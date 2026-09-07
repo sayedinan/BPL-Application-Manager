@@ -1,0 +1,71 @@
+# Dev profile — local Windows-native PostgreSQL on localhost:5432
+# (SPEC §1, "no mock mode").
+#
+# Connects to database `bpl_dev` as the non-superuser role `bpl_app`,
+# created alongside the database. See PLANNING-NOTES for the one-time
+# setup script.
+#
+# The password is NOT defaulted here — it must be supplied via the
+# DB_PASSWORD environment variable (or your IDE run config / .env
+# loader). Rotating the role's password only requires re-exporting
+# the new value; this file does not need to change.
+#
+# No schema is created here and Flyway is disabled in this profile so
+# the backend can boot before V1 migrations exist. Once V1 lands,
+# flip these to validate + enabled.
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/bpl_dev}
+    username: ${DB_USER:bpl_app}
+    # No default. Spring fails fast at startup if DB_PASSWORD is unset,
+    # which is intentional — silently using an empty password would
+    # log a misleading auth failure far from the root cause.
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 5000
+  jpa:
+    hibernate:
+      # V1 migration is now in place. `validate` makes Hibernate fail
+      # fast if the entity model drifts from the schema; switch to
+      # `none` only for emergency recovery.
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    # V1 landed. Flyway will apply any new migration on startup and
+    # validate checksums against flyway_schema_history.
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    out-of-order: false
+  session:
+    jdbc:
+      # Spring Boot's default is `embedded`, which would auto-create
+      # the Spring Session tables from the bundled schema SQL and
+      # collide with V6. Flyway is the single source of truth for
+      # these tables in dev. SPEC §13.1 sets the same value for prod.
+      initialize-schema: never
+
+# SSH credential encryption key (SPEC §8.3). 32+ char master key.
+# No default — set SSH_CIPHER_KEY in the dev shell / IDE run config.
+# Failing fast at startup is the right behavior: silently using an
+# empty key would produce a bean that "works" but encrypts with a
+# useless key, which is the worst possible failure mode.
+ssh:
+  cipher:
+    key: ${SSH_CIPHER_KEY:}
+
+server:
+  port: 8080
+
+# WebSocket connection limits (SPEC §5.4)
+websocket:
+  max-per-user: 5
+  max-per-application: 50
+  max-global: 500

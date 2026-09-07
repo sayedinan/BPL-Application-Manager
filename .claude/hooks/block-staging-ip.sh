@@ -1,7 +1,7 @@
 #!/bin/bash
 # block-staging-ip.sh
 # Blocks any Bash command or file write that references the live
-# staging server IP (180.210.129.233), shared with the JMeter integration suite.
+# staging server IP (180.210.129.233), shared with the JMeter suite.
 # This protects the BUILD process only — see the note above about the
 # finished product's intended use of this address.
 #

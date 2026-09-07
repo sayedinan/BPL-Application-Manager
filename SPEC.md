@@ -1,8 +1,8 @@
 # BPL Order Application Admin — Specification
 
-**Version:** 1.0
+**Version:** 1.1
 **Status:** Locked for Implementation
-**Last Updated:** 2026-09-06
+**Last Updated:** 2026-09-07
 
 ---
 
@@ -42,15 +42,15 @@ A web-based administration tool for managing BPL (and future PCL) order applicat
 ```sql
 CREATE TABLE users (
     id              BIGSERIAL PRIMARY KEY,
-    username        VARCHAR(64)  NOT NULL UNIQUE,
-    password_hash   VARCHAR(255) NOT NULL,        -- Argon2id
+    username        VARCHAR(64)  NOT NULL,
+    password_hash   VARCHAR(255) NOT NULL,        -- bcrypt
     role            VARCHAR(16)  NOT NULL CHECK (role IN ('SYS_ADMIN','ADMIN','USER')),
     must_change_password BOOLEAN NOT NULL DEFAULT true,
     deleted_at      TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_users_deleted ON users(deleted_at) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX idx_users_username_active ON users(username) WHERE deleted_at IS NULL;
 ```
 
 #### `applications`
@@ -69,11 +69,9 @@ CREATE TABLE applications (
     status                VARCHAR(16)  NOT NULL DEFAULT 'STOPPED'
                             CHECK (status IN ('RUNNING','STOPPED','STARTING','STOPPING','ERROR')),
     started_at            TIMESTAMPTZ,
-    deleted_at            TIMESTAMPTZ,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_applications_deleted ON applications(deleted_at) WHERE deleted_at IS NULL;
 ```
 
 #### `user_application_assignments`
@@ -118,6 +116,23 @@ CREATE UNIQUE INDEX idx_application_log_unique ON application_log_lines(applicat
 CREATE INDEX idx_application_log_latest ON application_log_lines(application_id, captured_at DESC);
 ```
 
+#### `idempotency_keys` (24h TTL, backs the `Idempotency-Key` header — §4.1)
+```sql
+CREATE TABLE idempotency_keys (
+    id             BIGSERIAL PRIMARY KEY,
+    idempotency_key VARCHAR(128) NOT NULL,
+    user_id        BIGINT NOT NULL REFERENCES users(id),
+    application_id BIGINT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at     TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '24 hours')
+);
+CREATE UNIQUE INDEX idx_idempotency_unique ON idempotency_keys(user_id, application_id, idempotency_key);
+CREATE INDEX idx_idempotency_expiry ON idempotency_keys(expires_at);
+-- A duplicate key within the 24h window returns IDEMPOTENCY_CONFLICT (409, §4.2).
+-- Expired rows are opportunistically deleted (WHERE expires_at < NOW()) rather
+-- than requiring a separate scheduled job — kept single-JAR-simple per §1.
+```
+
 #### `spring_session` (Spring Session JDBC)
 ```sql
 -- Managed by Spring Session schema (Flyway V1.1)
@@ -129,19 +144,23 @@ CREATE INDEX idx_application_log_latest ON application_log_lines(application_id,
 START_APPLICATION
 STOP_APPLICATION
 CREATE_APPLICATION
+UPDATE_APPLICATION
 DELETE_APPLICATION
 ASSIGN_APPLICATION
 RESET_PASSWORD
+CHANGE_PASSWORD
 CREATE_USER
 DELETE_USER
 CREATE_ADMIN
 LOGIN
 LOGOUT
+SHELLCHECK_UNAVAILABLE
 ```
 
 ### 3.3 Constraints & Conventions
 - **All timestamps:** `TIMESTAMPTZ` (UTC in DB)
-- **Soft delete:** `deleted_at` on users/applications; all queries filter `WHERE deleted_at IS NULL`
+- **Soft delete:** `deleted_at` on `users` only; all user queries filter `WHERE deleted_at IS NULL`
+- **Hard delete:** `applications` has no `deleted_at` column — DELETE removes the row; dependent `user_application_assignments` and `application_log_lines` rows cascade via `ON DELETE CASCADE`
 - **Application names:** `^[a-zA-Z0-9_-]{1,64}$`, case-insensitive unique
 - **Application IDs:** Never reused (supports audit log FK-less design)
 - **SSH passwords:** Encrypted at rest via Jasypt (AES-256-GCM), never logged
@@ -192,12 +211,14 @@ LOGOUT
 | POST | `/auth/login` | — | Login → sets HttpOnly cookie |
 | POST | `/auth/logout` | All | Invalidate session |
 | GET | `/auth/me` | All | Current user + assigned application IDs |
+| POST | `/auth/change-password` | All | Self-service password change, clears `must_change_password` |
 
-#### Engines
+#### Applications
 | Method | Path | Roles | Description |
 |---|---|---|---|
 | GET | `/applications` | All | List (status, startedAt only) |
 | GET | `/applications/{id}` | Sys.Admin | Full detail (scripts, credentials masked) |
+| POST | `/applications/test-connection` | Sys.Admin | Trust-on-first-connect: opens SSH, returns host key fingerprint for confirmation |
 | POST | `/applications` | Sys.Admin | Create (ShellCheck validation) |
 | PUT | `/applications/{id}` | Sys.Admin | Update (locked if not STOPPED) |
 | DELETE | `/applications/{id}` | Sys.Admin | Delete (requires STOPPED) |
@@ -318,7 +339,7 @@ tail -n "$LINES" "$LOG_FILE" 2>/dev/null | awk '{printf "%d %s\n", systime()*100
 ### 8.1 Authentication
 - **Session-based** (Spring Session JDBC → PostgreSQL)
 - **Cookie:** `HttpOnly`, `Secure` (prod), `SameSite=Strict`, `Path=/`, 8h TTL
-- **Password hash:** Argon2id (Spring Security default)
+- **Password hash:** bcrypt (Spring Security default)
 - **Must-change-password:** Forced on first login after creation/reset
 
 ### 8.2 Authorization
@@ -418,7 +439,7 @@ BPL-Order-Application-Admin/
 
 ## 11. Infrastructure
 
-### 13.1 Docker Compose (Production)
+### 11.1 Docker Compose (Production)
 ```yaml
 services:
   postgres:     postgres:16-alpine (SSL, scram-sha-256)
@@ -427,7 +448,7 @@ services:
   caddy:        TLS termination, security headers, rate limit
 ```
 
-### 13.2 Secrets (External)
+### 11.2 Secrets (External)
 | Secret | Rotation |
 |---|---|
 | `DB_PASSWORD` | 90 days |
@@ -435,7 +456,7 @@ services:
 | `KEYSTORE_PASSWORD` | 180 days |
 | TLS certs | 90 days (Caddy auto) |
 
-### 13.3 Observability (Separate Stack)
+### 11.3 Observability (Separate Stack)
 - **Metrics:** `/actuator/prometheus` (Micrometer)
 - **Logs:** JSON stdout → Loki via promtail
 - **Traces:** OTLP → Tempo (optional)
@@ -444,21 +465,40 @@ services:
 
 ## 12. Operational Procedures
 
-### 13.1 First Sys.Admin Bootstrap
+### 12.1 First Sys.Admin Bootstrap
 1. Flyway migration inserts seeded Sys.Admin
 2. Initial password shown once at deploy (logs/secret)
 3. First login → forced password change
 
-### 13.2 Password Reset (Admin → User)
+### 12.2 Password Reset (Admin → User)
 1. Admin calls `POST /users/{id}/reset-password`
 2. Backend returns `{ "temporaryPassword": "..." }` (once, HTTPS)
 3. Admin delivers via existing comms (Slack/email/verbal)
 4. User logs in → forced change
 
-### 13.3 Application Creation (Sys.Admin)
-1. Fill form: name, IP, SSH user, password, host key fingerprint, scripts, poll interval
-2. ShellCheck runs (CI: fail on `error`; dev: warn if binary missing)
-3. Save → encrypt password, store fingerprint, start poller if RUNNING
+### 12.3 Application Creation (Sys.Admin)
+1. Fill form: name, IP, SSH user, password, scripts, poll interval
+2. Click "Test Connection" (`POST /applications/test-connection`): backend opens an SSH
+   session to the target using trust-on-first-connect, returns the host key
+   fingerprint (SHA256) to the UI for display — no fingerprint is required as input
+3. Sys.Admin visually confirms the displayed fingerprint (e.g. against a value shared
+   out-of-band by the server owner) before proceeding
+4. ShellCheck runs on Save, in every environment (CI, dev, and production):
+   - `error`-level findings block Save (`SHELLCHECK_FAILED`, 400) with inline
+     line + message
+   - `warning`/`info`/`style` findings are non-blocking suggestions
+   - If the `shellcheck` binary itself is unavailable, Save proceeds anyway
+     (fail-open — a trusted Sys.Admin should not be blocked from saving an
+     application because a linter isn't installed). The UI shows a loud,
+     persistent warning that validation was skipped, and an audit entry is
+     written with `action_type = SHELLCHECK_UNAVAILABLE`, `result = SUCCESS`
+     (the save itself succeeded), and `detail` noting which script(s) went
+     unvalidated.
+5. Save (`POST /applications`) → encrypts password, persists the confirmed fingerprint,
+   start poller if RUNNING. On every subsequent connection, the poller/start/stop calls
+   re-verify the live host key against the stored fingerprint and fail closed
+   (connection refused, application marked ERROR) if it doesn't match — protects
+   against a swapped or compromised host after creation
 
 ### 12.4 Backup/Restore
 - **Application:** None (Flyway forward-only)
