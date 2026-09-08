@@ -27,6 +27,12 @@ spring:
       secure: true
       http-only: true
       same-site: strict
+      path: /
+  cors:
+    allowed-origins: "${CORS_ORIGIN}"
+    allowed-methods: "GET,POST,PUT,DELETE,OPTIONS"
+    allowed-headers: "*"
+    allow-credentials: true
   flyway:
     baseline-on-migrate: true
     validate-on-migrate: true

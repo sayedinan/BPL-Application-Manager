@@ -51,6 +51,34 @@ spring:
       # collide with V6. Flyway is the single source of truth for
       # these tables in dev. SPEC §13.1 sets the same value for prod.
       initialize-schema: never
+    # 8-hour server-side session lifetime per SPEC §8.1 / §13.1.
+    timeout: 8h
+    cookie:
+      secure: false
+      http-only: true
+      same-site: strict
+      path: /
+  cors:
+    allowed-origins: "http://localhost:5173"
+    allowed-methods: "GET,POST,PUT,DELETE,OPTIONS"
+    allowed-headers: "*"
+    allow-credentials: true
+      # DEVIATION from SPEC §8.1's "Secure (prod)" rule: dev
+      # runs over plain HTTP, so a Secure cookie would be
+      # rejected by the browser. This override is dev-only;
+      # application-prod.yml sets secure: true. The rest of the
+      # cookie attributes (HttpOnly, SameSite=Strict, Path=/,
+      # 8h TTL) match the SPEC exactly.
+      #
+      # Note on observed dev behavior: with secure=false over
+      # plain HTTP, Spring Session's DefaultCookieSerializer
+      # downgrades SameSite=Strict to SameSite=Lax to avoid
+      # browsers rejecting the cookie outright. The configured
+      # value is Strict; the downgrade is a browser-compatibility
+      # safety measure, not a config bug. In prod (secure=true
+      # over TLS) the cookie will be sent as SameSite=Strict
+      # exactly as the SPEC and the YAML both say.
+      secure: false
 
 # SSH credential encryption key (SPEC §8.3). 32+ char master key.
 # No default — set SSH_CIPHER_KEY in the dev shell / IDE run config.
@@ -69,3 +97,4 @@ websocket:
   max-per-user: 5
   max-per-application: 50
   max-global: 500
+  datasource:

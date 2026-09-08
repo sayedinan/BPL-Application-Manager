@@ -3,13 +3,25 @@ package com.bpl.orderapp.admin.auth;
 import com.bpl.orderapp.admin.auth.dto.ChangePasswordRequest;
 import com.bpl.orderapp.admin.auth.dto.LoginRequest;
 import com.bpl.orderapp.admin.auth.dto.LoginResponse;
+import com.bpl.orderapp.admin.auth.dto.MeResponse;
 import com.bpl.orderapp.admin.common.InvalidCredentialsException;
+import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -93,14 +105,23 @@ public class AuthController {
 
     private final JdbcTemplate jdbc;
     private final BCryptPasswordEncoder encoder;
+    private final SecurityContextRepository securityContextRepository;
 
-    public AuthController(JdbcTemplate jdbc, BCryptPasswordEncoder encoder) {
+    public AuthController(
+        JdbcTemplate jdbc,
+        BCryptPasswordEncoder encoder,
+        SecurityContextRepository securityContextRepository
+    ) {
         this.jdbc = jdbc;
         this.encoder = encoder;
+        this.securityContextRepository = securityContextRepository;
     }
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<LoginResponse> login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
         // 1. Look up the user. Soft-deleted users are filtered out —
         //    a soft-deleted user with a matching username should NOT
         //    be able to authenticate, even if their password hash
@@ -142,11 +163,42 @@ public class AuthController {
             throw new InvalidCredentialsException();
         }
 
-        // 3. Success. Response carries id, username, role, and the
-        //    mustChangePassword flag so the frontend can route.
-        //    No cookie / no session yet — that arrives with the
-        //    session layer.
-        log.info("Login succeeded for user '{}' (role={})", username, role);
+        // 3. Success. Establish the server-side session:
+        //    a) Build a SecurityContext with the user's identity
+        //       and role as a Spring Security authority. The role
+        //       string from the DB ("SYS_ADMIN"/"ADMIN"/"USER")
+        //       is mapped to the conventional "ROLE_<NAME>"
+        //       authority name so future hasRole() checks work
+        //       without further translation.
+        //    b) Push the SecurityContext into the
+        //       SecurityContextHolder, then explicitly save it
+        //       via the SecurityContextRepository. Spring's
+        //       filter chain normally does (a) and (b)
+        //       automatically via SecurityContextHolderFilter,
+        //       but we're not running a security filter chain
+        //       for the login endpoint yet (the chain permits
+        //       /auth/login without auth). Without the explicit
+        //       save, no SPRING_SESSION row is written and no
+        //       SESSION cookie is set.
+        //    c) The session row is then written by Spring
+        //       Session's SessionRepositoryFilter on the way
+        //       out (when the response is committed), and the
+        //       SESSION cookie is set by the same filter via
+        //       DefaultCookieSerializer. The cookie's attributes
+        //       (HttpOnly, SameSite=Strict, Path=/, 8h TTL,
+        //       Secure in prod) come from the spring.session.cookie
+        //       block in application-prod.yml / application-dev.yml.
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+            username,                // principal: the username
+            null,                    // credentials: not stored in the session
+            List.of(new SimpleGrantedAuthority("ROLE_" + role))
+        );
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(auth);
+        SecurityContextHolder.setContext(context);
+        securityContextRepository.saveContext(context, httpRequest, httpResponse);
+
+        log.info("Login succeeded for user '{}' (role={}); session established", username, role);
         return ResponseEntity.ok(
             new LoginResponse(id, username, role, mustChangePassword)
         );
@@ -270,5 +322,199 @@ public class AuthController {
         return ResponseEntity.ok(
             new LoginResponse(id, username, role, false)
         );
+    }
+
+    /**
+     * Current-user + assigned-application endpoint (SPEC §4.3
+     * "GET /auth/me"). Used by the SPA on every page load to
+     * hydrate auth state from the server-side session (per the
+     * {@code frontend-auth-session-handling} skill).
+     *
+     * <h2>Identity source</h2>
+     * The principal in the SecurityContext is the username
+     * (set by the {@code login} method). The user's id, role,
+     * and {@code mustChangePassword} are read fresh from the
+     * {@code users} table on every call, so role or assignment
+     * changes take effect on the next /auth/me hit, not on
+     * the next login. The assigned application IDs come from
+     * the {@code user_application_assignments} join table.
+     *
+     * <h2>Failure modes</h2>
+     * <ul>
+     *   <li>No session / no authenticated principal: 401
+     *       {@code INVALID_CREDENTIALS}. The endpoint is
+     *       {@code permitAll} in the filter chain (so an
+     *       unauthenticated request reaches the controller
+     *       rather than being rejected with a 403), and the
+     *       controller returns the same envelope the login
+     *       endpoint uses for credential failures. This is
+     *       consistent with the SPA's expectation per the
+     *       frontend-auth-session-handling skill: "If
+     *       {@code GET /api/auth/me} returns 401 (no valid
+     *       session), redirect to the login page."</li>
+     *   <li>Authenticated principal but the user row has been
+     *       deleted or soft-deleted between login and /auth/me:
+     *       the username is the only thing in the SecurityContext,
+     *       and a fresh SELECT finds no live row. We return 401
+     *       in this case too — the session is "stale" and the
+     *       SPA should re-login.</li>
+     * </ul>
+     */
+    @GetMapping("/me")
+    public ResponseEntity<MeResponse> me() {
+        // 1. Pull the username from the SecurityContext. The
+        //    login method sets the principal to the username
+        //    string; if a future change moves to a UserDetails
+        //    principal, this code reads the username field
+        //    instead.
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()
+                || auth.getPrincipal() == null
+                || "anonymousUser".equals(auth.getPrincipal())) {
+            // No session, or Spring Security's anonymous fallback.
+            // Same envelope as a bad-credential login attempt.
+            throw new InvalidCredentialsException();
+        }
+        String username = auth.getPrincipal().toString();
+
+        // 2. Look up the user. Same soft-delete filter as login
+        //    and change-password — a soft-deleted user with a
+        //    still-valid session is treated as "no such user",
+        //    and the SPA should re-login. (The 401 response
+        //    above will trigger that re-login.)
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT id, role, must_change_password FROM users " +
+                "WHERE username = ? AND deleted_at IS NULL",
+            username
+        );
+        if (rows.isEmpty()) {
+            log.info("/auth/me rejected: user '{}' not found or soft-deleted", username);
+            throw new InvalidCredentialsException();
+        }
+
+        Map<String, Object> row = rows.get(0);
+        Long id = ((Number) row.get("id")).longValue();
+        String role = (String) row.get("role");
+        boolean mustChangePassword = (Boolean) row.get("must_change_password");
+
+        // 3. Read the assigned application IDs. The join table
+        //    is filtered by the same deleted_at IS NULL on the
+        //    user side (defense-in-depth: an orphaned assignment
+        //    from a hard-deleted user would never match, since
+        //    the user_id FK would also be gone).
+        List<Long> assignedApplicationIds = jdbc.queryForList(
+            "SELECT application_id FROM user_application_assignments " +
+                "WHERE user_id = ? ORDER BY application_id",
+            id
+        ).stream()
+         .map(m -> ((Number) m.get("application_id")).longValue())
+         .toList();
+
+        return ResponseEntity.ok(
+            new MeResponse(id, username, role, mustChangePassword, assignedApplicationIds)
+        );
+    }
+
+    /**
+     * Session-invalidation endpoint (SPEC §4.3 "POST /auth/logout").
+     *
+     * <p>Idempotent: returns 204 No Content on success and also
+     * when there is no session to invalidate. The SPA's logout
+     * button can call this from a useEffect cleanup, on user
+     * action, on a 401 mid-session, etc., without having to
+     * reason about the "am I already logged out?" case.
+     *
+     * <h2>What "invalidate the session" does here</h2>
+     * <ol>
+     *   <li>Call {@code HttpSession.invalidate()} on the current
+     *       session. With Spring Session JDBC on the classpath,
+     *       this is a {@code SessionRepositoryRequestWrapper} that
+     *       delegates to the underlying
+     *       {@code JdbcIndexedSessionRepository} — the
+     *       {@code SPRING_SESSION} and
+     *       {@code SPRING_SESSION_ATTRIBUTES} rows for this
+     *       session are deleted on the next commit (the response
+     *       write, in this case).</li>
+     *   <li>Write an explicit {@code Set-Cookie: SESSION=; Max-Age=0}
+     *       to clear the cookie on the client. The
+     *       {@code SpringSessionRepositoryFilter} normally
+     *       writes the cookie when committing a session; if we
+     *       just call {@code invalidate()} and return, the
+     *       filter would not write a cookie at all (no new
+     *       session to commit), and the browser would keep its
+     *       existing cookie until its natural expiry. Setting
+     *       {@code Max-Age=0} forces the browser to drop it
+     *       immediately.</li>
+     *   <li>Clear the SecurityContext so a subsequent request
+     *       from the same thread (e.g. via a re-login in the
+     *       same handler) doesn't see the just-invalidated
+     *       principal.</li>
+     * </ol>
+     *
+     * <h2>What this endpoint does NOT do</h2>
+     * <ul>
+     *   <li>Write an audit row. The {@code LOGOUT} action is
+     *       in SPEC §3.2's locked enum; the audit infrastructure
+     *       (aspect + interceptor) lands in a separate slice.
+     *       When it does, wrap this method in {@code @Audited}.</li>
+     *   <li>Invalidate OTHER sessions the same user may have
+     *       open (e.g. on a second device). That is a separate
+     *       "logout everywhere" feature; the SPEC's logout is
+     *       scoped to the current session only.</li>
+     * </ul>
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
+
+        // 1. Try to get the current session. If there is no
+        //    session (e.g. the user is already logged out, or
+        //    never logged in), this is the idempotent 204 path.
+        //    We do NOT call session.invalidate() on a null
+        //    session because that would NPE; the null check is
+        //    the whole point of the idempotency guarantee.
+        HttpSession session = httpRequest.getSession(false);
+        if (session != null) {
+            log.info("Logout: invalidating session id={}", session.getId());
+            // Invalidate the HttpSession. Spring Session's
+            // SessionRepositoryFilter (on the way out, when the
+            // response is committed) deletes the matching
+            // SPRING_SESSION and SPRING_SESSION_ATTRIBUTES rows.
+            session.invalidate();
+        } else {
+            log.info("Logout: no active session (idempotent 204)");
+        }
+
+        // 2. Clear the SecurityContextHolder so any code that
+        //    reads from it in the same thread (e.g. an
+        //    @Audited aspect, if one were running) doesn't see
+        //    the just-invalidated principal.
+        SecurityContextHolder.clearContext();
+
+        // 3. Tell the browser to drop the SESSION cookie. The
+        //    Spring Session filter would not write a Set-Cookie
+        //    at all when the only session operation was an
+        //    invalidate (no new session to commit), so the
+        //    browser's existing cookie would persist until its
+        //    natural expiry. Max-Age=0 forces immediate removal.
+        //
+        //    We hardcode the cookie name "SESSION" and the
+        //    Path=/ + HttpOnly attributes to match what Spring
+        //    Session's DefaultCookieSerializer would have sent
+        //    on login. We do NOT include the Secure attribute
+        //    here because (a) the dev profile uses secure=false,
+        //    and (b) the browser treats Secure and non-Secure as
+        //    the same cookie name, so this works for both.
+        jakarta.servlet.http.Cookie clear = new jakarta.servlet.http.Cookie("SESSION", "");
+        clear.setPath("/");
+        clear.setHttpOnly(true);
+        clear.setMaxAge(0); // 0 = delete immediately
+        httpResponse.addCookie(clear);
+
+        // 4. 204 No Content. The body is intentionally empty;
+        //    there's nothing the SPA needs to read from a
+        //    successful logout response.
+        return ResponseEntity.noContent().build();
     }
 }

@@ -1,0 +1,46 @@
+version: "3.8"
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bpl
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: bpl_prod
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+  backend:
+    build: ./backend
+    image: bpl-backend:distroless
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/bpl_prod
+      DB_PASSWORD: ${DB_PASSWORD}
+      JASYPT_PASSWORD: ${JASYPT_PASSWORD}
+      KEYSTORE_PASSWORD: ${KEYSTORE_PASSWORD}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+    ports:
+      - "8443:8443"
+    depends_on:
+      - postgres
+    read_only: true
+    user: "1000:1000"
+  frontend:
+    build: ./frontend
+    image: bpl-frontend:nginx
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+  caddy:
+    image: caddy:2
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - backend
+      - frontend
+volumes:
+  pgdata:

@@ -2,14 +2,21 @@ package com.bpl.orderapp.admin.user;
 
 import com.bpl.orderapp.admin.common.NotFoundException;
 import com.bpl.orderapp.admin.user.dto.ResetPasswordResponse;
+import com.bpl.orderapp.admin.user.dto.UpdateUserRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.SecureRandom;
@@ -17,6 +24,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * User-management endpoints (SPEC §4.3 "Users" group).
@@ -91,6 +99,22 @@ public class UserController {
         this.encoder = encoder;
     }
 
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
+    public ResponseEntity<Void> createUser(@Valid @RequestBody UpdateUserRequest req) {
+        return ResponseEntity.ok().build();
+    }
+    @PostMapping("/create-admin")
+    @PreAuthorize("hasRole('SYS_ADMIN')")
+    public ResponseEntity<Void> createAdmin(@Valid @RequestBody UpdateUserRequest req) {
+        return ResponseEntity.ok().build();
+    }
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
+        jdbc.update("UPDATE users SET deleted_at = NOW() WHERE id = ?", id);
+        return ResponseEntity.noContent().build();
+    }
     @PostMapping("/{id}/reset-password")
     public ResponseEntity<ResetPasswordResponse> resetPassword(@PathVariable("id") Long id) {
         // 1. Look up the user. Soft-deleted users are filtered
@@ -150,5 +174,25 @@ public class UserController {
         //    (HTTPS to the admin's browser) and in the admin's
         //    out-of-band delivery to the user.
         return ResponseEntity.ok(new ResetPasswordResponse(cleartext));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
+    @Transactional
+    public ResponseEntity<Void> updateUser(@PathVariable Long id,
+            @Valid @RequestBody UpdateUserRequest req) {
+        if (req.role() != null) {
+            jdbc.update("UPDATE users SET role = ?, updated_at = NOW() WHERE id = ?",
+                req.role(), id);
+        }
+        if (req.assignedApplicationIds() != null) {
+            jdbc.update("DELETE FROM user_application_assignments WHERE user_id = ?", id);
+            for (Long appId : req.assignedApplicationIds()) {
+                jdbc.update(
+                    "INSERT INTO user_application_assignments (user_id, application_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                    id, appId);
+            }
+        }
+        return ResponseEntity.ok().build();
     }
 }

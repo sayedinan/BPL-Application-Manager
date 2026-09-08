@@ -8,8 +8,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -25,7 +27,12 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.bpl.orderapp.admin.auth.dto.ChangePasswordRequest;
@@ -59,6 +66,7 @@ class AuthControllerTest {
 
     @MockBean private JdbcTemplate jdbc;
     @MockBean private BCryptPasswordEncoder encoder;
+    @MockBean private SecurityContextRepository securityContextRepository;
 
     private static final String TEST_PASSWORD = "the-real-password";
     private static final String TEST_HASH = new BCryptPasswordEncoder(10).encode(TEST_PASSWORD);
@@ -347,5 +355,132 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.details.oldPassword").exists());
 
         verify(jdbc, never()).queryForList(anyString(), any(Object[].class));
+    }
+
+    // -----------------------------------------------------------------
+    // GET /auth/me
+    // -----------------------------------------------------------------
+
+    private void setAuthenticatedUser(String username) {
+        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
+        ctx.setAuthentication(new UsernamePasswordAuthenticationToken(
+            username, null, List.of(new SimpleGrantedAuthority("ROLE_USER"))));
+        SecurityContextHolder.setContext(ctx);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void me_returnsUserAndAssignedApplicationIds() throws Exception {
+        setAuthenticatedUser("admin");
+        when(jdbc.queryForList(anyString(), eq("admin"))).thenReturn(List.of(
+            Map.of(
+                "id", 1L,
+                "role", "SYS_ADMIN",
+                "must_change_password", false
+            )
+        ));
+        // The assignment query uses a different SQL form (no
+        // username — uses user_id). Stub it explicitly.
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(
+            Map.of("application_id", 1L),
+            Map.of("application_id", 2L),
+            Map.of("application_id", 5L)
+        ));
+
+        mvc.perform(get("/api/v1/auth/me"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(1))
+            .andExpect(jsonPath("$.username").value("admin"))
+            .andExpect(jsonPath("$.role").value("SYS_ADMIN"))
+            .andExpect(jsonPath("$.mustChangePassword").value(false))
+            .andExpect(jsonPath("$.assignedApplicationIds").isArray())
+            .andExpect(jsonPath("$.assignedApplicationIds[0]").value(1))
+            .andExpect(jsonPath("$.assignedApplicationIds[1]").value(2))
+            .andExpect(jsonPath("$.assignedApplicationIds[2]").value(5));
+    }
+
+    @Test
+    void me_noAuthentication_returns401_invalidCredentials() throws Exception {
+        // No SecurityContext is set — the request reaches the
+        // controller as unauthenticated.
+        mvc.perform(get("/api/v1/auth/me"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+
+        // The DB must not be touched on an unauthenticated /me
+        // — the controller rejects at the principal check, before
+        // any query runs.
+        verify(jdbc, never()).queryForList(anyString(), any(Object[].class));
+    }
+
+    @Test
+    void me_authenticatedButUserSoftDeleted_returns401() throws Exception {
+        setAuthenticatedUser("ghost");
+        // The user is gone (soft-deleted or hard-deleted); the
+        // SELECT returns an empty result. The controller must
+        // treat this as "no valid session" — same envelope as no
+        // auth at all.
+        when(jdbc.queryForList(anyString(), eq("ghost"))).thenReturn(List.of());
+
+        mvc.perform(get("/api/v1/auth/me"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+    }
+
+    @Test
+    void me_userWithNoAssignedApplications_returnsEmptyArray() throws Exception {
+        // A user with zero assignments is valid — they just see an
+        // empty list. The endpoint must not 500 or omit the field.
+        setAuthenticatedUser("alice");
+        when(jdbc.queryForList(anyString(), eq("alice"))).thenReturn(List.of(
+            Map.of(
+                "id", 2L,
+                "role", "USER",
+                "must_change_password", true
+            )
+        ));
+        when(jdbc.queryForList(anyString(), eq(2L))).thenReturn(List.of());
+
+        mvc.perform(get("/api/v1/auth/me"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(2))
+            .andExpect(jsonPath("$.role").value("USER"))
+            .andExpect(jsonPath("$.mustChangePassword").value(true))
+            .andExpect(jsonPath("$.assignedApplicationIds").isArray())
+            .andExpect(jsonPath("$.assignedApplicationIds").isEmpty());
+    }
+
+    // -----------------------------------------------------------------
+    // POST /auth/logout
+    // -----------------------------------------------------------------
+
+    @Test
+    void logout_withActiveSession_returns204_andClearsSessionCookie() throws Exception {
+        // The MockMvc test infrastructure auto-creates a session
+        // for each request unless the test sets one up. The
+        // controller calls session.invalidate() on whatever
+        // session the request has, then writes a Set-Cookie
+        // header that expires the SESSION cookie. We assert
+        // both: status 204 and a Set-Cookie with Max-Age=0.
+        mvc.perform(post("/api/v1/auth/logout"))
+            .andExpect(status().isNoContent())
+            .andExpect(cookie().exists("SESSION"))
+            .andExpect(cookie().maxAge("SESSION", 0));
+    }
+
+    @Test
+    void logout_alreadyLoggedOut_returns204_idempotently() throws Exception {
+        // No session to invalidate — the controller must still
+        // return 204 and write the clearing Set-Cookie. This is
+        // the "double-clicked logout button" case: the SPA
+        // should never see an error from a duplicate logout.
+        mvc.perform(post("/api/v1/auth/logout"))
+            .andExpect(status().isNoContent())
+            .andExpect(cookie().exists("SESSION"))
+            .andExpect(cookie().maxAge("SESSION", 0));
     }
 }

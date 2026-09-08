@@ -55,6 +55,26 @@ public class GlobalExceptionHandler {
             .body(pd);
     }
 
+    @ExceptionHandler(com.bpl.orderapp.admin.accountDeletion.SelfDeleteForbiddenException.class)
+    public ResponseEntity<ProblemDetail> handleSelfDeleteForbidden(
+            com.bpl.orderapp.admin.accountDeletion.SelfDeleteForbiddenException ex) {
+        // SPEC §4.2 maps SELF_DELETE_FORBIDDEN to 403. The
+        // exception's message is intentionally generic in the
+        // response — the controller can log the more detailed
+        // message server-side, but the wire response should not
+        // echo caller/target ids (those are not security
+        // hazards in this case, but keeping the response
+        // uniform with the other error envelopes is cleaner).
+        ProblemDetail pd = baseProblem(
+            ErrorCode.SELF_DELETE_FORBIDDEN,
+            HttpStatus.FORBIDDEN,
+            "Self-deletion is forbidden"
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(pd);
+    }
+
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ProblemDetail> handleNotFound(NotFoundException ex) {
         // 404 with a generic message. Used for "user not found"
