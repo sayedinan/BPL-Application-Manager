@@ -15,8 +15,6 @@ import { AuthProvider } from '@/auth/AuthContext';
 import { LoginPage } from '@/auth/LoginPage';
 import { CreateAdminPage } from '@/app/CreateAdminPage';
 import { EnginesPage } from '@/app/EnginesPage';
-import { useStartStop } from "@/app/StartStopHook";
-import { useAuth } from '@/auth/AuthContext';
 
 const queryClient = new QueryClient();
 

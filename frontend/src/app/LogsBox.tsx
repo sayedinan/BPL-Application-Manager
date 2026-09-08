@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Client } from '@stomp/stompjs';
 export function LogsBox({ appId, role }: { appId: number; role?: string }) {
   const [lines, setLines] = useState<string[]>([]);
+  const [autoFollow, setAutoFollow] = useState(true);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const clientRef = useRef<Client | null>(null);
   useEffect(() => {
     const client = new Client({ brokerURL: 'ws://localhost:8443/ws', debug: () => {}, connectHeaders: { Cookie: document.cookie } }); // cookie-auth: HttpOnly session sent via browser WebSocket (same-origin)
