@@ -1,0 +1,25 @@
+
+https://192.16.0.100 {
+
+    tls internal
+
+    handle /api/* {
+
+        reverse_proxy backend:8080
+
+    }
+
+    handle /ws {
+
+        reverse_proxy backend:8080
+
+    }
+
+    handle {
+
+        reverse_proxy frontend:80
+
+    }
+
+}
+

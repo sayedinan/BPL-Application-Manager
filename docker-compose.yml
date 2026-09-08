@@ -1,46 +1,111 @@
+
 version: "3.8"
+
 services:
+
   postgres:
+
     image: postgres:16-alpine
+
     environment:
+
       POSTGRES_USER: bpl
+
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+
       POSTGRES_DB: bpl_prod
+
     volumes:
+
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+
+    expose:
+
+      - "5432"
+
   backend:
+
     build: ./backend
-    image: bpl-backend:distroless
+
+    image: bpl-backend:prod
+
     environment:
+
+      SPRING_PROFILES_ACTIVE: prod
+
       DB_URL: jdbc:postgresql://postgres:5432/bpl_prod
+
+      DB_USER: bpl
+
       DB_PASSWORD: ${DB_PASSWORD}
-      JASYPT_PASSWORD: ${JASYPT_PASSWORD}
-      KEYSTORE_PASSWORD: ${KEYSTORE_PASSWORD}
+
+      SSH_CIPHER_KEY: ${SSH_CIPHER_KEY}
+
       CORS_ORIGIN: ${CORS_ORIGIN}
-    ports:
-      - "8443:8443"
+
+      SERVER_PORT: 8080
+
+      SERVER_SSL_ENABLED: "false"
+
+    expose:
+
+      - "8080"
+
     depends_on:
+
       - postgres
+
     read_only: true
-    user: "1000:1000"
+
+    tmpfs:
+
+      - /tmp
+
+    user: "65532:65532"
+
+    restart: unless-stopped
+
   frontend:
+
     build: ./frontend
+
     image: bpl-frontend:nginx
-    ports:
-      - "5173:80"
+
+    expose:
+
+      - "80"
+
     depends_on:
+
       - backend
+
+    restart: unless-stopped
+
   caddy:
+
     image: caddy:2
+
     ports:
-      - "443:443"
-      - "80:80"
+
+      - "8443:443"
+
     volumes:
+
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+
+      - caddy_data:/data
+
     depends_on:
+
       - backend
+
       - frontend
+
+    restart: unless-stopped
+
 volumes:
+
   pgdata:
+
+  caddy_data:
+
