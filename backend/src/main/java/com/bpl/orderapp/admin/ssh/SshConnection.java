@@ -8,7 +8,7 @@ public class SshConnection {
         JSch jsch = new JSch();
         Session session = jsch.getSession(user, host, 22);
         session.setPassword(pass);
-        session.setConfig("StrictHostKeyChecking", "yes");
+        session.setConfig("StrictHostKeyChecking", "no");
         session.connect(10000); // 10s connect timeout per §13.2
         // 8.2 — explicit fingerprint verification (not folded into 8.1)
         HostKey hostKey = session.getHostKey();
