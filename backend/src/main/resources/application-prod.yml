@@ -1,0 +1,65 @@
+# Prod profile — matches SPEC §13.1 verbatim. Secrets (DB_PASSWORD,
+# SSH_CIPHER_KEY, etc.) are injected from the environment.
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    protocol: TLSv1.3
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 5000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  session:
+    jdbc:
+      initialize-schema: never
+    timeout: 8h
+    cookie:
+      secure: true
+      http-only: true
+      same-site: strict
+      path: /
+  cors:
+    allowed-origins: "${CORS_ORIGIN}"
+    allowed-methods: "GET,POST,PUT,DELETE,OPTIONS"
+    allowed-headers: "*"
+    allow-credentials: true
+  flyway:
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    out-of-order: false
+
+# SSH credential encryption key (SPEC §8.3). 32+ char master key from
+# the secrets manager. No default — fail fast if SSH_CIPHER_KEY is
+# unset in the environment.
+ssh:
+  cipher:
+    key: ${SSH_CIPHER_KEY}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  pattern:
+    console: '{"ts":"%d{ISO8601}","lvl":"%level","tid":"%X{traceId}","sid":"%X{spanId}","logger":"%logger","msg":"%msg"}%n'
+
+# WebSocket connection limits (SPEC §5.4)
+websocket:
+  max-per-user: 5
+  max-per-application: 50
+  max-global: 500

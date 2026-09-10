@@ -1,0 +1,15 @@
+:443 {
+	tls /certs/server.crt /certs/server.key
+
+	handle /api/* {
+		reverse_proxy backend:8080
+	}
+
+	handle /ws {
+		reverse_proxy backend:8080
+	}
+
+	handle {
+		reverse_proxy frontend:80
+	}
+}

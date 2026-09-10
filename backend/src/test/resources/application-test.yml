@@ -1,0 +1,33 @@
+# Test profile — used by @ActiveProfiles("test") in unit/integration tests.
+# H2 in Postgres-compatibility mode is the default; switch to Testcontainers
+# Postgres for tests that exercise PostgreSQL-specific features (JSONB, INET,
+# partial unique indexes, etc. — see SPEC §3.1).
+spring:
+  datasource:
+    url: jdbc:h2:mem:bpl_admin_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+  flyway:
+    enabled: false
+  session:
+    jdbc:
+      initialize-schema: never
+
+# SSH credential encryption key (SPEC §8.3). 32+ char master key.
+# Tests set SSH_CIPHER_KEY via the gradle build (see build.gradle.kts
+# test block). The cipher bean must not be constructible from a
+# committed default — a hardcoded key in source control is exactly
+# the regression this config avoids.
+ssh:
+  cipher:
+    key: ${SSH_CIPHER_KEY:}
+
+websocket:
+  max-per-user: 5
+  max-per-application: 50
+  max-global: 500
