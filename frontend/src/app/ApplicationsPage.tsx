@@ -4,6 +4,15 @@ import { API } from '@/api/endpoints';
 
 type Status = 'RUNNING' | 'STOPPED' | 'STARTING' | 'STOPPING' | 'ERROR';
 
+function isOnline(status: Status): boolean {
+  return status === 'RUNNING' || status === 'STARTING';
+}
+function isEditable(status: Status): boolean {
+  return status === 'STOPPED' || status === 'ERROR';
+}
+function statusLabel(status: Status): string {
+  return isOnline(status) ? 'Online' : 'Offline';
+}
 interface ApplicationSummary {
   id: number;
   name: string;
@@ -37,6 +46,8 @@ export function ApplicationsPage(): JSX.Element {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [loadingEdit, setLoadingEdit] = useState(false);
 
   async function loadApplications() {
     try {
@@ -79,9 +90,69 @@ export function ApplicationsPage(): JSX.Element {
       setSubmitting(false);
     }
   }
+  
+   
+
+
+  async function handleEditClick(app: ApplicationSummary) {
+    if (!isEditable(app.status)) return;
+    setFormError(null);
+    setShowForm(false);
+    setLoadingEdit(true);
+    setEditingId(app.id);
+    try {
+      const detail = await api.get<Record<string, unknown>>(API.APPLICATIONS.DETAIL(app.id));
+      setForm({
+        name: String(detail.name ?? ''),
+        serverIp: String(detail.serverIp ?? ''),
+        sshUsername: String(detail.sshUsername ?? ''),
+        sshPassword: '',
+        sshHostKeyFingerprint: '',
+        startScript: String(detail.startScript ?? ''),
+        stopScript: String(detail.stopScript ?? ''),
+        logScript: String(detail.logScript ?? ''),
+        pollIntervalSeconds: String(detail.pollIntervalSeconds ?? '5'),
+      });
+    } catch (err) {
+      setListError(err instanceof ApiError ? err.message : `Failed to load ${app.name} for editing.`);
+      setEditingId(null);
+    } finally {
+      setLoadingEdit(false);
+    }
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setFormError(null);
+  }
+
+  async function handleUpdate(e: FormEvent) {
+    e.preventDefault();
+    if (editingId === null) return;
+    setFormError(null);
+    const pollInterval = Number(form.pollIntervalSeconds);
+    if (!Number.isFinite(pollInterval) || pollInterval <= 0) { setFormError('Poll interval must be a positive number of seconds.'); return; }
+    if (!form.name.trim()) { setFormError('Name is required.'); return; }
+    setSubmitting(true);
+    try {
+      await api.put(API.APPLICATIONS.UPDATE(editingId), {
+        name: form.name, serverIp: form.serverIp, sshUsername: form.sshUsername,
+        sshPassword: form.sshPassword || undefined,
+        startScript: form.startScript, stopScript: form.stopScript, logScript: form.logScript,
+        pollIntervalSeconds: pollInterval,
+      });
+      cancelEdit();
+      await loadApplications();
+    } catch (err) {
+      setFormError(err instanceof ApiError ? err.message : 'Failed to update application. It may no longer be offline.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function handleDelete(app: ApplicationSummary) {
-    if (app.status !== 'STOPPED') return;
+    if (!isEditable(app.status)) return;
     if (!window.confirm(`Delete "${app.name}"? This cannot be undone.`)) return;
     setDeletingId(app.id);
     try {
@@ -98,14 +169,14 @@ export function ApplicationsPage(): JSX.Element {
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold">Applications</h1>
-        <button onClick={() => setShowForm((s) => !s)} className="text-sm px-3 py-2 bg-blue-600 text-white rounded">
+        <button onClick={() => { if (editingId !== null) cancelEdit(); setShowForm((s) => !s); }} className="text-sm px-3 py-2 bg-blue-600 text-white rounded">
           {showForm ? 'Cancel' : '+ Add Application'}
         </button>
       </div>
       {listError && <p role="alert" className="text-sm text-red-600 mb-4">{listError}</p>}
-      {showForm && (
-        <form onSubmit={handleCreate} noValidate className="border rounded p-4 mb-6 max-w-xl">
-          <h2 className="font-medium mb-3">New Application</h2>
+      {(showForm || (editingId !== null && !loadingEdit)) && (
+        <form onSubmit={editingId !== null ? handleUpdate : handleCreate} noValidate className="border rounded p-4 mb-6 max-w-xl">
+          <h2 className="font-medium mb-3">{editingId !== null ? 'Edit Application' : 'New Application'}</h2>
           <label className="block mb-3">
             <span className="block text-sm text-gray-700 mb-1">Name</span>
             <input value={form.name} onChange={(e) => updateField('name', e.target.value)} className="w-full border rounded px-3 py-2" required />
@@ -150,9 +221,14 @@ export function ApplicationsPage(): JSX.Element {
             <input type="number" min={1} value={form.pollIntervalSeconds} onChange={(e) => updateField('pollIntervalSeconds', e.target.value)} className="w-32 border rounded px-3 py-2" />
           </label>
           {formError && <p role="alert" className="text-sm text-red-600 mb-4">{formError}</p>}
-          <button type="submit" disabled={submitting} className="text-sm px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50">
-            {submitting ? 'Creating…' : 'Create Application'}
-          </button>
+          <div className="flex gap-2">
+            <button type="submit" disabled={submitting} className="text-sm px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50">
+              {submitting ? (editingId !== null ? 'Saving…' : 'Creating…') : (editingId !== null ? 'Save Changes' : 'Create Application')}
+            </button>
+            {editingId !== null && (
+              <button type="button" onClick={cancelEdit} className="text-sm px-4 py-2 border rounded">Cancel</button>
+            )}
+          </div>
         </form>
       )}
       {loading ? (
@@ -172,9 +248,16 @@ export function ApplicationsPage(): JSX.Element {
             {apps.map((app) => (
               <tr key={app.id} className="border-b">
                 <td className="py-2">{app.name}</td>
-                <td className="py-2">{app.status}</td>
-                <td className="py-2 text-right">
-                  <button disabled={app.status !== 'STOPPED' || deletingId === app.id} onClick={() => handleDelete(app)} className="text-xs px-3 py-1 bg-red-600 text-white rounded disabled:opacity-40" title={app.status !== 'STOPPED' ? 'Must be STOPPED to delete' : undefined}>
+                <td className="py-2">
+                  <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${isOnline(app.status) ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
+                    {statusLabel(app.status)}
+                  </span>
+                </td>
+                <td className="py-2 text-right space-x-2">
+                  <button disabled={!isEditable(app.status)} onClick={() => handleEditClick(app)} className="text-xs px-3 py-1 bg-blue-600 text-white rounded disabled:opacity-40" title={!isEditable(app.status) ? 'Must be Offline to edit' : undefined}>
+                    Edit
+                  </button>
+                  <button disabled={!isEditable(app.status) || deletingId === app.id} onClick={() => handleDelete(app)} className="text-xs px-3 py-1 bg-red-600 text-white rounded disabled:opacity-40" title={!isEditable(app.status) ? 'Must be Offline to delete' : undefined}>
                     {deletingId === app.id ? 'Deleting…' : 'Delete'}
                   </button>
                 </td>
