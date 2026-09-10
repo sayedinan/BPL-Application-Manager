@@ -116,7 +116,6 @@ export function DashboardPlaceholder(): JSX.Element {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {apps.map((app) => {
             const runningTime = app.status === 'RUNNING' ? formatRunningTime(app.startedAt) : null;
-            const locked = app.status === 'STARTING' || app.status === 'STOPPING';
             return (
               <div key={app.id} onClick={() => setSelectedAppId(app.id)} className={`border rounded p-4 cursor-pointer ${selectedAppId === app.id ? 'ring-2 ring-blue-500' : ''}`}>
                 <div className="flex items-center justify-between mb-2">
