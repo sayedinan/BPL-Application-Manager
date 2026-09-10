@@ -60,6 +60,10 @@ public class ApplicationController {
     public ResponseEntity<Void> createApplication(@RequestBody Map<String, Object> req) {
         String name = (String) req.get("name");
         String serverIp = (String) req.get("serverIp");
+        if (serverIp == null || !serverIp.matches("^(\\d{1,3}\\.){3}\\d{1,3}$")) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST, "serverIp must be a valid IPv4 address");
+        }
         String sshUsername = (String) req.get("sshUsername");
         String sshPassword = (String) req.get("sshPassword");
         String startScript = (String) req.get("startScript");
