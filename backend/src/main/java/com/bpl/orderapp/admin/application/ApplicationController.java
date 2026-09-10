@@ -10,6 +10,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/applications")
 public class ApplicationController {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ApplicationController.class);
     private final JdbcTemplate jdbc;
     private final SshCredentialCipher cipher;
     private final IdempotencyService idempotencyService;
@@ -112,6 +113,7 @@ public class ApplicationController {
                 jdbc.update("UPDATE applications SET status='ERROR' WHERE id=?", id);
             }
         } catch (Exception e) {
+            log.error("Failed to start/stop application id={}", id, e);
             jdbc.update("UPDATE applications SET status='ERROR' WHERE id=?", id);
         }
 
@@ -149,6 +151,7 @@ public class ApplicationController {
                 jdbc.update("UPDATE applications SET status='ERROR' WHERE id=?", id);
             }
         } catch (Exception e) {
+            log.error("Failed to start/stop application id={}", id, e);
             jdbc.update("UPDATE applications SET status='ERROR' WHERE id=?", id);
         }
 
