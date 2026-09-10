@@ -57,6 +57,25 @@ public class ApplicationController {
         }
         return ResponseEntity.ok(result);
     }
+    @GetMapping("/{id}")
+    public ResponseEntity<Map<String,Object>> getApplication(@PathVariable Long id) {
+        Map<String,Object> app = jdbc.queryForMap(
+            "SELECT id, name, server_ip, ssh_username, ssh_host_key_fingerprint, start_script, stop_script, log_script, poll_interval_seconds, status FROM applications WHERE id = ?",
+            id
+        );
+        Map<String,Object> body = new java.util.LinkedHashMap<>();
+        body.put("id", ((Number) app.get("id")).longValue());
+        body.put("name", app.get("name"));
+        body.put("serverIp", app.get("server_ip").toString());
+        body.put("sshUsername", app.get("ssh_username"));
+        body.put("sshHostKeyFingerprint", app.get("ssh_host_key_fingerprint"));
+        body.put("startScript", app.get("start_script"));
+        body.put("stopScript", app.get("stop_script"));
+        body.put("logScript", app.get("log_script"));
+        body.put("pollIntervalSeconds", app.get("poll_interval_seconds"));
+        body.put("status", app.get("status"));
+        return ResponseEntity.ok(body);
+    }
     @PostMapping
     public ResponseEntity<Void> createApplication(@RequestBody Map<String, Object> req) {
         String name = (String) req.get("name");
@@ -166,7 +185,29 @@ public class ApplicationController {
     @PutMapping("/{id}")
     public ResponseEntity<Void> updateApplication(@PathVariable Long id, @RequestBody Map<String,Object> req) {
         String status = jdbc.queryForObject("SELECT status FROM applications WHERE id = ?", String.class, id);
-        if (!"STOPPED".equals(status)) return ResponseEntity.status(403).build();
+        boolean isOffline = "STOPPED".equals(status) || "ERROR".equals(status);
+        if (!isOffline) return ResponseEntity.status(403).build();
+
+        String name = (String) req.get("name");
+        String serverIp = (String) req.get("serverIp");
+        String sshUsername = (String) req.get("sshUsername");
+        String startScript = (String) req.get("startScript");
+        String stopScript = (String) req.get("stopScript");
+        String logScript = (String) req.get("logScript");
+        Object rawPoll = req.getOrDefault("pollIntervalSeconds", 5);
+        int pollInterval = ((Number) rawPoll).intValue();
+
+        String sshPassword = (String) req.get("sshPassword");
+        if (sshPassword != null && !sshPassword.isBlank()) {
+            String encPassword = cipher.encrypt(sshPassword);
+            jdbc.update(
+                "UPDATE applications SET name=?, server_ip=?::inet, ssh_username=?, ssh_password_enc=?, start_script=?, stop_script=?, log_script=?, poll_interval_seconds=?, updated_at=NOW() WHERE id=?",
+                name, serverIp, sshUsername, encPassword, startScript, stopScript, logScript, pollInterval, id);
+        } else {
+            jdbc.update(
+                "UPDATE applications SET name=?, server_ip=?::inet, ssh_username=?, start_script=?, stop_script=?, log_script=?, poll_interval_seconds=?, updated_at=NOW() WHERE id=?",
+                name, serverIp, sshUsername, startScript, stopScript, logScript, pollInterval, id);
+        }
         return ResponseEntity.ok().build();
     }
     @DeleteMapping("/{id}")
