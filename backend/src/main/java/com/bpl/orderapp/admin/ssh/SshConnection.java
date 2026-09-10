@@ -1,5 +1,8 @@
 package com.bpl.orderapp.admin.ssh;
 import com.jcraft.jsch.*;
+import org.springframework.stereotype.Component;
+
+@Component
 public class SshConnection {
     public Session connect(String host, String user, String pass, String fingerprint) throws Exception {
         JSch jsch = new JSch();
