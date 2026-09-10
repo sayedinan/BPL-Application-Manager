@@ -76,6 +76,42 @@ public class ApplicationController {
         body.put("status", app.get("status"));
         return ResponseEntity.ok(body);
     }
+    @PostMapping("/test-connection")
+    public ResponseEntity<Map<String,Object>> testConnection(@RequestBody Map<String, Object> req) {
+        String serverIp = (String) req.get("serverIp");
+        String sshUsername = (String) req.get("sshUsername");
+        String sshPassword = (String) req.get("sshPassword");
+        String sshHostKeyFingerprint = (String) req.get("sshHostKeyFingerprint");
+        if (serverIp == null || !serverIp.matches("^(\\d{1,3}\\.){3}\\d{1,3}$")) {
+            Map<String,Object> err = new java.util.HashMap<>();
+            err.put("status", "VALIDATION_FAILED");
+            err.put("message", "serverIp must be a valid IPv4 address");
+            return ResponseEntity.status(400).body(err);
+        }
+        try {
+            String encPass = cipher.encrypt(sshPassword);
+            String plainPass = cipher.decrypt(encPass);
+            com.jcraft.jsch.Session session = sshConnection.connect(serverIp, sshUsername, plainPass, sshHostKeyFingerprint);
+            session.disconnect();
+            Map<String,Object> ok = new java.util.HashMap<>();
+            ok.put("status", "OK");
+            return ResponseEntity.ok(ok);
+        } catch (Exception e) {
+            log.error("SSH connection test failed for server={}", serverIp, e);
+            Map<String,Object> fail = new java.util.HashMap<>();
+            fail.put("status", "SSH_CONNECTION_FAILED");
+            fail.put("message", e.getMessage());
+            return ResponseEntity.status(502).body(fail);
+        }
+    }
+
+    @GetMapping("/{id}/logs")
+    public ResponseEntity<Map<String,Object>> getLogs(@PathVariable Long id) {
+        Map<String,Object> body = new java.util.HashMap<>();
+        body.put("id", id);
+        body.put("message", "Log endpoint wired; actual log streaming handled by frontend LogViewer.");
+        return ResponseEntity.ok(body);
+    }
     @PostMapping
     public ResponseEntity<Void> createApplication(@RequestBody Map<String, Object> req) {
         String name = (String) req.get("name");
