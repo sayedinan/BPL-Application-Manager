@@ -166,7 +166,8 @@ public class ApplicationController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteApplication(@PathVariable Long id) {
         String status = jdbc.queryForObject("SELECT status FROM applications WHERE id = ?", String.class, id);
-        if (!"STOPPED".equals(status)) return ResponseEntity.status(409).build();
+        boolean isOffline = "STOPPED".equals(status) || "ERROR".equals(status);
+        if (!isOffline) return ResponseEntity.status(409).build();
         jdbc.update("DELETE FROM applications WHERE id = ?", id);
         return ResponseEntity.noContent().build();
     }

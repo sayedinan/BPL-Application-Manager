@@ -21,6 +21,10 @@ const STATUS_COLORS: Record<Status, string> = {
   ERROR: 'bg-red-100 text-red-800',
 };
 
+function isOnline(status: string): boolean {
+  return status === 'RUNNING';
+}
+
 function formatRunningTime(startedAt: string | null): string | null {
   if (!startedAt) return null;
   const ms = Date.now() - new Date(startedAt).getTime();
@@ -117,17 +121,24 @@ export function DashboardPlaceholder(): JSX.Element {
               <div key={app.id} onClick={() => setSelectedAppId(app.id)} className={`border rounded p-4 cursor-pointer ${selectedAppId === app.id ? 'ring-2 ring-blue-500' : ''}`}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-medium">{app.name}</span>
-                  <span className={`text-xs px-2 py-1 rounded ${STATUS_COLORS[app.status]}`}>{app.status}</span>
+                  <span className={`text-xs px-2 py-1 rounded ${STATUS_COLORS[app.status]}`}>{app.status === 'STARTING' || app.status === 'STOPPING' ? app.status : isOnline(app.status) ? 'Online' : 'Offline'}</span>
                 </div>
                 {app.startedAt && <p className="text-xs text-gray-500 mb-1">Started: {new Date(app.startedAt).toLocaleString()}</p>}
                 {runningTime && <p className="text-xs text-gray-500 mb-2">Running for {runningTime}</p>}
                 <div className="flex gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
-                  <button disabled={locked || app.status === 'RUNNING' || pendingId === app.id} onClick={() => handleStartStop(app, 'start')} className="text-xs px-3 py-1 bg-green-600 text-white rounded disabled:opacity-40">
-                    {pendingId === app.id && app.status !== 'RUNNING' ? '…' : 'Start'}
-                  </button>
-                  <button disabled={locked || app.status === 'STOPPED' || pendingId === app.id} onClick={() => handleStartStop(app, 'stop')} className="text-xs px-3 py-1 bg-red-600 text-white rounded disabled:opacity-40">
-                    {pendingId === app.id && app.status !== 'STOPPED' ? '…' : 'Stop'}
-                  </button>
+                  {app.status === 'STARTING' || app.status === 'STOPPING' ? (
+                    <span className={`text-xs px-2 py-1 rounded ${STATUS_COLORS[app.status]}`}>{app.status}</span>
+                  ) : isOnline(app.status) ? (
+                    <>
+                      <span className="text-xs px-2 py-1 rounded bg-green-100 text-green-800">Online</span>
+                      <button disabled={pendingId === app.id} onClick={() => handleStartStop(app, 'stop')} className="text-xs px-3 py-1 bg-red-600 text-white rounded disabled:opacity-40">Stop</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">Offline</span>
+                      <button disabled={pendingId === app.id} onClick={() => handleStartStop(app, 'start')} className="text-xs px-3 py-1 bg-green-600 text-white rounded disabled:opacity-40">Start</button>
+                    </>
+                  )}
                 </div>
               </div>
             );
