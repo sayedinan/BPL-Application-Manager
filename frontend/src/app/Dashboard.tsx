@@ -74,12 +74,17 @@ export function DashboardPlaceholder(): JSX.Element {
       const path = action === 'start' ? API.APPLICATIONS.START(app.id) : API.APPLICATIONS.STOP(app.id);
       const idempotencyKey =
         typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-      await fetch(`/api/v1${path}?userId=${user.id}`, {
+      const res = await fetch(`/api/v1${path}?userId=${user.id}`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Idempotency-Key': idempotencyKey },
       });
       await loadApplications();
+      if (!res.ok) {
+        setActionError(
+          `Failed to ${action} ${app.name} — check the server connection and scripts.`
+        );
+      }
     } catch {
       setActionError(`Failed to ${action} ${app.name}.`);
     } finally {
