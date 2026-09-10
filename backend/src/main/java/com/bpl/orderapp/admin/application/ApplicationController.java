@@ -1,6 +1,5 @@
 package com.bpl.orderapp.admin.application;
 import org.springframework.security.access.prepost.PreAuthorize;
-
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -76,12 +75,14 @@ public class ApplicationController {
         return ResponseEntity.ok().build();
     }
     @PostMapping("/{id}/start")
-    public ResponseEntity<Void> startApplication(@PathVariable Long id, @RequestHeader(value="Idempotency-Key", required=false) String idempotencyKey, @RequestParam Long userId) {
+    public ResponseEntity<Map<String,Object>> startApplication(@PathVariable Long id, @RequestHeader(value="Idempotency-Key", required=false) String idempotencyKey, @RequestParam Long userId) {
         try {
             idempotencyService.checkAndStore(idempotencyKey != null ? idempotencyKey : "", userId, id);
         } catch (RuntimeException e) {
             if (e.getMessage() != null && e.getMessage().contains("IDEMPOTENCY_CONFLICT")) {
-                return ResponseEntity.status(409).build();
+                Map<String,Object> conflictBody = new java.util.HashMap<>();
+                conflictBody.put("status", "CONFLICT");
+                return ResponseEntity.status(409).body(conflictBody);
             }
             throw e;
         }
@@ -111,10 +112,16 @@ public class ApplicationController {
             jdbc.update("UPDATE applications SET status='ERROR' WHERE id=?", id);
         }
 
-        return ResponseEntity.ok().build();
+        String finalStatus = jdbc.queryForObject("SELECT status FROM applications WHERE id=?", String.class, id);
+        Map<String,Object> body = new java.util.HashMap<>();
+        body.put("status", finalStatus);
+        if ("ERROR".equals(finalStatus)) {
+            return ResponseEntity.status(502).body(body);
+        }
+        return ResponseEntity.ok(body);
     }
     @PostMapping("/{id}/stop")
-    public ResponseEntity<Void> stopApplication(@PathVariable Long id, @RequestHeader(value="Idempotency-Key", required=false) String idempotencyKey, @RequestParam Long userId) {
+    public ResponseEntity<Map<String,Object>> stopApplication(@PathVariable Long id, @RequestHeader(value="Idempotency-Key", required=false) String idempotencyKey, @RequestParam Long userId) {
         idempotencyService.checkAndStore(idempotencyKey, userId, id);
         jdbc.update("UPDATE applications SET status='STOPPING' WHERE id=?", id);
 
@@ -142,7 +149,13 @@ public class ApplicationController {
             jdbc.update("UPDATE applications SET status='ERROR' WHERE id=?", id);
         }
 
-        return ResponseEntity.ok().build();
+        String finalStatus = jdbc.queryForObject("SELECT status FROM applications WHERE id=?", String.class, id);
+        Map<String,Object> body = new java.util.HashMap<>();
+        body.put("status", finalStatus);
+        if ("ERROR".equals(finalStatus)) {
+            return ResponseEntity.status(502).body(body);
+        }
+        return ResponseEntity.ok(body);
     }
     @PutMapping("/{id}")
     public ResponseEntity<Void> updateApplication(@PathVariable Long id, @RequestBody Map<String,Object> req) {
