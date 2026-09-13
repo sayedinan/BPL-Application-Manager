@@ -231,7 +231,7 @@ export function ApplicationsPage(): JSX.Element {
           </div>
         </form>
       )}
-      {loading ? (
+      {!showForm && editingId === null && (loading ? (
         <p>Loading…</p>
       ) : apps.length === 0 ? (
         <p className="text-gray-600">No applications yet. Add one above.</p>
@@ -265,7 +265,7 @@ export function ApplicationsPage(): JSX.Element {
             ))}
           </tbody>
         </table>
-      )}
+      )))}
     </div>
   );
 }
