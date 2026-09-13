@@ -152,7 +152,7 @@ public class AuthController {
             encoder.matches(request.password(), DUMMY_BCRYPT_HASH);
             try {
                 auditWriter.write("LOGIN", request.username(), "UNKNOWN", null, null, null,
-                    java.util.Map.of(), "FAILURE");
+                    java.util.Map.of(), "FAILURE", httpRequest);
             } catch (Exception auditEx) {
                 log.warn("Audit write failed for failed LOGIN (unknown user)", auditEx);
             }
@@ -172,7 +172,7 @@ public class AuthController {
             log.info("Login failed: invalid password for user '{}'", username);
             try {
                 auditWriter.write("LOGIN", username, role, null, null, id,
-                    java.util.Map.of(), "FAILURE");
+                    java.util.Map.of(), "FAILURE", httpRequest);
             } catch (Exception auditEx) {
                 log.warn("Audit write failed for failed LOGIN (user id={})", id, auditEx);
             }
@@ -217,7 +217,7 @@ public class AuthController {
         log.info("Login succeeded for user '{}' (role={}); session established", username, role);
         try {
             auditWriter.write("LOGIN", username, role, null, null, id,
-                java.util.Map.of(), "SUCCESS");
+                java.util.Map.of(), "SUCCESS", httpRequest);
         } catch (Exception auditEx) {
             log.warn("Audit write failed for successful LOGIN (user id={})", id, auditEx);
         }
@@ -263,7 +263,8 @@ public class AuthController {
      */
     @PostMapping("/change-password")
     public ResponseEntity<LoginResponse> changePassword(
-            @Valid @RequestBody ChangePasswordRequest request) {
+            @Valid @RequestBody ChangePasswordRequest request,
+            HttpServletRequest httpRequest) {
 
         // 1. Look up the user. Same soft-delete filter as login —
         //    a soft-deleted user must not be able to change their
@@ -338,7 +339,7 @@ public class AuthController {
 
         try {
             auditWriter.write("CHANGE_PASSWORD", username, role, null, null, id,
-                java.util.Map.of(), "SUCCESS");
+                java.util.Map.of(), "SUCCESS", httpRequest);
         } catch (Exception auditEx) {
             log.warn("Audit write failed for CHANGE_PASSWORD (user id={})", id, auditEx);
         }
@@ -562,7 +563,7 @@ public class AuthController {
         if (auditLogoutActor != null) {
             try {
                 auditWriter.write("LOGOUT", auditLogoutActor, auditLogoutRole, null, null, null,
-                    java.util.Map.of(), "SUCCESS");
+                    java.util.Map.of(), "SUCCESS", httpRequest);
             } catch (Exception auditEx) {
                 log.warn("Audit write failed for LOGOUT (user='{}')", auditLogoutActor, auditEx);
             }

@@ -11,6 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -120,20 +121,20 @@ public class UserController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
-    public ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> createUser(@Valid @RequestBody com.bpl.orderapp.admin.user.dto.CreateUserRequest req) {
-        return doCreate(req.username(), req.role(), req.assignedApplicationIds());
+    public ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> createUser(@Valid @RequestBody com.bpl.orderapp.admin.user.dto.CreateUserRequest req, HttpServletRequest httpRequest) {
+        return doCreate(req.username(), req.role(), req.assignedApplicationIds(), httpRequest);
     }
     @PostMapping("/create-admin")
     @PreAuthorize("hasRole('SYS_ADMIN')")
-    public ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> createAdmin(@Valid @RequestBody com.bpl.orderapp.admin.user.dto.CreateUserRequest req) {
+    public ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> createAdmin(@Valid @RequestBody com.bpl.orderapp.admin.user.dto.CreateUserRequest req, HttpServletRequest httpRequest) {
         String role = req.role();
         if (!"ADMIN".equals(role) && !"SYS_ADMIN".equals(role)) {
             throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.BAD_REQUEST, "role must be ADMIN or SYS_ADMIN");
         }
-        return doCreate(req.username(), role, req.assignedApplicationIds());
+        return doCreate(req.username(), role, req.assignedApplicationIds(), httpRequest);
     }
-    private ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> doCreate(String username, String role, java.util.List<Long> assignedIds) {
+    private ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> doCreate(String username, String role, java.util.List<Long> assignedIds, HttpServletRequest httpRequest) {
         var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         boolean callerIsSysAdmin = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN"));
         if (!"USER".equals(role) && !callerIsSysAdmin) {
@@ -171,7 +172,8 @@ public class UserController {
                 null, null, newId,
                 java.util.Map.of("username", username, "role", role,
                     "assignedApplicationIds", assignedIds == null ? java.util.List.of() : assignedIds),
-                "SUCCESS"
+                "SUCCESS",
+                httpRequest
             );
         } catch (Exception auditEx) {
             log.warn("Audit write failed for CREATE_USER/CREATE_ADMIN (user id={})", newId, auditEx);
@@ -180,7 +182,7 @@ public class UserController {
     }
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
-    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id, HttpServletRequest httpRequest) {
         var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         boolean callerIsSysAdmin = auth.getAuthorities().stream()
             .anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN"));
@@ -204,7 +206,7 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
     @PostMapping("/{id}/reset-password")
-    public ResponseEntity<ResetPasswordResponse> resetPassword(@PathVariable("id") Long id) {
+    public ResponseEntity<ResetPasswordResponse> resetPassword(@PathVariable("id") Long id, HttpServletRequest httpRequest) {
         var resetAuth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         String resetActorRole = resetAuth.getAuthorities().stream()
             .anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN")) ? "SYS_ADMIN" : "ADMIN";
@@ -263,7 +265,7 @@ public class UserController {
 
         try {
             auditWriter.write("RESET_PASSWORD", resetAuth.getName(), resetActorRole, null, null, id,
-                java.util.Map.of("username", username), "SUCCESS");
+                java.util.Map.of("username", username), "SUCCESS", httpRequest);
         } catch (Exception auditEx) {
             log.warn("Audit write failed for RESET_PASSWORD (user id={})", id, auditEx);
         }
