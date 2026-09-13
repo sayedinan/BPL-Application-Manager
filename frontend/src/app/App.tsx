@@ -10,13 +10,13 @@ import { DashboardPlaceholder } from '@/app/Dashboard';
 import { ApplicationsPage } from '@/app/ApplicationsPage';
 import { CreateAdminPage } from '@/app/CreateAdminPage';
 import { EnginesPage } from '@/app/EnginesPage';
+import { UsersPage } from '@/app/UsersPage';
 import { api } from '@/api/client';
 import { API } from '@/api/endpoints';
 
 const queryClient = new QueryClient();
 
 function ForbiddenPage() { return <div style={{padding:40,textAlign:'center'}}><h1>403 — Access Denied</h1><p>You don't have access to this page.</p></div>; }
-function PlaceholderUsers() { return <div>Users (Admin+)</div>; }
 
 function SysAdminOnly({children}:{children:React.ReactNode}) { const {user}=useAuth(); return user?.role==="SYS_ADMIN"?<>{children}</>:<ForbiddenPage />; }
 function AdminPlus({children}:{children:React.ReactNode}) { const {user}=useAuth(); return (user?.role==="SYS_ADMIN"||user?.role==="ADMIN")?<>{children}</>:<ForbiddenPage />; }
@@ -58,7 +58,7 @@ export function App(): JSX.Element {
           <Routes>
             <Route path="/" element={<DashboardPlaceholder />} />
             <Route path="/applications" element={<SysAdminOnly><ApplicationsPage /></SysAdminOnly>} />
-            <Route path="/users" element={<AdminPlus><PlaceholderUsers /></AdminPlus>} />
+            <Route path="/users" element={<AdminPlus><UsersPage /></AdminPlus>} />
             <Route path="/users/create-admin" element={<SysAdminOnly><CreateAdminPage /></SysAdminOnly>} />
             <Route path="/engines" element={<SysAdminOnly><EnginesPage /></SysAdminOnly>} />
             <Route path="/login" element={<LoginPage />} />
