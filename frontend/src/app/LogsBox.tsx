@@ -10,24 +10,47 @@ interface LogLineRow {
   captured_at: string;
 }
 
+interface AuditLogRow {
+  id: number;
+  timestamp: string;
+  actorUsername: string;
+  actorRole: string;
+  actionType: string;
+  targetApplicationId: number | null;
+  targetApplicationName: string | null;
+  targetUserId: number | null;
+  result: string;
+}
+
+type LogSource = 'application' | 'audit';
+
+function formatAuditLine(row: AuditLogRow): string {
+  const target = row.targetApplicationName ?? (row.targetUserId != null ? `user#${row.targetUserId}` : '-');
+  return `${row.timestamp} ${row.actorUsername}(${row.actorRole}) ${row.actionType} target=${target} result=${row.result}`;
+}
+
 export function LogsBox({ appId, appName, role }: { appId: number; appName: string; role?: string }) {
+  const canViewAudit = role === 'SYS_ADMIN' || role === 'ADMIN';
+  const [source, setSource] = useState<LogSource>('application');
   const [lines, setLines] = useState<string[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [autoFollow, setAutoFollow] = useState(true);
   const clientRef = useRef<Client | null>(null);
 
-  // Backfill history first, then attach the live subscription so
-  // lines aren't lost between "component mounted" and "WS connected".
   useEffect(() => {
     let cancelled = false;
     setLines([]);
     setHistoryError(null);
+    setAutoFollow(true);
 
     async function loadHistory() {
       try {
-        const rows = await api.get<LogLineRow[]>(API.APPLICATIONS.LOGS(appId));
-        if (!cancelled) {
-          setLines(rows.map((r) => r.content));
+        if (source === 'application') {
+          const rows = await api.get<LogLineRow[]>(API.APPLICATIONS.LOGS(appId));
+          if (!cancelled) setLines(rows.map((r) => r.content));
+        } else {
+          const res = await api.get<{ items: AuditLogRow[] }>(`${API.AUDIT_LOGS}?page=0&size=100`);
+          if (!cancelled) setLines(res.items.slice().reverse().map(formatAuditLine));
         }
       } catch (err) {
         if (!cancelled) {
@@ -38,17 +61,19 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
 
     void loadHistory();
     return () => { cancelled = true; };
-  }, [appId]);
+  }, [appId, source]);
 
   useEffect(() => {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const brokerURL = `${wsProtocol}//${window.location.host}/ws`;
     const client = new Client({ brokerURL, debug: () => {} });
+    const topic = source === 'application' ? `/topic/application-logs/${appId}` : '/topic/audit-log';
 
-    client.onConnect = () => client.subscribe(`/topic/application-logs/${appId}`, (msg) => {
+    client.onConnect = () => client.subscribe(topic, (msg) => {
       try {
         const d = JSON.parse(msg.body);
-        setLines((prev) => [...prev, d.content]);
+        const line = source === 'application' ? d.content : formatAuditLine(d);
+        setLines((prev) => [...prev, line]);
       } catch {
         setLines((prev) => [...prev, msg.body]);
       }
@@ -57,7 +82,7 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
     client.activate();
     clientRef.current = client;
     return () => { client.deactivate(); };
-  }, [appId]);
+  }, [appId, source]);
 
   const reconnectDelays = [1000, 2000, 4000, 8000, 16000, 30000];
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
@@ -85,9 +110,9 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
 
   return (
     <div ref={scrollRef} onScroll={handleScroll} style={{ overflowY: 'auto', height: 400 }}>
-      <select>
-        <option>{appName} — Application Log</option>
-        {(role === 'SYS_ADMIN' || role === 'ADMIN') && <option>Audit Log (Admin+ only)</option>}
+      <select value={source} onChange={(e) => setSource(e.target.value as LogSource)}>
+        <option value="application">{appName} — Application Log</option>
+        {canViewAudit && <option value="audit">Audit Log (Admin+ only)</option>}
       </select>
       {historyError && <p role="alert" className="text-sm text-red-600">{historyError}</p>}
       <pre>{lines.join('\n')}</pre>
