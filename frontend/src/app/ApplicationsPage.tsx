@@ -5,12 +5,16 @@ import { API } from '@/api/endpoints';
 type Status = 'RUNNING' | 'STOPPED' | 'STARTING' | 'STOPPING' | 'ERROR';
 
 function isOnline(status: Status): boolean {
-  return status === 'RUNNING' || status === 'STARTING';
+  return status === 'RUNNING';
+}
+function isTransitional(status: Status): boolean {
+  return status === 'STARTING' || status === 'STOPPING';
 }
 function isEditable(status: Status): boolean {
   return status === 'STOPPED' || status === 'ERROR';
 }
 function statusLabel(status: Status): string {
+  if (isTransitional(status)) return status === 'STARTING' ? 'Starting…' : 'Stopping…';
   return isOnline(status) ? 'Online' : 'Offline';
 }
 interface ApplicationSummary {
@@ -90,9 +94,6 @@ export function ApplicationsPage(): JSX.Element {
       setSubmitting(false);
     }
   }
-  
-   
-
 
   async function handleEditClick(app: ApplicationSummary) {
     if (!isEditable(app.status)) return;
@@ -231,41 +232,52 @@ export function ApplicationsPage(): JSX.Element {
           </div>
         </form>
       )}
-      {!showForm && editingId === null && (loading ? (
-        <p>Loading…</p>
-      ) : apps.length === 0 ? (
-        <p className="text-gray-600">No applications yet. Add one above.</p>
-      ) : (
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="text-left border-b">
-              <th className="py-2">Name</th>
-              <th className="py-2">Status</th>
-              <th className="py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {apps.map((app) => (
-              <tr key={app.id} className="border-b">
-                <td className="py-2">{app.name}</td>
-                <td className="py-2">
-                  <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${isOnline(app.status) ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
-                    {statusLabel(app.status)}
-                  </span>
-                </td>
-                <td className="py-2 text-right space-x-2">
-                  <button disabled={!isEditable(app.status)} onClick={() => handleEditClick(app)} className="text-xs px-3 py-1 bg-blue-600 text-white rounded disabled:opacity-40" title={!isEditable(app.status) ? 'Must be Offline to edit' : undefined}>
-                    Edit
-                  </button>
-                  <button disabled={!isEditable(app.status) || deletingId === app.id} onClick={() => handleDelete(app)} className="text-xs px-3 py-1 bg-red-600 text-white rounded disabled:opacity-40" title={!isEditable(app.status) ? 'Must be Offline to delete' : undefined}>
-                    {deletingId === app.id ? 'Deleting…' : 'Delete'}
-                  </button>
-                </td>
+      {!showForm && editingId === null && (
+        loading ? (
+          <p>Loading…</p>
+        ) : apps.length === 0 ? (
+          <p className="text-gray-600">No applications yet. Add one above.</p>
+        ) : (
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="text-left border-b">
+                <th className="py-2">Name</th>
+                <th className="py-2">Status</th>
+                <th className="py-2"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )))}
+            </thead>
+            <tbody>
+              {apps.map((app) => (
+                <tr key={app.id} className="border-b">
+                  <td className="py-2">{app.name}</td>
+                  <td className="py-2">
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                      isTransitional(app.status)
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : isOnline(app.status)
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-gray-200 text-gray-700'
+                    }`}>
+                      {statusLabel(app.status)}
+                    </span>
+                    {app.status === 'ERROR' && (
+                      <p className="text-xs text-red-600 mt-1">⚠ Last start/stop attempt failed</p>
+                    )}
+                  </td>
+                  <td className="py-2 text-right space-x-2">
+                    <button disabled={!isEditable(app.status)} onClick={() => handleEditClick(app)} className="text-xs px-3 py-1 bg-blue-600 text-white rounded disabled:opacity-40" title={!isEditable(app.status) ? 'Must be Offline to edit' : undefined}>
+                      Edit
+                    </button>
+                    <button disabled={!isEditable(app.status) || deletingId === app.id} onClick={() => handleDelete(app)} className="text-xs px-3 py-1 bg-red-600 text-white rounded disabled:opacity-40" title={!isEditable(app.status) ? 'Must be Offline to delete' : undefined}>
+                      {deletingId === app.id ? 'Deleting…' : 'Delete'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )
+      )}
     </div>
   );
 }
