@@ -198,11 +198,12 @@ export function UsersPage(): JSX.Element {
             <span className="block text-sm text-gray-700 mb-1">Role</span>
             <select
               value={newRole}
-              onChange={(e) => setNewRole(e.target.value as 'USER' | 'ADMIN')}
+              onChange={(e) => setNewRole(e.target.value as 'USER' | 'ADMIN' | 'SYS_ADMIN')}
               className="w-full border rounded px-3 py-2"
             >
               <option value="USER">User</option>
               {canCreateAdmin && <option value="ADMIN">Admin</option>}
+              {canCreateAdmin && <option value="SYS_ADMIN">Sys.Admin</option>}
             </select>
             {!canCreateAdmin && (
               <span className="block text-xs text-gray-500 mt-1">
@@ -239,6 +240,9 @@ export function UsersPage(): JSX.Element {
           <tbody>
             {users.map((u) => {
               const isSelf = currentUser?.id === u.id;
+              const isSysAdminRow = u.role === 'SYS_ADMIN';
+              const viewerIsSysAdmin = currentUser?.role === 'SYS_ADMIN';
+              const canManageRow = viewerIsSysAdmin || !isSysAdminRow;
               return (
                 <tr key={u.id} className="border-b">
                   <td className="py-2">
@@ -265,20 +269,25 @@ export function UsersPage(): JSX.Element {
                   </td>
                   <td className="py-2 text-gray-600">{new Date(u.created_at).toLocaleDateString()}</td>
                   <td className="py-2 text-right space-x-2">
-                    <button
-                      onClick={() => openEdit(u)}
-                      className="text-xs px-3 py-1 bg-gray-200 text-gray-800 rounded"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      disabled={isSelf || deletingId === u.id}
-                      onClick={() => handleDelete(u)}
-                      title={isSelf ? 'Cannot delete your own account' : undefined}
-                      className="text-xs px-3 py-1 bg-red-600 text-white rounded disabled:opacity-40"
-                    >
-                      {deletingId === u.id ? 'Deleting…' : 'Delete'}
-                    </button>
+                    {canManageRow ? (
+                      <button
+                        onClick={() => openEdit(u)}
+                        className="text-xs px-3 py-1 bg-gray-200 text-gray-800 rounded"
+                        title={isSelf ? 'Can edit assignments only (cannot delete self)' : undefined}
+                      >
+                        Edit
+                      </button>
+                    ) : null}
+                    {canManageRow ? (
+                      <button
+                        disabled={isSelf || deletingId === u.id}
+                        onClick={() => handleDelete(u)}
+                        title={isSelf ? 'Cannot delete your own account' : undefined}
+                        className="text-xs px-3 py-1 bg-red-600 text-white rounded disabled:opacity-40"
+                      >
+                        {deletingId === u.id ? 'Deleting…' : 'Delete'}
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               );
