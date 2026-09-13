@@ -1,7 +1,9 @@
 package com.bpl.orderapp.admin.config;
 
+import com.bpl.orderapp.admin.audit.AuditWriter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 /**
@@ -27,5 +29,10 @@ public class PasswordEncoderConfig {
     @Bean
     public BCryptPasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(10);
+    }
+
+    @Bean
+    public AuditWriter auditWriter(JdbcTemplate jdbc) {
+        return new AuditWriter(jdbc);
     }
 }

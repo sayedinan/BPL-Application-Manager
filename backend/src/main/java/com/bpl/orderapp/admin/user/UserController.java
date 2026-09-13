@@ -1,5 +1,6 @@
 package com.bpl.orderapp.admin.user;
 
+import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.common.NotFoundException;
 import com.bpl.orderapp.admin.user.dto.ResetPasswordResponse;
 import com.bpl.orderapp.admin.user.dto.UpdateUserRequest;
@@ -92,11 +93,13 @@ public class UserController {
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
 
     private final JdbcTemplate jdbc;
+    private final AuditWriter auditWriter;
     private final BCryptPasswordEncoder encoder;
 
-    public UserController(JdbcTemplate jdbc, BCryptPasswordEncoder encoder) {
+    public UserController(JdbcTemplate jdbc, BCryptPasswordEncoder encoder, AuditWriter auditWriter) {
         this.jdbc = jdbc;
         this.encoder = encoder;
+        this.auditWriter = auditWriter;
     }
 
     @GetMapping
