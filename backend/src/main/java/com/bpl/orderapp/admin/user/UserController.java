@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -24,7 +25,6 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * User-management endpoints (SPEC §4.3 "Users" group).
@@ -97,6 +97,15 @@ public class UserController {
     public UserController(JdbcTemplate jdbc, BCryptPasswordEncoder encoder) {
         this.jdbc = jdbc;
         this.encoder = encoder;
+    }
+
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
+    public ResponseEntity<List<Map<String, Object>>> listUsers() {
+        List<Map<String, Object>> users = jdbc.queryForList(
+            "SELECT id, username, role, must_change_password, created_at FROM users WHERE deleted_at IS NULL ORDER BY username"
+        );
+        return ResponseEntity.ok(users);
     }
 
     @PostMapping
