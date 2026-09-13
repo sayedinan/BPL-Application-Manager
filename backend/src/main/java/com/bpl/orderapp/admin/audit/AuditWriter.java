@@ -33,11 +33,27 @@ public class AuditWriter {
      * is intermediate proxy hops. Fall back to getRemoteAddr() for
      * direct connections (e.g. local dev without Caddy in front).
      */
+    /**
+     * Caddy is the ONLY reverse-proxy hop in front of this backend
+     * (client -> Caddy -> backend, per the Caddyfile). Caddy does
+     * NOT overwrite an inbound X-Forwarded-For; it APPENDS its own
+     * observed peer address to whatever the client sent. That means
+     * the first entry in this header is attacker-controlled (a
+     * client can send any X-Forwarded-For it likes), while the LAST
+     * entry is the address Caddy itself saw on the socket — the one
+     * value in this header that's actually trustworthy here. Taking
+     * the first entry (a common mistake) would let any caller spoof
+     * their audited source_ip. If another trusted proxy is ever
+     * added in front of Caddy, this must change to strip exactly
+     * that many trusted hops from the end instead of always taking
+     * the last one.
+     */
     private String extractSourceIp(HttpServletRequest request) {
         if (request == null) return null;
         String xff = request.getHeader("X-Forwarded-For");
         if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
+            String[] hops = xff.split(",");
+            return hops[hops.length - 1].trim();
         }
         return request.getRemoteAddr();
     }
