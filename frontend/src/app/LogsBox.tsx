@@ -109,13 +109,15 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
   };
 
   return (
-    <div ref={scrollRef} onScroll={handleScroll} style={{ overflowY: 'auto', height: 400 }}>
+    <div>
       <select value={source} onChange={(e) => setSource(e.target.value as LogSource)}>
         <option value="application">{appName} — Application Log</option>
         {canViewAudit && <option value="audit">Audit Log (Admin+ only)</option>}
       </select>
       {historyError && <p role="alert" className="text-sm text-red-600">{historyError}</p>}
-      <pre>{lines.join('\n')}</pre>
+      <div ref={scrollRef} onScroll={handleScroll} style={{ overflowY: 'auto', height: 400 }}>
+        <pre>{lines.join('\n')}</pre>
+      </div>
       {!autoFollow && (
         <button onClick={() => { setAutoFollow(true); if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }}>
           ↓ Jump to latest
