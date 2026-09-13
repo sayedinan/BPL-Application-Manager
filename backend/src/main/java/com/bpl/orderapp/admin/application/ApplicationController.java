@@ -56,7 +56,15 @@ public class ApplicationController {
             item.put("name", row.get("name"));
             item.put("status", row.get("status"));
             Object startedAt = row.get("started_at");
-            item.put("startedAt", startedAt == null ? null : startedAt.toString());
+            // .toString() on a java.sql.Timestamp has no timezone marker
+            // (e.g. "2026-09-14 09:30:00.0"), so the browser's `new Date(...)`
+            // parses it as LOCAL time instead of UTC — inflating "running for"
+            // by exactly the browser's UTC offset (6h for Dhaka). Format as a
+            // proper ISO-8601 instant instead, same fix already applied in
+            // AuditLogController.
+            item.put("startedAt", startedAt == null
+                ? null
+                : ((java.sql.Timestamp) startedAt).toInstant().toString());
             result.add(item);
         }
         return ResponseEntity.ok(result);
