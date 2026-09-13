@@ -156,9 +156,19 @@ export async function apiFetch<T>(
     );
   }
 
-  // Success: 200/201/etc. with a JSON body.
+  // Success: 200/201 with a JSON body — but some endpoints (e.g.
+  // PUT /applications/{id}, POST /applications) return 200 with an
+  // empty body. response.json() throws a raw SyntaxError on an
+  // empty body, which is NOT an ApiError, so callers' `err
+  // instanceof ApiError` checks would miss it and show a generic
+  // fallback message even though the request actually succeeded.
+  // Try to parse; fall back to undefined on an empty/non-JSON body.
   if (response.status === 200 || response.status === 201) {
-    return (await response.json()) as T;
+    try {
+      return (await response.json()) as T;
+    } catch {
+      return undefined as T;
+    }
   }
 
   // Other 2xx (e.g. 202 Accepted, 203) — still try to parse as
