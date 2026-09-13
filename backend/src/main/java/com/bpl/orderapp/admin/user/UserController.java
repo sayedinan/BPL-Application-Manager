@@ -108,6 +108,13 @@ public class UserController {
         List<Map<String, Object>> users = jdbc.queryForList(
             "SELECT id, username, role, must_change_password, created_at FROM users WHERE deleted_at IS NULL ORDER BY username"
         );
+        for (Map<String,Object> row : users) {
+            Long userRowId = ((Number) row.get("id")).longValue();
+            java.util.List<Long> assigned = jdbc.queryForList(
+                "SELECT application_id FROM user_application_assignments WHERE user_id = ?",
+                Long.class, userRowId);
+            row.put("assignedApplicationIds", assigned);
+        }
         return ResponseEntity.ok(users);
     }
 
@@ -119,7 +126,12 @@ public class UserController {
     @PostMapping("/create-admin")
     @PreAuthorize("hasRole('SYS_ADMIN')")
     public ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> createAdmin(@Valid @RequestBody com.bpl.orderapp.admin.user.dto.CreateUserRequest req) {
-        return doCreate(req.username(), "ADMIN", req.assignedApplicationIds());
+        String role = req.role();
+        if (!"ADMIN".equals(role) && !"SYS_ADMIN".equals(role)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST, "role must be ADMIN or SYS_ADMIN");
+        }
+        return doCreate(req.username(), role, req.assignedApplicationIds());
     }
     private ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> doCreate(String username, String role, java.util.List<Long> assignedIds) {
         var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
@@ -169,6 +181,25 @@ public class UserController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
     public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        boolean callerIsSysAdmin = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN"));
+        List<Map<String, Object>> callerRows = jdbc.queryForList(
+            "SELECT id FROM users WHERE username = ? AND deleted_at IS NULL", auth.getName());
+        if (callerRows.isEmpty()) {
+            throw new com.bpl.orderapp.admin.common.InvalidCredentialsException();
+        }
+        Long callerId = ((Number) callerRows.get(0).get("id")).longValue();
+        com.bpl.orderapp.admin.accountDeletion.AccountDeletionGuard.assertCanDelete(callerId, id);
+        List<Map<String, Object>> targetRows = jdbc.queryForList(
+            "SELECT role FROM users WHERE id = ? AND deleted_at IS NULL", id);
+        if (targetRows.isEmpty()) {
+            throw new NotFoundException();
+        }
+        String targetRole = (String) targetRows.get(0).get("role");
+        if ("SYS_ADMIN".equals(targetRole) && !callerIsSysAdmin) {
+            throw new com.bpl.orderapp.admin.common.AdminCeilingException();
+        }
         jdbc.update("UPDATE users SET deleted_at = NOW() WHERE id = ?", id);
         return ResponseEntity.noContent().build();
     }

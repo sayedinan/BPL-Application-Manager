@@ -35,7 +35,7 @@ export function UsersPage(): JSX.Element {
 
   const [showForm, setShowForm] = useState(false);
   const [newUsername, setNewUsername] = useState('');
-  const [newRole, setNewRole] = useState<'USER' | 'ADMIN'>('USER');
+  const [newRole, setNewRole] = useState<'USER' | 'ADMIN' | 'SYS_ADMIN'>('USER');
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -113,7 +113,7 @@ export function UsersPage(): JSX.Element {
     }
     setCreating(true);
     try {
-      const path = newRole === 'ADMIN' ? '/users/create-admin' : API.USERS.CREATE;
+      const path = newRole === 'USER' ? API.USERS.CREATE : '/users/create-admin';
       const res = await api.post<{ id: number; username: string; role: string; temporaryPassword: string }>(
         path,
         { username: newUsername.trim(), role: newRole, assignedApplicationIds: [] },
@@ -289,25 +289,7 @@ export function UsersPage(): JSX.Element {
 
       {editingUser && (
         <div className="border rounded p-4 mt-6 max-w-md">
-          <h2 className="font-medium mb-3">Edit &quot;{editingUser.username}&quot;</h2>
-
-          <label className="block mb-3">
-            <span className="block text-sm text-gray-700 mb-1">Role</span>
-            <select
-              value={editRole}
-              onChange={(e) => setEditRole(e.target.value as 'USER' | 'ADMIN' | 'SYS_ADMIN')}
-              className="w-full border rounded px-3 py-2"
-            >
-              <option value="USER">User</option>
-              {canCreateAdmin && <option value="ADMIN">Admin</option>}
-              {canCreateAdmin && <option value="SYS_ADMIN">Sys.Admin</option>}
-            </select>
-            {!canCreateAdmin && (
-              <span className="block text-xs text-gray-500 mt-1">
-                Only Sys.Admin can promote to Admin or Sys.Admin.
-              </span>
-            )}
-          </label>
+          <h2 className="font-medium mb-3">Edit &quot;{editingUser.username}&quot; — Assigned Applications</h2>
 
           <fieldset className="mb-4">
             <legend className="block text-sm text-gray-700 mb-2">Assigned Applications</legend>
