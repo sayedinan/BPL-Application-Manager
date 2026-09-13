@@ -18,6 +18,13 @@ const queryClient = new QueryClient();
 
 function ForbiddenPage() { return <div style={{padding:40,textAlign:'center'}}><h1>403 — Access Denied</h1><p>You don't have access to this page.</p></div>; }
 
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { status } = useAuth();
+  if (status === 'unknown') return <div style={{ padding: 40, textAlign: 'center' }}>Loading…</div>;
+  if (status !== 'authenticated') return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
 function SysAdminOnly({children}:{children:React.ReactNode}) { const {user}=useAuth(); return user?.role==="SYS_ADMIN"?<>{children}</>:<ForbiddenPage />; }
 function AdminPlus({children}:{children:React.ReactNode}) { const {user}=useAuth(); return (user?.role==="SYS_ADMIN"||user?.role==="ADMIN")?<>{children}</>:<ForbiddenPage />; }
 
@@ -56,14 +63,14 @@ export function App(): JSX.Element {
           <AuthHydrator />
           <NavBar />
           <Routes>
-            <Route path="/" element={<DashboardPlaceholder />} />
-            <Route path="/applications" element={<SysAdminOnly><ApplicationsPage /></SysAdminOnly>} />
-            <Route path="/users" element={<AdminPlus><UsersPage /></AdminPlus>} />
-            <Route path="/users/create-admin" element={<SysAdminOnly><CreateAdminPage /></SysAdminOnly>} />
-            <Route path="/engines" element={<SysAdminOnly><EnginesPage /></SysAdminOnly>} />
+            <Route path="/" element={<RequireAuth><DashboardPlaceholder /></RequireAuth>} />
+            <Route path="/applications" element={<RequireAuth><SysAdminOnly><ApplicationsPage /></SysAdminOnly></RequireAuth>} />
+            <Route path="/users" element={<RequireAuth><AdminPlus><UsersPage /></AdminPlus></RequireAuth>} />
+            <Route path="/users/create-admin" element={<RequireAuth><SysAdminOnly><CreateAdminPage /></SysAdminOnly></RequireAuth>} />
+            <Route path="/engines" element={<RequireAuth><SysAdminOnly><EnginesPage /></SysAdminOnly></RequireAuth>} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/change-password" element={<RealChangePasswordPage />} />
-            <Route path="/force-change-password" element={<Navigate to="/change-password" />} />
+            <Route path="/change-password" element={<RequireAuth><RealChangePasswordPage /></RequireAuth>} />
+            <Route path="/force-change-password" element={<RequireAuth><Navigate to="/change-password" /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </AuthProvider>
