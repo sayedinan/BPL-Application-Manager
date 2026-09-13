@@ -205,6 +205,10 @@ public class UserController {
     }
     @PostMapping("/{id}/reset-password")
     public ResponseEntity<ResetPasswordResponse> resetPassword(@PathVariable("id") Long id) {
+        var resetAuth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        String resetActorRole = resetAuth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN")) ? "SYS_ADMIN" : "ADMIN";
+
         // 1. Look up the user. Soft-deleted users are filtered
         //    out — a Sys.Admin resetting a soft-deleted user's
         //    password would resurrect them by accident, and the
@@ -256,6 +260,13 @@ public class UserController {
         // 4. Log WITHOUT the cleartext. The username is fine; the
         //    temp password is not.
         log.info("Reset-password succeeded for user '{}' (id={})", username, id);
+
+        try {
+            auditWriter.write("RESET_PASSWORD", resetAuth.getName(), resetActorRole, null, null, id,
+                java.util.Map.of("username", username), "SUCCESS");
+        } catch (Exception auditEx) {
+            log.warn("Audit write failed for RESET_PASSWORD (user id={})", id, auditEx);
+        }
 
         // 5. Return the temp password exactly once. From here on,
         //    the only place it exists in cleartext is in transit

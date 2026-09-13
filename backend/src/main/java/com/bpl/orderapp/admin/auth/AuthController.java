@@ -336,6 +336,13 @@ public class AuthController {
 
         log.info("Change-password succeeded for user '{}'", username);
 
+        try {
+            auditWriter.write("CHANGE_PASSWORD", username, role, null, null, id,
+                java.util.Map.of(), "SUCCESS");
+        } catch (Exception auditEx) {
+            log.warn("Audit write failed for CHANGE_PASSWORD (user id={})", id, auditEx);
+        }
+
         // 5. Return the same shape as /auth/login so the SPA can
         //    replace its in-memory user state with one round-trip.
         //    mustChangePassword is now false, so the SPA's route
@@ -490,6 +497,22 @@ public class AuthController {
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
 
+        // Capture the caller's identity BEFORE anything below
+        // invalidates the session or clears the SecurityContext —
+        // once that happens there's no identity left to attribute
+        // the LOGOUT audit row to. If there's no authenticated
+        // principal (e.g. calling /logout with no active session,
+        // the idempotent 204 path), auditLogoutActor stays null and
+        // no audit row is written — there's genuinely no actor.
+        var currentAuth = SecurityContextHolder.getContext().getAuthentication();
+        String auditLogoutActor = (currentAuth != null && currentAuth.isAuthenticated()
+                && !"anonymousUser".equals(currentAuth.getPrincipal()))
+            ? currentAuth.getName() : null;
+        String auditLogoutRole = (auditLogoutActor == null || currentAuth == null) ? null
+            : currentAuth.getAuthorities().stream()
+                .map(a -> a.getAuthority().replaceFirst("^ROLE_", ""))
+                .findFirst().orElse("UNKNOWN");
+
         // 1. Try to get the current session. If there is no
         //    session (e.g. the user is already logged out, or
         //    never logged in), this is the idempotent 204 path.
@@ -534,7 +557,18 @@ public class AuthController {
         clear.setMaxAge(0); // 0 = delete immediately
         httpResponse.addCookie(clear);
 
-        // 4. 204 No Content. The body is intentionally empty;
+        // 4. Audit the logout, if there was actually someone
+        //    logged in to attribute it to.
+        if (auditLogoutActor != null) {
+            try {
+                auditWriter.write("LOGOUT", auditLogoutActor, auditLogoutRole, null, null, null,
+                    java.util.Map.of(), "SUCCESS");
+            } catch (Exception auditEx) {
+                log.warn("Audit write failed for LOGOUT (user='{}')", auditLogoutActor, auditEx);
+            }
+        }
+
+        // 5. 204 No Content. The body is intentionally empty;
         //    there's nothing the SPA needs to read from a
         //    successful logout response.
         return ResponseEntity.noContent().build();
