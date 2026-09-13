@@ -1,5 +1,7 @@
 package com.bpl.orderapp.admin.log;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Component;
+@Component
 public class WebSocketBroadcast {
     private final SimpMessagingTemplate template;
     public WebSocketBroadcast(SimpMessagingTemplate template) { this.template = template; }

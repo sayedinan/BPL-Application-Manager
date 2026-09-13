@@ -4,6 +4,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import com.bpl.orderapp.admin.common.IdempotencyService;
 import com.bpl.orderapp.admin.audit.AuditWriter;
+import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
 import com.bpl.orderapp.admin.common.NotFoundException;
 import com.bpl.orderapp.admin.ssh.SshConnection;
 import org.springframework.web.bind.annotation.*;
@@ -18,8 +19,9 @@ public class ApplicationController {
     private final IdempotencyService idempotencyService;
     private final SshConnection sshConnection;
     private final AuditWriter auditWriter;
-    public ApplicationController(JdbcTemplate jdbc, SshCredentialCipher cipher, IdempotencyService idempotencyService, SshConnection sshConnection, AuditWriter auditWriter) {
-        this.jdbc = jdbc; this.cipher = cipher; this.idempotencyService = idempotencyService; this.sshConnection = sshConnection; this.auditWriter = auditWriter;
+    private final LogPollingOrchestrator logPollingOrchestrator;
+    public ApplicationController(JdbcTemplate jdbc, SshCredentialCipher cipher, IdempotencyService idempotencyService, SshConnection sshConnection, AuditWriter auditWriter, LogPollingOrchestrator logPollingOrchestrator) {
+        this.jdbc = jdbc; this.cipher = cipher; this.idempotencyService = idempotencyService; this.sshConnection = sshConnection; this.auditWriter = auditWriter; this.logPollingOrchestrator = logPollingOrchestrator;
     }
     @GetMapping
     public ResponseEntity<java.util.List<Map<String, Object>>> list() {
@@ -110,11 +112,10 @@ public class ApplicationController {
     }
 
     @GetMapping("/{id}/logs")
-    public ResponseEntity<Map<String,Object>> getLogs(@PathVariable Long id) {
-        Map<String,Object> body = new java.util.HashMap<>();
-        body.put("id", id);
-        body.put("message", "Log endpoint wired; actual log streaming handled by frontend LogViewer.");
-        return ResponseEntity.ok(body);
+    public ResponseEntity<java.util.List<Map<String,Object>>> getLogs(@PathVariable Long id) {
+        java.util.List<Map<String,Object>> rows = jdbc.queryForList(
+            "SELECT line_number, content, captured_at FROM application_log_lines WHERE application_id = ? ORDER BY line_number ASC", id);
+        return ResponseEntity.ok(rows);
     }
     @PostMapping
     public ResponseEntity<Void> createApplication(@RequestBody Map<String, Object> req) {
@@ -177,6 +178,9 @@ public class ApplicationController {
         }
 
         String finalStatus = jdbc.queryForObject("SELECT status FROM applications WHERE id=?", String.class, id);
+        if ("RUNNING".equals(finalStatus)) {
+            logPollingOrchestrator.startPolling(id);
+        }
         Map<String,Object> body = new java.util.HashMap<>();
         body.put("status", finalStatus);
         if ("ERROR".equals(finalStatus)) {
@@ -214,6 +218,7 @@ public class ApplicationController {
             jdbc.update("UPDATE applications SET status='ERROR' WHERE id=?", id);
         }
 
+        logPollingOrchestrator.stopPolling(id);
         String finalStatus = jdbc.queryForObject("SELECT status FROM applications WHERE id=?", String.class, id);
         Map<String,Object> body = new java.util.HashMap<>();
         body.put("status", finalStatus);
@@ -255,6 +260,7 @@ public class ApplicationController {
         String status = jdbc.queryForObject("SELECT status FROM applications WHERE id = ?", String.class, id);
         boolean isOffline = "STOPPED".equals(status) || "ERROR".equals(status);
         if (!isOffline) return ResponseEntity.status(409).build();
+        logPollingOrchestrator.stopPolling(id);
         jdbc.update("DELETE FROM applications WHERE id = ?", id);
         return ResponseEntity.noContent().build();
     }
