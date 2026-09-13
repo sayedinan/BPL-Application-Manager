@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Client } from '@stomp/stompjs';
 
-export function LogsBox({ appId, role }: { appId: number; role?: string }) {
+export function LogsBox({ appId, appName, role }: { appId: number; appName: string; role?: string }) {
 
   const [lines, setLines] = useState<string[]>([]);
 
@@ -75,7 +75,7 @@ export function LogsBox({ appId, role }: { appId: number; role?: string }) {
 
   return <div ref={scrollRef} onScroll={handleScroll} style={{overflowY:'auto', height:400}}>
 
-    <select><option>Application Log</option>{(role==="SYS_ADMIN"||role==="ADMIN")&&<option>Audit Log (Admin+ only)</option>}</select>
+    <select><option>{appName} — Application Log</option>{(role==="SYS_ADMIN"||role==="ADMIN")&&<option>Audit Log (Admin+ only)</option>}</select>
 
     <pre>{lines.join('\n')}</pre>{!autoFollow && <button onClick={()=>{setAutoFollow(true); if(scrollRef.current)scrollRef.current.scrollTop=scrollRef.current.scrollHeight}}>↓ Jump to latest</button>}{showBanner && <div role="alert">WebSocket disconnected — reconnect failed after 10 attempts.</div>}</div>;
 

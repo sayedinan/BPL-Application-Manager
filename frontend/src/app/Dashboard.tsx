@@ -147,7 +147,7 @@ export function DashboardPlaceholder(): JSX.Element {
       {selectedAppId !== null && (
         <div>
           <h2 className="text-lg font-medium mb-2">Logs</h2>
-          <LogsBox appId={selectedAppId} role={user?.role} />
+          <LogsBox appId={selectedAppId} appName={apps.find((a) => a.id === selectedAppId)?.name ?? ''} role={user?.role} />
         </div>
       )}
     </div>
