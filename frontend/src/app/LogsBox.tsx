@@ -49,7 +49,7 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
           const rows = await api.get<LogLineRow[]>(API.APPLICATIONS.LOGS(appId));
           if (!cancelled) setLines(rows.map((r) => r.content));
         } else {
-          const res = await api.get<{ items: AuditLogRow[] }>(`${API.AUDIT_LOGS}?page=0&size=100`);
+          const res = await api.get<{ items: AuditLogRow[] }>(`${API.AUDIT_LOGS}?page=0&size=500`);
           if (!cancelled) setLines(res.items.slice().reverse().map(formatAuditLine));
         }
       } catch (err) {

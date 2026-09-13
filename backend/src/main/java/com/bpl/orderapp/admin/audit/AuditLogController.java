@@ -18,6 +18,7 @@ import java.util.*;
 public class AuditLogController {
 
     private final JdbcTemplate jdbc;
+    private static final int MAX_PAGE_SIZE = 500;
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public AuditLogController(JdbcTemplate jdbc) {
@@ -30,6 +31,13 @@ public class AuditLogController {
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+
+        // The audit_logs table is append-only and kept forever by design —
+        // this cap only limits what a single API response can return, so
+        // the UI (and any other client) can never pull back more than the
+        // last MAX_PAGE_SIZE rows in one page, regardless of what `size`
+        // a caller passes.
+        size = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
 
         Timestamp fromTs = parseOrNull(from, "from");
         Timestamp toTs = parseOrNull(to, "to");
