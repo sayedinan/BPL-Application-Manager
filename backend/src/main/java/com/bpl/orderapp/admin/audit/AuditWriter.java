@@ -25,15 +25,6 @@ public class AuditWriter {
     }
 
     /**
-     * Caddy sits in front of the backend as a reverse proxy, so
-     * request.getRemoteAddr() would always report Caddy's own
-     * address, not the real client. Caddy forwards the original
-     * client IP in X-Forwarded-For; take the first (left-most)
-     * entry, since that's the original client — everything after it
-     * is intermediate proxy hops. Fall back to getRemoteAddr() for
-     * direct connections (e.g. local dev without Caddy in front).
-     */
-    /**
      * Caddy is the ONLY reverse-proxy hop in front of this backend
      * (client -> Caddy -> backend, per the Caddyfile). Caddy does
      * NOT overwrite an inbound X-Forwarded-For; it APPENDS its own
