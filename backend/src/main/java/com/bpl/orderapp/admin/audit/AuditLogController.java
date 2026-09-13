@@ -34,12 +34,26 @@ public class AuditLogController {
         Timestamp fromTs = parseOrNull(from, "from");
         Timestamp toTs = parseOrNull(to, "to");
 
+        StringBuilder where = new StringBuilder();
+        List<Object> params = new ArrayList<>();
+        if (fromTs != null) {
+            where.append(where.isEmpty() ? " WHERE " : " AND ").append("timestamp >= ?");
+            params.add(fromTs);
+        }
+        if (toTs != null) {
+            where.append(where.isEmpty() ? " WHERE " : " AND ").append("timestamp <= ?");
+            params.add(toTs);
+        }
+
+        List<Object> selectParams = new ArrayList<>(params);
+        selectParams.add(size);
+        selectParams.add(page * size);
+
         List<Map<String, Object>> rows = jdbc.query(
             "SELECT id, timestamp, actor_username, actor_role, action_type, "
                 + "target_application_id, target_application_name, target_user_id, detail, result "
-                + "FROM audit_logs "
-                + "WHERE (timestamp >= ? OR ? IS NULL) AND (timestamp <= ? OR ? IS NULL) "
-                + "ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+                + "FROM audit_logs" + where
+                + " ORDER BY timestamp DESC LIMIT ? OFFSET ?",
             (rs, rowNum) -> {
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("id", rs.getLong("id"));
@@ -54,11 +68,11 @@ public class AuditLogController {
                 row.put("result", rs.getString("result"));
                 return row;
             },
-            fromTs, fromTs, toTs, toTs, size, page * size);
+            selectParams.toArray());
 
         Integer total = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM audit_logs WHERE (timestamp >= ? OR ? IS NULL) AND (timestamp <= ? OR ? IS NULL)",
-            Integer.class, fromTs, fromTs, toTs, toTs);
+            "SELECT COUNT(*) FROM audit_logs" + where,
+            Integer.class, params.toArray());
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", rows);
