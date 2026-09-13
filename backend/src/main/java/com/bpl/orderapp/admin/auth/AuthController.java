@@ -5,6 +5,7 @@ import com.bpl.orderapp.admin.auth.dto.LoginRequest;
 import com.bpl.orderapp.admin.auth.dto.LoginResponse;
 import com.bpl.orderapp.admin.auth.dto.MeResponse;
 import com.bpl.orderapp.admin.common.InvalidCredentialsException;
+import com.bpl.orderapp.admin.audit.AuditWriter;
 import jakarta.servlet.http.HttpSession;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -106,15 +107,18 @@ public class AuthController {
     private final JdbcTemplate jdbc;
     private final BCryptPasswordEncoder encoder;
     private final SecurityContextRepository securityContextRepository;
+    private final AuditWriter auditWriter;
 
     public AuthController(
         JdbcTemplate jdbc,
         BCryptPasswordEncoder encoder,
-        SecurityContextRepository securityContextRepository
+        SecurityContextRepository securityContextRepository,
+        AuditWriter auditWriter
     ) {
         this.jdbc = jdbc;
         this.encoder = encoder;
         this.securityContextRepository = securityContextRepository;
+        this.auditWriter = auditWriter;
     }
 
     @PostMapping("/login")
@@ -146,6 +150,12 @@ public class AuthController {
             // "user exists, wrong password" path.
             log.info("Login attempt for unknown or soft-deleted user: '{}'", request.username());
             encoder.matches(request.password(), DUMMY_BCRYPT_HASH);
+            try {
+                auditWriter.write("LOGIN", request.username(), "UNKNOWN", null, null, null,
+                    java.util.Map.of(), "FAILURE");
+            } catch (Exception auditEx) {
+                log.warn("Audit write failed for failed LOGIN (unknown user)", auditEx);
+            }
             throw new InvalidCredentialsException();
         }
 
@@ -160,6 +170,12 @@ public class AuthController {
         //    uses the underlying bcrypt constant-time compare.
         if (!encoder.matches(request.password(), passwordHash)) {
             log.info("Login failed: invalid password for user '{}'", username);
+            try {
+                auditWriter.write("LOGIN", username, role, null, null, id,
+                    java.util.Map.of(), "FAILURE");
+            } catch (Exception auditEx) {
+                log.warn("Audit write failed for failed LOGIN (user id={})", id, auditEx);
+            }
             throw new InvalidCredentialsException();
         }
 
@@ -199,6 +215,12 @@ public class AuthController {
         securityContextRepository.saveContext(context, httpRequest, httpResponse);
 
         log.info("Login succeeded for user '{}' (role={}); session established", username, role);
+        try {
+            auditWriter.write("LOGIN", username, role, null, null, id,
+                java.util.Map.of(), "SUCCESS");
+        } catch (Exception auditEx) {
+            log.warn("Audit write failed for successful LOGIN (user id={})", id, auditEx);
+        }
         return ResponseEntity.ok(
             new LoginResponse(id, username, role, mustChangePassword)
         );
