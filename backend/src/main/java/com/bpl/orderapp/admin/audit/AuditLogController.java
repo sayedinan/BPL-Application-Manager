@@ -34,6 +34,16 @@ public class AuditLogController {
         Timestamp fromTs = parseOrNull(from, "from");
         Timestamp toTs = parseOrNull(to, "to");
 
+        // Build the WHERE clause conditionally rather than passing
+        // `(timestamp >= ? OR ? IS NULL)` with a null placeholder.
+        // When from/to are both absent (the common case — plain
+        // "load latest logs"), every occurrence of a parameter was
+        // NULL with no other typed context, and Postgres cannot
+        // infer a type for a bare `?` used only against `IS NULL`
+        // — it throws "could not determine data type of parameter"
+        // (surfaces as BadSqlGrammarException / 500 INTERNAL_ERROR).
+        // Only emitting a clause when the bound value is non-null
+        // sidesteps the ambiguity entirely; no cast trickery needed.
         StringBuilder where = new StringBuilder();
         List<Object> params = new ArrayList<>();
         if (fromTs != null) {
