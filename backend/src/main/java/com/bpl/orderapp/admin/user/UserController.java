@@ -110,13 +110,46 @@ public class UserController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
-    public ResponseEntity<Void> createUser(@Valid @RequestBody UpdateUserRequest req) {
-        return ResponseEntity.ok().build();
+    public ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> createUser(@Valid @RequestBody com.bpl.orderapp.admin.user.dto.CreateUserRequest req) {
+        return doCreate(req.username(), req.role(), req.assignedApplicationIds());
     }
     @PostMapping("/create-admin")
     @PreAuthorize("hasRole('SYS_ADMIN')")
-    public ResponseEntity<Void> createAdmin(@Valid @RequestBody UpdateUserRequest req) {
-        return ResponseEntity.ok().build();
+    public ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> createAdmin(@Valid @RequestBody com.bpl.orderapp.admin.user.dto.CreateUserRequest req) {
+        return doCreate(req.username(), "ADMIN", req.assignedApplicationIds());
+    }
+    private ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> doCreate(String username, String role, java.util.List<Long> assignedIds) {
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        boolean callerIsSysAdmin = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN"));
+        if (!"USER".equals(role) && !callerIsSysAdmin) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN, "Admin cannot create Admin/Sys.Admin accounts");
+        }
+        java.util.List<Map<String, Object>> existing = jdbc.queryForList(
+            "SELECT id FROM users WHERE username = ? AND deleted_at IS NULL", username);
+        if (!existing.isEmpty()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.CONFLICT, "DUPLICATE_NAME");
+        }
+        java.security.SecureRandom rng = new java.security.SecureRandom();
+        byte[] bytes = new byte[24];
+        rng.nextBytes(bytes);
+        String cleartext = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        String hash = encoder.encode(cleartext);
+        java.time.Instant now = java.time.Instant.now();
+        jdbc.update(
+            "INSERT INTO users (username, password_hash, role, must_change_password, created_at, updated_at) VALUES (?, ?, ?, true, ?, ?)",
+            username, hash, role, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
+        Long newId = jdbc.queryForObject("SELECT id FROM users WHERE username = ?", Long.class, username);
+        if (assignedIds != null) {
+            for (Long appId : assignedIds) {
+                jdbc.update(
+                    "INSERT INTO user_application_assignments (user_id, application_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                    newId, appId);
+            }
+        }
+        log.info("Created user '{}' (role={})", username, role);
+        return ResponseEntity.ok(new com.bpl.orderapp.admin.user.dto.CreateUserResponse(newId, username, role, cleartext));
     }
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")

@@ -1,20 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
+import { useAuth } from '@/auth/AuthContext';
 
 interface User {
   id: number;
   username: string;
-  role: 'SYS_ADMIN' | 'ADMIN' | 'OPERATOR';
+  role: 'SYS_ADMIN' | 'ADMIN' | 'USER';
   must_change_password: boolean;
   created_at: string;
 }
 
 export function UsersPage(): JSX.Element {
+  const { user: currentUser } = useAuth();
+  const canCreateAdmin = currentUser?.role === 'SYS_ADMIN';
+
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const [showForm, setShowForm] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [newRole, setNewRole] = useState<'USER' | 'ADMIN'>('USER');
+  const [creating, setCreating] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Shown exactly once after a successful create — same pattern as
+  // reset-password: the cleartext temp password never appears again
+  // after this render, so it must be copy-able right here.
+  const [createdResult, setCreatedResult] = useState<{ username: string; temporaryPassword: string } | null>(null);
 
   async function loadUsers() {
     try {
@@ -30,7 +45,44 @@ export function UsersPage(): JSX.Element {
 
   useEffect(() => { void loadUsers(); }, []);
 
+  function resetForm() {
+    setNewUsername('');
+    setNewRole('USER');
+    setFormError(null);
+  }
+
+  async function handleCreate(e: FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+    if (!newUsername.trim()) {
+      setFormError('Username is required.');
+      return;
+    }
+    setCreating(true);
+    try {
+      const path = newRole === 'ADMIN' ? '/users/create-admin' : API.USERS.CREATE;
+      const res = await api.post<{ id: number; username: string; role: string; temporaryPassword: string }>(
+        path,
+        { username: newUsername.trim(), role: newRole, assignedApplicationIds: [] },
+      );
+      setCreatedResult({ username: res.username, temporaryPassword: res.temporaryPassword });
+      resetForm();
+      setShowForm(false);
+      await loadUsers();
+    } catch (err) {
+      setFormError(err instanceof ApiError ? err.message : 'Failed to create user.');
+    } finally {
+      setCreating(false);
+    }
+  }
+
   async function handleDelete(user: User) {
+    if (currentUser && user.id === currentUser.id) {
+      // Defense in depth — the backend also rejects this
+      // (SELF_DELETE_FORBIDDEN), but no point round-tripping.
+      setError('You cannot delete your own account.');
+      return;
+    }
     if (!window.confirm(`Delete user "${user.username}"? This cannot be undone.`)) return;
     setDeletingId(user.id);
     try {
@@ -45,8 +97,77 @@ export function UsersPage(): JSX.Element {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold mb-6">Users</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-semibold">Users</h1>
+        <button
+          onClick={() => { setShowForm((s) => !s); resetForm(); }}
+          className="text-sm px-3 py-2 bg-blue-600 text-white rounded"
+        >
+          {showForm ? 'Cancel' : '+ Add User'}
+        </button>
+      </div>
+
       {error && <p role="alert" className="text-sm text-red-600 mb-4">{error}</p>}
+
+      {createdResult && (
+        <div className="border border-green-300 bg-green-50 rounded p-4 mb-6 max-w-xl">
+          <p className="font-medium text-green-800 mb-1">
+            User &quot;{createdResult.username}&quot; created.
+          </p>
+          <p className="text-sm text-gray-700 mb-2">
+            Temporary password (shown once — deliver this out-of-band; it cannot be retrieved again):
+          </p>
+          <code className="block bg-white border rounded px-3 py-2 font-mono text-sm break-all">
+            {createdResult.temporaryPassword}
+          </code>
+          <button
+            onClick={() => setCreatedResult(null)}
+            className="text-xs px-3 py-1 mt-3 border rounded"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {showForm && (
+        <form onSubmit={handleCreate} noValidate className="border rounded p-4 mb-6 max-w-md">
+          <h2 className="font-medium mb-3">New User</h2>
+          <label className="block mb-3">
+            <span className="block text-sm text-gray-700 mb-1">Username</span>
+            <input
+              value={newUsername}
+              onChange={(e) => setNewUsername(e.target.value)}
+              className="w-full border rounded px-3 py-2"
+              required
+            />
+          </label>
+          <label className="block mb-4">
+            <span className="block text-sm text-gray-700 mb-1">Role</span>
+            <select
+              value={newRole}
+              onChange={(e) => setNewRole(e.target.value as 'USER' | 'ADMIN')}
+              className="w-full border rounded px-3 py-2"
+            >
+              <option value="USER">User</option>
+              {canCreateAdmin && <option value="ADMIN">Admin</option>}
+            </select>
+            {!canCreateAdmin && (
+              <span className="block text-xs text-gray-500 mt-1">
+                Only Sys.Admin can create Admin accounts.
+              </span>
+            )}
+          </label>
+          {formError && <p role="alert" className="text-sm text-red-600 mb-4">{formError}</p>}
+          <button
+            type="submit"
+            disabled={creating}
+            className="text-sm px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+          >
+            {creating ? 'Creating…' : 'Create User'}
+          </button>
+        </form>
+      )}
+
       {loading ? (
         <p>Loading…</p>
       ) : users.length === 0 ? (
@@ -63,31 +184,46 @@ export function UsersPage(): JSX.Element {
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => (
-              <tr key={user.id} className="border-b">
-                <td className="py-2">{user.username}</td>
-                <td className="py-2">
-                  <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                    user.role === 'SYS_ADMIN' ? 'bg-red-100 text-red-800' :
-                    user.role === 'ADMIN' ? 'bg-blue-100 text-blue-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {user.role}
-                  </span>
-                </td>
-                <td className="py-2">
-                  {user.must_change_password && (
-                    <span className="text-xs text-orange-600">⚠ Must change password</span>
-                  )}
-                </td>
-                <td className="py-2 text-gray-600">{new Date(user.created_at).toLocaleDateString()}</td>
-                <td className="py-2 text-right">
-                  <button disabled={deletingId === user.id} onClick={() => handleDelete(user)} className="text-xs px-3 py-1 bg-red-600 text-white rounded disabled:opacity-40">
-                    {deletingId === user.id ? 'Deleting…' : 'Delete'}
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {users.map((u) => {
+              const isSelf = currentUser?.id === u.id;
+              return (
+                <tr key={u.id} className="border-b">
+                  <td className="py-2">
+                    {u.username}
+                    {isSelf && <span className="ml-2 text-xs text-gray-500">(you)</span>}
+                  </td>
+                  <td className="py-2">
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                        u.role === 'SYS_ADMIN'
+                          ? 'bg-red-100 text-red-800'
+                          : u.role === 'ADMIN'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-gray-100 text-gray-800'
+                      }`}
+                    >
+                      {u.role}
+                    </span>
+                  </td>
+                  <td className="py-2">
+                    {u.must_change_password && (
+                      <span className="text-xs text-orange-600">⚠ Must change password</span>
+                    )}
+                  </td>
+                  <td className="py-2 text-gray-600">{new Date(u.created_at).toLocaleDateString()}</td>
+                  <td className="py-2 text-right">
+                    <button
+                      disabled={isSelf || deletingId === u.id}
+                      onClick={() => handleDelete(u)}
+                      title={isSelf ? 'Cannot delete your own account' : undefined}
+                      className="text-xs px-3 py-1 bg-red-600 text-white rounded disabled:opacity-40"
+                    >
+                      {deletingId === u.id ? 'Deleting…' : 'Delete'}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
