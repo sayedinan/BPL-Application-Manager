@@ -3,6 +3,8 @@ import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import com.bpl.orderapp.admin.common.IdempotencyService;
+import com.bpl.orderapp.admin.audit.AuditWriter;
+import com.bpl.orderapp.admin.common.NotFoundException;
 import com.bpl.orderapp.admin.ssh.SshConnection;
 import org.springframework.web.bind.annotation.*;
 import java.util.Map;
@@ -15,9 +17,9 @@ public class ApplicationController {
     private final SshCredentialCipher cipher;
     private final IdempotencyService idempotencyService;
     private final SshConnection sshConnection;
-    public ApplicationController(JdbcTemplate jdbc, SshCredentialCipher cipher, IdempotencyService idempotencyService, SshConnection sshConnection) {
-        this.jdbc = jdbc; this.cipher = cipher; this.idempotencyService = idempotencyService;
-        this.sshConnection = sshConnection;
+    private final AuditWriter auditWriter;
+    public ApplicationController(JdbcTemplate jdbc, SshCredentialCipher cipher, IdempotencyService idempotencyService, SshConnection sshConnection, AuditWriter auditWriter) {
+        this.jdbc = jdbc; this.cipher = cipher; this.idempotencyService = idempotencyService; this.sshConnection = sshConnection; this.auditWriter = auditWriter;
     }
     @GetMapping
     public ResponseEntity<java.util.List<Map<String, Object>>> list() {
@@ -35,7 +37,7 @@ public class ApplicationController {
         Long userId = ((Number) userRows.get(0).get("id")).longValue();
         String role = (String) userRows.get(0).get("role");
         java.util.List<Map<String, Object>> rows;
-        if ("SYS_ADMIN".equals(role)) {
+        if ("SYS_ADMIN".equals(role) || "ADMIN".equals(role)) {
             rows = jdbc.queryForList(
                 "SELECT id, name, status, started_at FROM applications ORDER BY name");
         } else {

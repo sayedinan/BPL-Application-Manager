@@ -69,7 +69,7 @@ class RbacTest {
         assertThat(Rbac.canAccess(Role.ADMIN, Action.DELETE_USER)).isTrue();
         assertThat(Rbac.canAccess(Role.ADMIN, Action.ASSIGN_APPLICATION)).isTrue();
         assertThat(Rbac.canAccess(Role.ADMIN, Action.LIST_APPLICATIONS)).isTrue();
-        assertThat(Rbac.canAccess(Role.ADMIN, Action.ACCESS_APPLICATION)).isTrue();
+        assertThat(Rbac.canAccess(Role.ADMIN, Action.ACCESS_APPLICATION)).isFalse();
         assertThat(Rbac.canAccess(Role.ADMIN, Action.CONTROL_APPLICATION)).isTrue();
         assertThat(Rbac.canAccess(Role.ADMIN, Action.VIEW_AUDIT_LOG)).isTrue();
         assertThat(Rbac.canAccess(Role.ADMIN, Action.RESET_PASSWORD)).isTrue();
@@ -111,7 +111,7 @@ class RbacTest {
         // (canAccessApplication) is what enforces "only the
         // assigned ones".
         assertThat(Rbac.canAccess(Role.USER, Action.LIST_APPLICATIONS)).isTrue();
-        assertThat(Rbac.canAccess(Role.USER, Action.ACCESS_APPLICATION)).isTrue();
+        assertThat(Rbac.canAccess(Role.USER, Action.ACCESS_APPLICATION)).isFalse();
         assertThat(Rbac.canAccess(Role.USER, Action.CONTROL_APPLICATION)).isTrue();
     }
 

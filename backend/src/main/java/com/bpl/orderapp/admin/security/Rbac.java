@@ -106,10 +106,10 @@ public final class Rbac {
                     // service layer.
                     case CREATE_APPLICATION,
                          UPDATE_APPLICATION,
-                         DELETE_APPLICATION -> false;
+                         DELETE_APPLICATION,
+                         ACCESS_APPLICATION -> false;
                     case CONTROL_APPLICATION,
-                         LIST_APPLICATIONS,
-                         ACCESS_APPLICATION -> true;
+                         LIST_APPLICATIONS -> true;
                     // User management: Admin can do all of it.
                     case CREATE_USER,
                          UPDATE_USER,
@@ -136,7 +136,8 @@ public final class Rbac {
                     // No application management.
                     case CREATE_APPLICATION,
                          UPDATE_APPLICATION,
-                         DELETE_APPLICATION -> false;
+                         DELETE_APPLICATION,
+                         ACCESS_APPLICATION -> false;
                     // User can see their application list and
                     // access individual applications — but only
                     // the ones they're assigned to. The coarse
@@ -144,8 +145,7 @@ public final class Rbac {
                     // users at all"; the per-resource check is
                     // canAccessApplication, applied per row in
                     // the list query and per detail request.
-                    case LIST_APPLICATIONS,
-                         ACCESS_APPLICATION -> true;
+                    case LIST_APPLICATIONS -> true;
                     // User can start/stop applications they're
                     // assigned to. Same coarse-vs-fine split.
                     case CONTROL_APPLICATION -> true;

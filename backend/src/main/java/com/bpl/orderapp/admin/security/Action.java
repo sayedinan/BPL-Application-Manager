@@ -51,10 +51,11 @@ public enum Action {
     LIST_APPLICATIONS,
 
     /**
-     * Read the full detail of one specific application. Same
-     * coarse/fine split as LIST_APPLICATIONS — this action
-     * gates "is access to one app allowed at all"; the
-     * per-resource check is {@code Rbac.canAccessApplication}.
+     * Read the full detail of one specific application (scripts,
+     * SSH connection info, fingerprint). SYS_ADMIN only — the
+     * per-resource filter ({@code canAccessApplication}) is
+     * separate and handles ADMIN/USER visibility; this action
+     * only answers "is full-detail access permitted at all?".
      */
     ACCESS_APPLICATION,
 

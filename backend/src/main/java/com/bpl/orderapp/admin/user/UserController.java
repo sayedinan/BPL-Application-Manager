@@ -125,14 +125,12 @@ public class UserController {
         var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         boolean callerIsSysAdmin = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN"));
         if (!"USER".equals(role) && !callerIsSysAdmin) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.FORBIDDEN, "Admin cannot create Admin/Sys.Admin accounts");
+            throw new com.bpl.orderapp.admin.common.AdminCeilingException();
         }
         java.util.List<Map<String, Object>> existing = jdbc.queryForList(
             "SELECT id FROM users WHERE username = ? AND deleted_at IS NULL", username);
         if (!existing.isEmpty()) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.CONFLICT, "DUPLICATE_NAME");
+            throw new com.bpl.orderapp.admin.common.DuplicateNameException(username);
         }
         java.security.SecureRandom rng = new java.security.SecureRandom();
         byte[] bytes = new byte[24];
@@ -151,7 +149,21 @@ public class UserController {
                     newId, appId);
             }
         }
-        log.info("Created user '{}' (role={})", username, role);
+        log.info("Created user '{}' (id={}, role={})", username, newId, role);
+        try {
+            var currentAuth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            auditWriter.write(
+                "ADMIN".equals(role) ? "CREATE_ADMIN" : "CREATE_USER",
+                currentAuth.getName(),
+                callerIsSysAdmin ? "SYS_ADMIN" : "ADMIN",
+                null, null, newId,
+                java.util.Map.of("username", username, "role", role,
+                    "assignedApplicationIds", assignedIds == null ? java.util.List.of() : assignedIds),
+                "SUCCESS"
+            );
+        } catch (Exception auditEx) {
+            log.warn("Audit write failed for CREATE_USER/CREATE_ADMIN (user id={})", newId, auditEx);
+        }
         return ResponseEntity.ok(new com.bpl.orderapp.admin.user.dto.CreateUserResponse(newId, username, role, cleartext));
     }
     @DeleteMapping("/{id}")
