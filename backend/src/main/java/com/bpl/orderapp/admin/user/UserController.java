@@ -239,6 +239,12 @@ public class UserController {
     public ResponseEntity<Void> updateUser(@PathVariable Long id,
             @Valid @RequestBody UpdateUserRequest req) {
         if (req.role() != null) {
+            boolean callerIsSysAdmin = org.springframework.security.core.context.SecurityContextHolder.getContext()
+                .getAuthentication().getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN"));
+            if (!"USER".equals(req.role()) && !callerIsSysAdmin) {
+                throw new com.bpl.orderapp.admin.common.AdminCeilingException();
+            }
             jdbc.update("UPDATE users SET role = ?, updated_at = NOW() WHERE id = ?",
                 req.role(), id);
         }

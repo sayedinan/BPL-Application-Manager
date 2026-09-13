@@ -9,6 +9,12 @@ interface User {
   role: 'SYS_ADMIN' | 'ADMIN' | 'USER';
   must_change_password: boolean;
   created_at: string;
+  assignedApplicationIds: number[];
+}
+
+interface Application {
+  id: number;
+  name: string;
 }
 
 export function UsersPage(): JSX.Element {
@@ -19,6 +25,13 @@ export function UsersPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editRole, setEditRole] = useState<'USER' | 'ADMIN' | 'SYS_ADMIN'>('USER');
+  const [editAssignedIds, setEditAssignedIds] = useState<number[]>([]);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
   const [newUsername, setNewUsername] = useState('');
@@ -43,12 +56,52 @@ export function UsersPage(): JSX.Element {
     }
   }
 
-  useEffect(() => { void loadUsers(); }, []);
+  async function loadApplications() {
+    try {
+      const list = await api.get<Application[]>(API.APPLICATIONS.LIST);
+      setApplications(list);
+    } catch {
+      // Non-fatal — assignment checkboxes just won't render.
+    }
+  }
+
+  useEffect(() => { void loadUsers(); void loadApplications(); }, []);
 
   function resetForm() {
     setNewUsername('');
     setNewRole('USER');
     setFormError(null);
+  }
+
+  function openEdit(u: User) {
+    setEditingUser(u);
+    setEditRole(u.role);
+    setEditAssignedIds(u.assignedApplicationIds ?? []);
+    setEditError(null);
+  }
+
+  function toggleAssigned(appId: number) {
+    setEditAssignedIds((ids) =>
+      ids.includes(appId) ? ids.filter((i) => i !== appId) : [...ids, appId]
+    );
+  }
+
+  async function handleSaveEdit() {
+    if (!editingUser) return;
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      await api.put(API.USERS.UPDATE(editingUser.id), {
+        role: editRole,
+        assignedApplicationIds: editAssignedIds,
+      });
+      setEditingUser(null);
+      await loadUsers();
+    } catch (err) {
+      setEditError(err instanceof ApiError ? err.message : 'Failed to update user.');
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   async function handleCreate(e: FormEvent) {
@@ -211,7 +264,13 @@ export function UsersPage(): JSX.Element {
                     )}
                   </td>
                   <td className="py-2 text-gray-600">{new Date(u.created_at).toLocaleDateString()}</td>
-                  <td className="py-2 text-right">
+                  <td className="py-2 text-right space-x-2">
+                    <button
+                      onClick={() => openEdit(u)}
+                      className="text-xs px-3 py-1 bg-gray-200 text-gray-800 rounded"
+                    >
+                      Edit
+                    </button>
                     <button
                       disabled={isSelf || deletingId === u.id}
                       onClick={() => handleDelete(u)}
@@ -226,6 +285,66 @@ export function UsersPage(): JSX.Element {
             })}
           </tbody>
         </table>
+      )}
+
+      {editingUser && (
+        <div className="border rounded p-4 mt-6 max-w-md">
+          <h2 className="font-medium mb-3">Edit &quot;{editingUser.username}&quot;</h2>
+
+          <label className="block mb-3">
+            <span className="block text-sm text-gray-700 mb-1">Role</span>
+            <select
+              value={editRole}
+              onChange={(e) => setEditRole(e.target.value as 'USER' | 'ADMIN' | 'SYS_ADMIN')}
+              className="w-full border rounded px-3 py-2"
+            >
+              <option value="USER">User</option>
+              {canCreateAdmin && <option value="ADMIN">Admin</option>}
+              {canCreateAdmin && <option value="SYS_ADMIN">Sys.Admin</option>}
+            </select>
+            {!canCreateAdmin && (
+              <span className="block text-xs text-gray-500 mt-1">
+                Only Sys.Admin can promote to Admin or Sys.Admin.
+              </span>
+            )}
+          </label>
+
+          <fieldset className="mb-4">
+            <legend className="block text-sm text-gray-700 mb-2">Assigned Applications</legend>
+            {applications.length === 0 ? (
+              <p className="text-xs text-gray-500">No applications available.</p>
+            ) : (
+              applications.map((app) => (
+                <label key={app.id} className="flex items-center gap-2 text-sm mb-1">
+                  <input
+                    type="checkbox"
+                    checked={editAssignedIds.includes(app.id)}
+                    onChange={() => toggleAssigned(app.id)}
+                  />
+                  {app.name}
+                </label>
+              ))
+            )}
+          </fieldset>
+
+          {editError && <p role="alert" className="text-sm text-red-600 mb-3">{editError}</p>}
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleSaveEdit}
+              disabled={savingEdit}
+              className="text-sm px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+            >
+              {savingEdit ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              onClick={() => setEditingUser(null)}
+              className="text-sm px-4 py-2 border rounded"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
