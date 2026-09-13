@@ -92,9 +92,11 @@ public class ApplicationController {
             String encPass = cipher.encrypt(sshPassword);
             String plainPass = cipher.decrypt(encPass);
             com.jcraft.jsch.Session session = sshConnection.connect(serverIp, sshUsername, plainPass, sshHostKeyFingerprint);
+            String presentedFingerprint = session.getHostKey().getFingerPrint(new com.jcraft.jsch.JSch());
             session.disconnect();
             Map<String,Object> ok = new java.util.HashMap<>();
             ok.put("status", "OK");
+            ok.put("fingerprint", presentedFingerprint);
             return ResponseEntity.ok(ok);
         } catch (Exception e) {
             log.error("SSH connection test failed for server={}", serverIp, e);

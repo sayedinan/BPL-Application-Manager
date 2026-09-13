@@ -52,6 +52,8 @@ export function ApplicationsPage(): JSX.Element {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loadingEdit, setLoadingEdit] = useState(false);
+  const [testStatus, setTestStatus] = useState<'untested' | 'testing' | 'verified' | 'failed'>('untested');
+  const [testMessage, setTestMessage] = useState<string | null>(null);
 
   async function loadApplications() {
     try {
@@ -69,6 +71,9 @@ export function ApplicationsPage(): JSX.Element {
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+    if (key === 'serverIp' || key === 'sshUsername' || key === 'sshPassword') {
+      setTestStatus('untested');
+    }
   }
 
   async function handleCreate(e: FormEvent) {
@@ -87,6 +92,7 @@ export function ApplicationsPage(): JSX.Element {
       });
       setForm(EMPTY_FORM);
       setShowForm(false);
+      setTestStatus('untested');
       await loadApplications();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : 'Failed to create application.');
@@ -95,10 +101,27 @@ export function ApplicationsPage(): JSX.Element {
     }
   }
 
+  async function handleTestConnection() {
+    setTestStatus('testing');
+    setTestMessage(null);
+    try {
+      const result = await api.post<{ status: string; fingerprint?: string }>(
+        API.APPLICATIONS.TEST_CONNECTION,
+        { serverIp: form.serverIp, sshUsername: form.sshUsername, sshPassword: form.sshPassword, sshHostKeyFingerprint: form.sshHostKeyFingerprint || undefined },
+      );
+      if (result.fingerprint) updateField('sshHostKeyFingerprint', result.fingerprint);
+      setTestStatus('verified');
+    } catch (err) {
+      setTestStatus('failed');
+      setTestMessage(err instanceof ApiError ? err.message : 'Connection failed.');
+    }
+  }
+
   async function handleEditClick(app: ApplicationSummary) {
     if (!isEditable(app.status)) return;
     setFormError(null);
     setShowForm(false);
+    setTestStatus('untested');
     setLoadingEdit(true);
     setEditingId(app.id);
     try {
@@ -126,6 +149,7 @@ export function ApplicationsPage(): JSX.Element {
     setEditingId(null);
     setForm(EMPTY_FORM);
     setFormError(null);
+    setTestStatus('untested');
   }
 
   async function handleUpdate(e: FormEvent) {
@@ -198,13 +222,15 @@ export function ApplicationsPage(): JSX.Element {
           </div>
           <label className="block mb-3">
             <span className="block text-sm text-gray-700 mb-1">SSH Host Key Fingerprint</span>
-            <input value={form.sshHostKeyFingerprint} onChange={(e) => updateField('sshHostKeyFingerprint', e.target.value)} placeholder="aa:bb:cc:dd:..." className="w-full border rounded px-3 py-2 font-mono text-sm" required />
-            <span className="block text-xs text-gray-500 mt-1">
-              MD5 colon-hex format (JSch's default), not OpenSSH's SHA256 format. From this server, run:{' '}
-              <code className="bg-gray-100 px-1">ssh-keyscan -t rsa &lt;server-ip&gt; | ssh-keygen -lf - -E md5</code>{' '}
-              and use the part after &quot;MD5:&quot;.
-            </span>
+            <input value={form.sshHostKeyFingerprint} readOnly className="w-full border rounded px-3 py-2 font-mono text-sm bg-gray-50 cursor-default" />
           </label>
+          <div className="mb-4">
+            <button type="button" onClick={handleTestConnection} disabled={testStatus === 'testing' || !form.serverIp || !form.sshUsername || !form.sshPassword} className="text-sm px-3 py-2 border rounded disabled:opacity-40">
+              {testStatus === 'testing' ? 'Testing…' : 'Test Connection'}
+            </button>
+            {testStatus === 'verified' && <span className="ml-2 text-sm text-green-700">✓ Verified — fingerprint captured</span>}
+            {testStatus === 'failed' && <span className="ml-2 text-sm text-red-600">✗ {testMessage}</span>}
+          </div>
           <label className="block mb-3">
             <span className="block text-sm text-gray-700 mb-1">Start Script</span>
             <textarea value={form.startScript} onChange={(e) => updateField('startScript', e.target.value)} className="w-full border rounded px-3 py-2 font-mono text-sm" rows={3} required />
@@ -223,7 +249,7 @@ export function ApplicationsPage(): JSX.Element {
           </label>
           {formError && <p role="alert" className="text-sm text-red-600 mb-4">{formError}</p>}
           <div className="flex gap-2">
-            <button type="submit" disabled={submitting} className="text-sm px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50">
+            <button type="submit" disabled={submitting || testStatus !== 'verified'} className="text-sm px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50">
               {submitting ? (editingId !== null ? 'Saving…' : 'Creating…') : (editingId !== null ? 'Save Changes' : 'Create Application')}
             </button>
             {editingId !== null && (
