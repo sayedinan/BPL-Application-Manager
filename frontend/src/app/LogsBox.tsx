@@ -74,21 +74,35 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
     const client = new Client({ brokerURL, debug: () => {} });
     const topic = source === 'application' ? `/topic/application-logs/${appId}` : '/topic/audit-log';
 
-    client.onConnect = () => client.subscribe(topic, (msg) => {
-      try {
-        const d = JSON.parse(msg.body);
-        const line = source === 'application' ? d.content : formatAuditLine(d);
-        setLines((prev) => [...prev, line]);
-      } catch {
-        setLines((prev) => [...prev, msg.body]);
-      }
-    });
+    client.onConnect = () => {
+      // A reconnect actually succeeded — clear the failure count so
+      // a stale "disconnected" banner doesn't linger forever after
+      // the backend comes back up. Previously this was never reset,
+      // so once 10 attempts were exhausted the banner stayed stuck
+      // permanently even after the socket reconnected, and the only
+      // way out was a full page reload.
+      setReconnectAttempt(0);
+      client.subscribe(topic, (msg) => {
+        try {
+          const d = JSON.parse(msg.body);
+          const line = source === 'application' ? d.content : formatAuditLine(d);
+          setLines((prev) => [...prev, line]);
+        } catch {
+          setLines((prev) => [...prev, msg.body]);
+        }
+      });
+    };
 
     client.activate();
     clientRef.current = client;
     return () => { client.deactivate(); };
   }, [appId, source]);
 
+  // Backend restarts for routine deploys can take well over a
+  // couple of minutes (Gradle rebuild + Docker recreate), so cap the
+  // backoff at 30s but keep retrying indefinitely instead of giving
+  // up after a fixed attempt count — a redeploy shouldn't strand
+  // anyone with a stale dashboard tab open.
   const reconnectDelays = [1000, 2000, 4000, 8000, 16000, 30000];
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
@@ -100,6 +114,11 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
     }
   }, [reconnectAttempt]);
 
+  // Still surface a banner after a while so a genuinely stuck
+  // connection isn't silently invisible — but it's now advisory, not
+  // a dead end: retries keep happening underneath it, and a manual
+  // button is offered too in case someone wants to force it sooner
+  // (e.g. right after they know a deploy just finished).
   const showBanner = reconnectAttempt >= 10;
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -128,7 +147,14 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
           ↓ Jump to latest
         </button>
       )}
-      {showBanner && <div role="alert">WebSocket disconnected — reconnect failed after 10 attempts.</div>}
+      {showBanner && (
+        <div role="alert">
+          WebSocket disconnected — still retrying every 30s.{' '}
+          <button onClick={() => { setReconnectAttempt(0); clientRef.current?.activate(); }}>
+            Reconnect now
+          </button>
+        </div>
+      )}
     </div>
   );
 }
