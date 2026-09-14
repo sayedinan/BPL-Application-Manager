@@ -4,6 +4,7 @@ import { apiFetch, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { useAuth, type CurrentUser } from '@/auth/AuthContext';
 import { Button } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Alert';
 
 interface LoginResponse {
   id: number;
@@ -104,11 +105,7 @@ export function LoginPage(): JSX.Element {
             />
           </div>
 
-          {error && (
-            <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-400">
-              {error}
-            </div>
-          )}
+          {error && <Alert>{error}</Alert>}
 
           <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? 'Signing in…' : 'Sign in'}

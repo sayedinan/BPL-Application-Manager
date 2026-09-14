@@ -6,6 +6,7 @@ import { LogsBox } from '@/app/LogsBox';
 import { Card, PageHeader } from '@/components/ui/Card';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Alert';
 
 type Status = 'RUNNING' | 'STOPPED' | 'STARTING' | 'STOPPING' | 'ERROR';
 
@@ -114,16 +115,8 @@ export function DashboardPlaceholder(): JSX.Element {
         description={`Signed in as ${user?.username} (${user?.role})`}
       />
 
-      {error && (
-        <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-400">
-          {error}
-        </p>
-      )}
-      {actionError && (
-        <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-400">
-          {actionError}
-        </p>
-      )}
+      {error && <Alert className="mb-4">{error}</Alert>}
+      {actionError && <Alert className="mb-4">{actionError}</Alert>}
 
       {apps.length === 0 ? (
         <Card className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">

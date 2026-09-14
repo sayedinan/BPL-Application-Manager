@@ -9,8 +9,6 @@ import { LoginPage } from '@/auth/LoginPage';
 import { RealChangePasswordPage } from '@/auth/ChangePasswordPage';
 import { DashboardPlaceholder } from '@/app/Dashboard';
 import { ApplicationsPage } from '@/app/ApplicationsPage';
-import { CreateAdminPage } from '@/app/CreateAdminPage';
-import { EnginesPage } from '@/app/EnginesPage';
 import { UsersPage } from '@/app/UsersPage';
 import { api } from '@/api/client';
 import { API } from '@/api/endpoints';
@@ -145,8 +143,6 @@ function AppRoutes() {
       <Route path="/" element={<RequireAuth><DashboardPlaceholder /></RequireAuth>} />
       <Route path="/applications" element={<RequireAuth><SysAdminOnly><ApplicationsPage /></SysAdminOnly></RequireAuth>} />
       <Route path="/users" element={<RequireAuth><AdminPlus><UsersPage /></AdminPlus></RequireAuth>} />
-      <Route path="/users/create-admin" element={<RequireAuth><SysAdminOnly><CreateAdminPage /></SysAdminOnly></RequireAuth>} />
-      <Route path="/engines" element={<RequireAuth><SysAdminOnly><EnginesPage /></SysAdminOnly></RequireAuth>} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/change-password" element={<RequireAuth><RealChangePasswordPage /></RequireAuth>} />
       <Route path="/force-change-password" element={<RequireAuth><Navigate to="/change-password" /></RequireAuth>} />

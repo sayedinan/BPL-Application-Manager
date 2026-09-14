@@ -1,6 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
+import { Button } from '@/components/ui/Button';
+import { Badge, type BadgeTone } from '@/components/ui/Badge';
+import { Card, PageHeader } from '@/components/ui/Card';
+import { Alert } from '@/components/ui/Alert';
 
 type Status = 'RUNNING' | 'STOPPED' | 'STARTING' | 'STOPPING' | 'ERROR';
 
@@ -15,8 +19,15 @@ function isEditable(status: Status): boolean {
 }
 function statusLabel(status: Status): string {
   if (isTransitional(status)) return status === 'STARTING' ? 'Starting…' : 'Stopping…';
+  if (status === 'ERROR') return 'Error';
   return isOnline(status) ? 'Online' : 'Offline';
 }
+function statusTone(status: Status): BadgeTone {
+  if (status === 'ERROR') return 'error';
+  if (isTransitional(status)) return 'pending';
+  return isOnline(status) ? 'online' : 'offline';
+}
+
 interface ApplicationSummary {
   id: number;
   name: string;
@@ -40,6 +51,12 @@ const EMPTY_FORM: FormState = {
   name: '', serverIp: '', sshUsername: '', sshPassword: '', sshHostKeyFingerprint: '',
   startScript: '', stopScript: '', logScript: '', pollIntervalSeconds: '5',
 };
+
+const inputClass =
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 ' +
+  'placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
+  'dark:border-slate-700 dark:bg-surface-dark dark:text-slate-100';
+const labelClass = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300';
 
 export function ApplicationsPage(): JSX.Element {
   const [apps, setApps] = useState<ApplicationSummary[]>([]);
@@ -190,118 +207,167 @@ export function ApplicationsPage(): JSX.Element {
     }
   }
 
+  const formOpen = showForm || (editingId !== null && !loadingEdit);
+
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Applications</h1>
-        <button onClick={() => { if (editingId !== null) cancelEdit(); setShowForm((s) => !s); }} className="text-sm px-3 py-2 bg-blue-600 text-white rounded">
-          {showForm ? 'Cancel' : '+ Add Application'}
-        </button>
-      </div>
-      {listError && <p role="alert" className="text-sm text-red-600 mb-4">{listError}</p>}
-      {(showForm || (editingId !== null && !loadingEdit)) && (
-        <form onSubmit={editingId !== null ? handleUpdate : handleCreate} noValidate className="border rounded p-4 mb-6 max-w-xl">
-          <h2 className="font-medium mb-3">{editingId !== null ? 'Edit Application' : 'New Application'}</h2>
-          <label className="block mb-3">
-            <span className="block text-sm text-gray-700 mb-1">Name</span>
-            <input value={form.name} onChange={(e) => updateField('name', e.target.value)} className="w-full border rounded px-3 py-2" required />
-          </label>
-          <label className="block mb-3">
-            <span className="block text-sm text-gray-700 mb-1">Server IP</span>
-            <input value={form.serverIp} onChange={(e) => updateField('serverIp', e.target.value)} placeholder="192.168.1.10" className="w-full border rounded px-3 py-2" required />
-          </label>
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <label className="block">
-              <span className="block text-sm text-gray-700 mb-1">SSH Username</span>
-              <input value={form.sshUsername} onChange={(e) => updateField('sshUsername', e.target.value)} className="w-full border rounded px-3 py-2" required />
-            </label>
-            <label className="block">
-              <span className="block text-sm text-gray-700 mb-1">SSH Password</span>
-              <input type="password" value={form.sshPassword} onChange={(e) => updateField('sshPassword', e.target.value)} className="w-full border rounded px-3 py-2" required />
-            </label>
-          </div>
-          <label className="block mb-3">
-            <span className="block text-sm text-gray-700 mb-1">SSH Host Key Fingerprint</span>
-            <input value={form.sshHostKeyFingerprint} readOnly className="w-full border rounded px-3 py-2 font-mono text-sm bg-gray-50 cursor-default" />
-          </label>
-          <div className="mb-4">
-            <button type="button" onClick={handleTestConnection} disabled={testStatus === 'testing' || !form.serverIp || !form.sshUsername || !form.sshPassword} className="text-sm px-3 py-2 border rounded disabled:opacity-40">
-              {testStatus === 'testing' ? 'Testing…' : 'Test Connection'}
-            </button>
-            {testStatus === 'verified' && <span className="ml-2 text-sm text-green-700">✓ Verified — fingerprint captured</span>}
-            {testStatus === 'failed' && <span className="ml-2 text-sm text-red-600">✗ {testMessage}</span>}
-          </div>
-          <label className="block mb-3">
-            <span className="block text-sm text-gray-700 mb-1">Start Script</span>
-            <textarea value={form.startScript} onChange={(e) => updateField('startScript', e.target.value)} className="w-full border rounded px-3 py-2 font-mono text-sm" rows={3} required />
-          </label>
-          <label className="block mb-3">
-            <span className="block text-sm text-gray-700 mb-1">Stop Script</span>
-            <textarea value={form.stopScript} onChange={(e) => updateField('stopScript', e.target.value)} className="w-full border rounded px-3 py-2 font-mono text-sm" rows={3} required />
-          </label>
-          <label className="block mb-3">
-            <span className="block text-sm text-gray-700 mb-1">Log Script</span>
-            <textarea value={form.logScript} onChange={(e) => updateField('logScript', e.target.value)} className="w-full border rounded px-3 py-2 font-mono text-sm" rows={3} required />
-          </label>
-          <label className="block mb-4">
-            <span className="block text-sm text-gray-700 mb-1">Poll Interval (seconds)</span>
-            <input type="number" min={1} value={form.pollIntervalSeconds} onChange={(e) => updateField('pollIntervalSeconds', e.target.value)} className="w-32 border rounded px-3 py-2" />
-          </label>
-          {formError && <p role="alert" className="text-sm text-red-600 mb-4">{formError}</p>}
-          <div className="flex gap-2">
-            <button type="submit" disabled={submitting || testStatus !== 'verified'} className="text-sm px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50">
-              {submitting ? (editingId !== null ? 'Saving…' : 'Creating…') : (editingId !== null ? 'Save Changes' : 'Create Application')}
-            </button>
-            {editingId !== null && (
-              <button type="button" onClick={cancelEdit} className="text-sm px-4 py-2 border rounded">Cancel</button>
-            )}
-          </div>
-        </form>
+    <div className="p-6 sm:p-8 max-w-6xl mx-auto">
+      <PageHeader
+        title="Applications"
+        description="SSH-backed order applications — create, edit, and monitor."
+        actions={
+          <Button
+            variant={showForm ? 'secondary' : 'primary'}
+            onClick={() => { if (editingId !== null) cancelEdit(); setShowForm((s) => !s); }}
+          >
+            {showForm ? 'Cancel' : '+ Add Application'}
+          </Button>
+        }
+      />
+
+      {listError && (
+        <div role="alert" className="mb-4 rounded-lg border border-status-error/30 bg-status-errorBg px-4 py-2.5 text-sm text-status-error dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          {listError}
+        </div>
       )}
+
+      {formOpen && (
+        <Card className="mb-6 max-w-xl animate-fade-in p-5">
+          <form onSubmit={editingId !== null ? handleUpdate : handleCreate} noValidate>
+            <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
+              {editingId !== null ? 'Edit Application' : 'New Application'}
+            </h2>
+
+            <label className="mb-3 block">
+              <span className={labelClass}>Name</span>
+              <input value={form.name} onChange={(e) => updateField('name', e.target.value)} className={inputClass} required />
+            </label>
+
+            <label className="mb-3 block">
+              <span className={labelClass}>Server IP</span>
+              <input value={form.serverIp} onChange={(e) => updateField('serverIp', e.target.value)} placeholder="192.168.1.10" className={inputClass} required />
+            </label>
+
+            <div className="mb-3 grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className={labelClass}>SSH Username</span>
+                <input value={form.sshUsername} onChange={(e) => updateField('sshUsername', e.target.value)} className={inputClass} required />
+              </label>
+              <label className="block">
+                <span className={labelClass}>SSH Password</span>
+                <input type="password" value={form.sshPassword} onChange={(e) => updateField('sshPassword', e.target.value)} className={inputClass} required />
+              </label>
+            </div>
+
+            <label className="mb-3 block">
+              <span className={labelClass}>SSH Host Key Fingerprint</span>
+              <input
+                value={form.sshHostKeyFingerprint}
+                readOnly
+                placeholder="Captured after a successful Test Connection"
+                className={`${inputClass} cursor-default bg-slate-50 font-mono text-xs dark:bg-slate-800/50`}
+              />
+            </label>
+
+            <div className="mb-5 flex items-center gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleTestConnection}
+                disabled={testStatus === 'testing' || !form.serverIp || !form.sshUsername || !form.sshPassword}
+              >
+                {testStatus === 'testing' ? 'Testing…' : 'Test Connection'}
+              </Button>
+              {testStatus === 'verified' && <Badge tone="online">Verified — fingerprint captured</Badge>}
+              {testStatus === 'failed' && <Badge tone="error">{testMessage ?? 'Connection failed'}</Badge>}
+            </div>
+
+            <label className="mb-3 block">
+              <span className={labelClass}>Start Script</span>
+              <textarea value={form.startScript} onChange={(e) => updateField('startScript', e.target.value)} className={`${inputClass} font-mono`} rows={3} required />
+            </label>
+            <label className="mb-3 block">
+              <span className={labelClass}>Stop Script</span>
+              <textarea value={form.stopScript} onChange={(e) => updateField('stopScript', e.target.value)} className={`${inputClass} font-mono`} rows={3} required />
+            </label>
+            <label className="mb-3 block">
+              <span className={labelClass}>Log Script</span>
+              <textarea value={form.logScript} onChange={(e) => updateField('logScript', e.target.value)} className={`${inputClass} font-mono`} rows={3} required />
+            </label>
+
+            <label className="mb-5 block">
+              <span className={labelClass}>Poll Interval (seconds)</span>
+              <input type="number" min={1} value={form.pollIntervalSeconds} onChange={(e) => updateField('pollIntervalSeconds', e.target.value)} className={`${inputClass} w-32`} />
+            </label>
+
+            {formError && <Alert className="mb-4">{formError}</Alert>}
+
+            <div className="flex gap-2">
+              <Button type="submit" disabled={submitting || testStatus !== 'verified'}>
+                {submitting ? (editingId !== null ? 'Saving…' : 'Creating…') : (editingId !== null ? 'Save Changes' : 'Create Application')}
+              </Button>
+              {editingId !== null && (
+                <Button type="button" variant="secondary" onClick={cancelEdit}>Cancel</Button>
+              )}
+            </div>
+          </form>
+        </Card>
+      )}
+
       {!showForm && editingId === null && (
         loading ? (
-          <p>Loading…</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
         ) : apps.length === 0 ? (
-          <p className="text-gray-600">No applications yet. Add one above.</p>
+          <Card className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+            No applications yet. Add one above.
+          </Card>
         ) : (
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="text-left border-b">
-                <th className="py-2">Name</th>
-                <th className="py-2">Status</th>
-                <th className="py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {apps.map((app) => (
-                <tr key={app.id} className="border-b">
-                  <td className="py-2">{app.name}</td>
-                  <td className="py-2">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                      isTransitional(app.status)
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : isOnline(app.status)
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-200 text-gray-700'
-                    }`}>
-                      {statusLabel(app.status)}
-                    </span>
-                    {app.status === 'ERROR' && (
-                      <p className="text-xs text-red-600 mt-1">⚠ Last start/stop attempt failed</p>
-                    )}
-                  </td>
-                  <td className="py-2 text-right space-x-2">
-                    <button disabled={!isEditable(app.status)} onClick={() => handleEditClick(app)} className="text-xs px-3 py-1 bg-blue-600 text-white rounded disabled:opacity-40" title={!isEditable(app.status) ? 'Must be Offline to edit' : undefined}>
-                      Edit
-                    </button>
-                    <button disabled={!isEditable(app.status) || deletingId === app.id} onClick={() => handleDelete(app)} className="text-xs px-3 py-1 bg-red-600 text-white rounded disabled:opacity-40" title={!isEditable(app.status) ? 'Must be Offline to delete' : undefined}>
-                      {deletingId === app.id ? 'Deleting…' : 'Delete'}
-                    </button>
-                  </td>
+          <Card className="overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {apps.map((app) => (
+                  <tr key={app.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
+                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{app.name}</td>
+                    <td className="px-4 py-3">
+                      <Badge tone={statusTone(app.status)}>{statusLabel(app.status)}</Badge>
+                      {app.status === 'ERROR' && (
+                        <p className="mt-1 text-xs text-status-error dark:text-red-400">Last start/stop attempt failed</p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={!isEditable(app.status)}
+                          onClick={() => handleEditClick(app)}
+                          title={!isEditable(app.status) ? 'Must be Offline to edit' : undefined}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          disabled={!isEditable(app.status) || deletingId === app.id}
+                          onClick={() => handleDelete(app)}
+                          title={!isEditable(app.status) ? 'Must be Offline to delete' : undefined}
+                        >
+                          {deletingId === app.id ? 'Deleting…' : 'Delete'}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
         )
       )}
     </div>

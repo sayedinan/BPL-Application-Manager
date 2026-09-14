@@ -2,6 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
+import { Button } from '@/components/ui/Button';
+import { Badge, type BadgeTone } from '@/components/ui/Badge';
+import { Card, PageHeader } from '@/components/ui/Card';
+import { Alert } from '@/components/ui/Alert';
 
 interface User {
   id: number;
@@ -15,6 +19,24 @@ interface User {
 interface Application {
   id: number;
   name: string;
+}
+
+const inputClass =
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 ' +
+  'placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
+  'dark:border-slate-700 dark:bg-surface-dark dark:text-slate-100';
+const labelClass = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300';
+
+function roleTone(role: User['role']): BadgeTone {
+  if (role === 'SYS_ADMIN') return 'error';
+  if (role === 'ADMIN') return 'neutral';
+  return 'offline';
+}
+
+function roleLabel(role: User['role']): string {
+  if (role === 'SYS_ADMIN') return 'Sys.Admin';
+  if (role === 'ADMIN') return 'Admin';
+  return 'User';
 }
 
 export function UsersPage(): JSX.Element {
@@ -149,193 +171,185 @@ export function UsersPage(): JSX.Element {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Users</h1>
-        <button
-          onClick={() => { setShowForm((s) => !s); resetForm(); }}
-          className="text-sm px-3 py-2 bg-blue-600 text-white rounded"
-        >
-          {showForm ? 'Cancel' : '+ Add User'}
-        </button>
-      </div>
+    <div className="p-6 sm:p-8 max-w-6xl mx-auto">
+      <PageHeader
+        title="Users"
+        description="Manage accounts, roles, and application assignments."
+        actions={
+          <Button
+            variant={showForm ? 'secondary' : 'primary'}
+            onClick={() => { setShowForm((s) => !s); resetForm(); }}
+          >
+            {showForm ? 'Cancel' : '+ Add User'}
+          </Button>
+        }
+      />
 
-      {error && <p role="alert" className="text-sm text-red-600 mb-4">{error}</p>}
+      {error && <Alert className="mb-4">{error}</Alert>}
 
       {createdResult && (
-        <div className="border border-green-300 bg-green-50 rounded p-4 mb-6 max-w-xl">
-          <p className="font-medium text-green-800 mb-1">
+        <Card className="mb-6 max-w-xl border-status-online/30 bg-status-onlineBg/60 p-5 dark:border-green-500/20 dark:bg-green-500/5">
+          <p className="mb-1 font-semibold text-status-online dark:text-green-400">
             User &quot;{createdResult.username}&quot; created.
           </p>
-          <p className="text-sm text-gray-700 mb-2">
+          <p className="mb-2 text-sm text-slate-600 dark:text-slate-300">
             Temporary password (shown once — deliver this out-of-band; it cannot be retrieved again):
           </p>
-          <code className="block bg-white border rounded px-3 py-2 font-mono text-sm break-all">
+          <code className="block break-all rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-sm dark:border-slate-700 dark:bg-surface-dark dark:text-slate-100">
             {createdResult.temporaryPassword}
           </code>
-          <button
-            onClick={() => setCreatedResult(null)}
-            className="text-xs px-3 py-1 mt-3 border rounded"
-          >
+          <Button size="sm" variant="secondary" className="mt-3" onClick={() => setCreatedResult(null)}>
             Dismiss
-          </button>
-        </div>
+          </Button>
+        </Card>
       )}
 
       {showForm && (
-        <form onSubmit={handleCreate} noValidate className="border rounded p-4 mb-6 max-w-md">
-          <h2 className="font-medium mb-3">New User</h2>
-          <label className="block mb-3">
-            <span className="block text-sm text-gray-700 mb-1">Username</span>
-            <input
-              value={newUsername}
-              onChange={(e) => setNewUsername(e.target.value)}
-              className="w-full border rounded px-3 py-2"
-              required
-            />
-          </label>
-          <label className="block mb-4">
-            <span className="block text-sm text-gray-700 mb-1">Role</span>
-            <select
-              value={newRole}
-              onChange={(e) => setNewRole(e.target.value as 'USER' | 'ADMIN' | 'SYS_ADMIN')}
-              className="w-full border rounded px-3 py-2"
-            >
-              <option value="USER">User</option>
-              {canCreateAdmin && <option value="ADMIN">Admin</option>}
-              {canCreateAdmin && <option value="SYS_ADMIN">Sys.Admin</option>}
-            </select>
-            {!canCreateAdmin && (
-              <span className="block text-xs text-gray-500 mt-1">
-                Only Sys.Admin can create Admin accounts.
-              </span>
-            )}
-          </label>
-          {formError && <p role="alert" className="text-sm text-red-600 mb-4">{formError}</p>}
-          <button
-            type="submit"
-            disabled={creating}
-            className="text-sm px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
-          >
-            {creating ? 'Creating…' : 'Create User'}
-          </button>
-        </form>
+        <Card className="mb-6 max-w-md animate-fade-in p-5">
+          <form onSubmit={handleCreate} noValidate>
+            <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">New User</h2>
+            <label className="mb-3 block">
+              <span className={labelClass}>Username</span>
+              <input
+                value={newUsername}
+                onChange={(e) => setNewUsername(e.target.value)}
+                className={inputClass}
+                required
+              />
+            </label>
+            <label className="mb-4 block">
+              <span className={labelClass}>Role</span>
+              <select
+                value={newRole}
+                onChange={(e) => setNewRole(e.target.value as 'USER' | 'ADMIN' | 'SYS_ADMIN')}
+                className={inputClass}
+              >
+                <option value="USER">User</option>
+                {canCreateAdmin && <option value="ADMIN">Admin</option>}
+                {canCreateAdmin && <option value="SYS_ADMIN">Sys.Admin</option>}
+              </select>
+              {!canCreateAdmin && (
+                <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                  Only Sys.Admin can create Admin accounts.
+                </span>
+              )}
+            </label>
+            {formError && <Alert className="mb-4">{formError}</Alert>}
+            <Button type="submit" disabled={creating}>
+              {creating ? 'Creating…' : 'Create User'}
+            </Button>
+          </form>
+        </Card>
       )}
 
       {loading ? (
-        <p>Loading…</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
       ) : users.length === 0 ? (
-        <p className="text-gray-600">No users yet.</p>
+        <Card className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">No users yet.</Card>
       ) : (
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="text-left border-b">
-              <th className="py-2">Username</th>
-              <th className="py-2">Role</th>
-              <th className="py-2">Status</th>
-              <th className="py-2">Created</th>
-              <th className="py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => {
-              const isSelf = currentUser?.id === u.id;
-              const isSysAdminRow = u.role === 'SYS_ADMIN';
-              const viewerIsSysAdmin = currentUser?.role === 'SYS_ADMIN';
-              const canManageRow = viewerIsSysAdmin || !isSysAdminRow;
-              return (
-                <tr key={u.id} className="border-b">
-                  <td className="py-2">
-                    {u.username}
-                    {isSelf && <span className="ml-2 text-xs text-gray-500">(you)</span>}
-                  </td>
-                  <td className="py-2">
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                        u.role === 'SYS_ADMIN'
-                          ? 'bg-red-100 text-red-800'
-                          : u.role === 'ADMIN'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      {u.role}
-                    </span>
-                  </td>
-                  <td className="py-2">
-                    {u.must_change_password && (
-                      <span className="text-xs text-orange-600">⚠ Must change password</span>
-                    )}
-                  </td>
-                  <td className="py-2 text-gray-600">{new Date(u.created_at).toLocaleDateString()}</td>
-                  <td className="py-2 text-right space-x-2">
-                    {canManageRow ? (
-                      <button
-                        onClick={() => openEdit(u)}
-                        className="text-xs px-3 py-1 bg-gray-200 text-gray-800 rounded"
-                        title={isSelf ? 'Can edit assignments only (cannot delete self)' : undefined}
-                      >
-                        Edit
-                      </button>
-                    ) : null}
-                    {canManageRow ? (
-                      <button
-                        disabled={isSelf || deletingId === u.id}
-                        onClick={() => handleDelete(u)}
-                        title={isSelf ? 'Cannot delete your own account' : undefined}
-                        className="text-xs px-3 py-1 bg-red-600 text-white rounded disabled:opacity-40"
-                      >
-                        {deletingId === u.id ? 'Deleting…' : 'Delete'}
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <Card className="overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                <th className="px-4 py-3 font-medium">Username</th>
+                <th className="px-4 py-3 font-medium">Role</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Created</th>
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => {
+                const isSelf = currentUser?.id === u.id;
+                const isSysAdminRow = u.role === 'SYS_ADMIN';
+                const viewerIsSysAdmin = currentUser?.role === 'SYS_ADMIN';
+                const canManageRow = viewerIsSysAdmin || !isSysAdminRow;
+                return (
+                  <tr key={u.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
+                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">
+                      {u.username}
+                      {isSelf && <span className="ml-2 text-xs font-normal text-slate-400">(you)</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge tone={roleTone(u.role)} dot={false}>{roleLabel(u.role)}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.must_change_password && (
+                        <Badge tone="pending">Must change password</Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
+                      {new Date(u.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3">
+                      {canManageRow && (
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => openEdit(u)}
+                            title={isSelf ? 'Can edit assignments only (cannot delete self)' : undefined}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            disabled={isSelf || deletingId === u.id}
+                            onClick={() => handleDelete(u)}
+                            title={isSelf ? 'Cannot delete your own account' : undefined}
+                          >
+                            {deletingId === u.id ? 'Deleting…' : 'Delete'}
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Card>
       )}
 
       {editingUser && (
-        <div className="border rounded p-4 mt-6 max-w-md">
-          <h2 className="font-medium mb-3">Edit &quot;{editingUser.username}&quot; — Assigned Applications</h2>
+        <Card className="mt-6 max-w-md animate-fade-in p-5">
+          <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
+            Edit &quot;{editingUser.username}&quot; — Assigned Applications
+          </h2>
 
           <fieldset className="mb-4">
-            <legend className="block text-sm text-gray-700 mb-2">Assigned Applications</legend>
+            <legend className={labelClass}>Assigned Applications</legend>
             {applications.length === 0 ? (
-              <p className="text-xs text-gray-500">No applications available.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">No applications available.</p>
             ) : (
-              applications.map((app) => (
-                <label key={app.id} className="flex items-center gap-2 text-sm mb-1">
-                  <input
-                    type="checkbox"
-                    checked={editAssignedIds.includes(app.id)}
-                    onChange={() => toggleAssigned(app.id)}
-                  />
-                  {app.name}
-                </label>
-              ))
+              <div className="space-y-1.5">
+                {applications.map((app) => (
+                  <label key={app.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={editAssignedIds.includes(app.id)}
+                      onChange={() => toggleAssigned(app.id)}
+                      className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600"
+                    />
+                    {app.name}
+                  </label>
+                ))}
+              </div>
             )}
           </fieldset>
 
-          {editError && <p role="alert" className="text-sm text-red-600 mb-3">{editError}</p>}
+          {editError && <Alert className="mb-4">{editError}</Alert>}
 
           <div className="flex gap-2">
-            <button
-              onClick={handleSaveEdit}
-              disabled={savingEdit}
-              className="text-sm px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
-            >
+            <Button onClick={handleSaveEdit} disabled={savingEdit}>
               {savingEdit ? 'Saving…' : 'Save'}
-            </button>
-            <button
-              onClick={() => setEditingUser(null)}
-              className="text-sm px-4 py-2 border rounded"
-            >
+            </Button>
+            <Button variant="secondary" onClick={() => setEditingUser(null)}>
               Cancel
-            </button>
+            </Button>
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );

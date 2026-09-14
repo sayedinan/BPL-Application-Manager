@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Alert } from '@/components/ui/Alert';
 
 interface ChangePasswordResponse {
   id: number;
@@ -10,6 +13,11 @@ interface ChangePasswordResponse {
   role: string;
   mustChangePassword: boolean;
 }
+
+const inputClass =
+  'mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 ' +
+  'transition-theme placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
+  'dark:border-slate-700 dark:bg-surface-dark dark:text-white';
 
 export function RealChangePasswordPage(): JSX.Element {
   const { user, setUser } = useAuth();
@@ -48,27 +56,76 @@ export function RealChangePasswordPage(): JSX.Element {
   }
 
   return (
-    <div data-change-password-page="real" className="p-8 max-w-sm mx-auto mt-20">
-      <h1 className="text-2xl font-semibold mb-2">Change Password</h1>
-      <p className="text-sm text-gray-600 mb-6">You must set a new password before continuing.</p>
-      <form onSubmit={handleSubmit} noValidate>
-        <label className="block mb-3">
-          <span className="block text-sm text-gray-700 mb-1">Current password</span>
-          <input type="password" autoComplete="current-password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full border rounded px-3 py-2" required autoFocus />
-        </label>
-        <label className="block mb-3">
-          <span className="block text-sm text-gray-700 mb-1">New password</span>
-          <input type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full border rounded px-3 py-2" minLength={12} required />
-        </label>
-        <label className="block mb-4">
-          <span className="block text-sm text-gray-700 mb-1">Confirm new password</span>
-          <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full border rounded px-3 py-2" minLength={12} required />
-        </label>
-        {error && <p role="alert" className="text-sm text-red-600 mb-4">{error}</p>}
-        <button type="submit" disabled={submitting} className="w-full bg-blue-600 text-white rounded px-3 py-2 disabled:opacity-50">
-          {submitting ? 'Saving…' : 'Save new password'}
-        </button>
-      </form>
+    <div
+      data-change-password-page="real"
+      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-surface-subtle px-4 dark:bg-surface-dark"
+    >
+      <div className="pointer-events-none absolute -top-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-brand-500/20 blur-3xl" />
+
+      <Card className="relative w-full max-w-sm animate-fade-in p-8 shadow-popover">
+        <div className="mb-6 text-center">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Change Password</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            You must set a new password before continuing.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          <div>
+            <label htmlFor="oldPassword" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Current password
+            </label>
+            <input
+              id="oldPassword"
+              type="password"
+              autoComplete="current-password"
+              value={oldPassword}
+              onChange={(e) => setOldPassword(e.target.value)}
+              className={inputClass}
+              required
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label htmlFor="newPassword" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              New password
+            </label>
+            <input
+              id="newPassword"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className={inputClass}
+              minLength={12}
+              required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Confirm new password
+            </label>
+            <input
+              id="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className={inputClass}
+              minLength={12}
+              required
+            />
+          </div>
+
+          {error && <Alert>{error}</Alert>}
+
+          <Button type="submit" disabled={submitting} className="w-full">
+            {submitting ? 'Saving…' : 'Save new password'}
+          </Button>
+        </form>
+      </Card>
     </div>
   );
 }
