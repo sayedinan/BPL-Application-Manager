@@ -1,8 +1,8 @@
-
 import { useEffect, useRef, useState } from 'react';
 import { Client } from '@stomp/stompjs';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
+import { Button } from '@/components/ui/Button';
 
 interface LogLineRow {
   line_number: number;
@@ -26,10 +26,6 @@ type LogSource = 'application' | 'audit';
 
 function formatAuditLine(row: AuditLogRow): string {
   const target = row.targetApplicationName ?? (row.targetUserId != null ? `user#${row.targetUserId}` : '-');
-  // row.timestamp is a correct UTC ISO instant (e.g. "...488654Z") —
-  // it was just being printed raw instead of converted to the
-  // viewer's local time, unlike the "Started" line elsewhere on this
-  // page which already uses toLocaleString(). Match that behavior here.
   const localTime = new Date(row.timestamp).toLocaleString();
   return `${localTime} ${row.actorUsername}(${row.actorRole}) ${row.actionType} target=${target} result=${row.result}`;
 }
@@ -75,12 +71,6 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
     const topic = source === 'application' ? `/topic/application-logs/${appId}` : '/topic/audit-log';
 
     client.onConnect = () => {
-      // A reconnect actually succeeded — clear the failure count so
-      // a stale "disconnected" banner doesn't linger forever after
-      // the backend comes back up. Previously this was never reset,
-      // so once 10 attempts were exhausted the banner stayed stuck
-      // permanently even after the socket reconnected, and the only
-      // way out was a full page reload.
       setReconnectAttempt(0);
       client.subscribe(topic, (msg) => {
         try {
@@ -98,11 +88,6 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
     return () => { client.deactivate(); };
   }, [appId, source]);
 
-  // Backend restarts for routine deploys can take well over a
-  // couple of minutes (Gradle rebuild + Docker recreate), so cap the
-  // backoff at 30s but keep retrying indefinitely instead of giving
-  // up after a fixed attempt count — a redeploy shouldn't strand
-  // anyone with a stale dashboard tab open.
   const reconnectDelays = [1000, 2000, 4000, 8000, 16000, 30000];
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
@@ -114,11 +99,6 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
     }
   }, [reconnectAttempt]);
 
-  // Still surface a banner after a while so a genuinely stuck
-  // connection isn't silently invisible — but it's now advisory, not
-  // a dead end: retries keep happening underneath it, and a manual
-  // button is offered too in case someone wants to force it sooner
-  // (e.g. right after they know a deploy just finished).
   const showBanner = reconnectAttempt >= 10;
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -134,25 +114,56 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
 
   return (
     <div>
-      <select value={source} onChange={(e) => setSource(e.target.value as LogSource)}>
-        <option value="application">{appName} — Application Log</option>
-        {canViewAudit && <option value="audit">Audit Log (Admin+ only)</option>}
-      </select>
-      {historyError && <p role="alert" className="text-sm text-red-600">{historyError}</p>}
-      <div ref={scrollRef} onScroll={handleScroll} style={{ overflowY: 'auto', height: 400 }}>
-        <pre>{lines.join('\n')}</pre>
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900/60">
+        <select
+          value={source}
+          onChange={(e) => setSource(e.target.value as LogSource)}
+          className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-theme focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-surface-dark dark:text-slate-200"
+        >
+          <option value="application">{appName} — Application Log</option>
+          {canViewAudit && <option value="audit">Audit Log (Admin+ only)</option>}
+        </select>
+        <span className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+          <span className={`h-1.5 w-1.5 rounded-full ${showBanner ? 'bg-red-500' : 'bg-status-online animate-pulse-soft'}`} />
+          {showBanner ? 'Disconnected' : 'Live'}
+        </span>
       </div>
-      {!autoFollow && (
-        <button onClick={() => { setAutoFollow(true); if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }}>
-          ↓ Jump to latest
-        </button>
+
+      {historyError && (
+        <p role="alert" className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          {historyError}
+        </p>
       )}
-      {showBanner && (
-        <div role="alert">
-          WebSocket disconnected — still retrying every 30s.{' '}
-          <button onClick={() => { setReconnectAttempt(0); clientRef.current?.activate(); }}>
-            Reconnect now
+
+      <div className="relative">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="h-96 overflow-y-auto bg-slate-950 px-4 py-3 font-mono text-xs leading-relaxed text-slate-300"
+        >
+          <pre className="whitespace-pre-wrap break-all">{lines.length > 0 ? lines.join('\n') : 'No log lines yet…'}</pre>
+        </div>
+
+        {!autoFollow && (
+          <button
+            onClick={() => { setAutoFollow(true); if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 px-3 py-1.5 text-xs font-medium text-white shadow-popover transition-theme hover:bg-brand-700"
+          >
+            ↓ Jump to latest
           </button>
+        )}
+      </div>
+
+      {showBanner && (
+        <div role="alert" className="flex items-center justify-between gap-3 border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+          <span>WebSocket disconnected — still retrying every 30s.</span>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => { setReconnectAttempt(0); clientRef.current?.activate(); }}
+          >
+            Reconnect now
+          </Button>
         </div>
       )}
     </div>

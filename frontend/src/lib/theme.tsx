@@ -1,3 +1,7 @@
+// Light/dark theme toggle. Persists to localStorage and toggles the
+// `dark` class on <html>, which is what tailwind.config.js's
+// darkMode:'class' setting reads.
+
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 type Theme = 'light' | 'dark';

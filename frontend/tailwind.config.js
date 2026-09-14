@@ -5,6 +5,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Brand palette pulled from the BPL logo (navy hexagon + cyan power ring).
         brand: {
           50: '#eef6ff',
           100: '#d9ecff',
@@ -12,10 +13,10 @@ export default {
           300: '#84c5ff',
           400: '#4aa8ff',
           500: '#1f8bfa',
-          600: '#0f6fdb',
+          600: '#0f6fdb', // primary action color
           700: '#0f59ad',
           800: '#134a8a',
-          900: '#0f2f52',
+          900: '#0f2f52', // logo navy
           950: '#0a1d33',
         },
         surface: {

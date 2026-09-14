@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { useAuth, type CurrentUser } from '@/auth/AuthContext';
+import { Button } from '@/components/ui/Button';
 
 interface LoginResponse {
   id: number;
@@ -34,18 +35,12 @@ export function LoginPage(): JSX.Element {
 
     setSubmitting(true);
     try {
-      // skipAuthRedirect: a 401 here means "bad credentials", not
-      // "stale session" — we handle it ourselves below rather than
-      // letting the client bounce to /login (we're already here).
       const loginResult = await apiFetch<LoginResponse>(API.AUTH.LOGIN, {
         method: 'POST',
         body: { username: username.trim(), password },
         skipAuthRedirect: true,
       });
 
-      // Login response doesn't carry assignedApplicationIds; fetch
-      // /auth/me once to populate the full AuthContext shape, same
-      // as AuthHydrator does on page load.
       const me = await apiFetch<MeResponse>(API.AUTH.ME);
       setUser(me);
       setStatus('authenticated');
@@ -65,16 +60,20 @@ export function LoginPage(): JSX.Element {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold text-gray-900">Sign in</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          BPL Application Admin
-        </p>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-surface-subtle px-4 dark:bg-surface-dark">
+      {/* Ambient brand glow */}
+      <div className="pointer-events-none absolute -top-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-brand-500/20 blur-3xl" />
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
+      <div className="relative w-full max-w-sm animate-fade-in rounded-2xl border border-slate-200 bg-white p-8 shadow-popover dark:border-slate-800 dark:bg-surface-darkSubtle">
+        <div className="mb-6 flex flex-col items-center text-center">
+          <img src="/logo.png" alt="BPL" className="mb-3 h-14 w-14" />
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Sign in</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">BPL Application Admin</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="username" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
               Username
             </label>
             <input
@@ -85,12 +84,12 @@ export function LoginPage(): JSX.Element {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={submitting}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 transition-theme placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-surface-dark dark:text-white"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="password" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
               Password
             </label>
             <input
@@ -101,23 +100,19 @@ export function LoginPage(): JSX.Element {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={submitting}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 transition-theme placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-surface-dark dark:text-white"
             />
           </div>
 
           {error && (
-            <div role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-400">
               {error}
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
+          <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? 'Signing in…' : 'Sign in'}
-          </button>
+          </Button>
         </form>
       </div>
     </div>
