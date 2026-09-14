@@ -1,3 +1,40 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    @apply bg-surface-subtle text-slate-900 antialiased;
+    @apply dark:bg-surface-dark dark:text-slate-100;
+  }
+
+  ::selection {
+    @apply bg-brand-200 text-brand-900;
+  }
+
+  /* Thin, theme-aware scrollbars for the log viewer and long lists */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 dark:bg-slate-700;
+    border-radius: 9999px;
+  }
+}
+
+@layer utilities {
+  .transition-theme {
+    transition-property: background-color, border-color, color, box-shadow;
+    transition-duration: 150ms;
+  }
+}
