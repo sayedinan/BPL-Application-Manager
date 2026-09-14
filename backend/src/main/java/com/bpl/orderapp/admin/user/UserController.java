@@ -202,7 +202,26 @@ public class UserController {
         if ("SYS_ADMIN".equals(targetRole) && !callerIsSysAdmin) {
             throw new com.bpl.orderapp.admin.common.AdminCeilingException();
         }
+        List<Map<String, Object>> deletedUserRows = jdbc.queryForList(
+            "SELECT username FROM users WHERE id = ?", id);
+        String deletedUsername = deletedUserRows.isEmpty() ? null : (String) deletedUserRows.get(0).get("username");
+
         jdbc.update("UPDATE users SET deleted_at = NOW() WHERE id = ?", id);
+
+        try {
+            auditWriter.write(
+                "DELETE_USER",
+                auth.getName(),
+                callerIsSysAdmin ? "SYS_ADMIN" : "ADMIN",
+                null, null, id,
+                java.util.Map.of("username", deletedUsername == null ? "" : deletedUsername, "role", targetRole),
+                "SUCCESS",
+                httpRequest
+            );
+        } catch (Exception auditEx) {
+            log.warn("Audit write failed for DELETE_USER (user id={})", id, auditEx);
+        }
+
         return ResponseEntity.noContent().build();
     }
     @PostMapping("/{id}/reset-password")
