@@ -26,7 +26,12 @@ type LogSource = 'application' | 'audit';
 
 function formatAuditLine(row: AuditLogRow): string {
   const target = row.targetApplicationName ?? (row.targetUserId != null ? `user#${row.targetUserId}` : '-');
-  return `${row.timestamp} ${row.actorUsername}(${row.actorRole}) ${row.actionType} target=${target} result=${row.result}`;
+  // row.timestamp is a correct UTC ISO instant (e.g. "...488654Z") —
+  // it was just being printed raw instead of converted to the
+  // viewer's local time, unlike the "Started" line elsewhere on this
+  // page which already uses toLocaleString(). Match that behavior here.
+  const localTime = new Date(row.timestamp).toLocaleString();
+  return `${localTime} ${row.actorUsername}(${row.actorRole}) ${row.actionType} target=${target} result=${row.result}`;
 }
 
 export function LogsBox({ appId, appName, role }: { appId: number; appName: string; role?: string }) {
