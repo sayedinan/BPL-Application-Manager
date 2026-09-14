@@ -224,11 +224,7 @@ export function ApplicationsPage(): JSX.Element {
         }
       />
 
-      {listError && (
-        <div role="alert" className="mb-4 rounded-lg border border-status-error/30 bg-status-errorBg px-4 py-2.5 text-sm text-status-error dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
-          {listError}
-        </div>
-      )}
+      {listError && <Alert className="mb-4">{listError}</Alert>}
 
       {formOpen && (
         <Card className="mb-6 max-w-xl animate-fade-in p-5">

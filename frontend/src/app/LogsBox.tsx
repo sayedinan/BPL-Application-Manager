@@ -155,7 +155,7 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
       </div>
 
       {showBanner && (
-        <div role="alert" className="flex items-center justify-between gap-3 border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+        <div role="alert" className="flex items-center justify-between gap-3 border-t border-status-pending/20 bg-status-pendingBg px-4 py-2 text-xs text-status-pending dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
           <span>WebSocket disconnected — still retrying every 30s.</span>
           <Button
             size="sm"
