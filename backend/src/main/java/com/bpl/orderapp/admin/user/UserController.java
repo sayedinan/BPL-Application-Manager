@@ -313,6 +313,13 @@ public class UserController {
         boolean callerIsSysAdmin = updateAuth.getAuthorities().stream()
             .anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN"));
 
+        // Snapshot BEFORE state so the audit row can show a diff,
+        // not just the new values. Must happen before either the
+        // role UPDATE or the assignment DELETE below.
+        String oldRole = jdbc.queryForObject("SELECT role FROM users WHERE id = ?", String.class, id);
+        java.util.List<Long> oldAssignedIds = jdbc.queryForList(
+            "SELECT application_id FROM user_application_assignments WHERE user_id = ?", Long.class, id);
+
         if (req.role() != null) {
             if (!"USER".equals(req.role()) && !callerIsSysAdmin) {
                 throw new com.bpl.orderapp.admin.common.AdminCeilingException();
@@ -331,15 +338,50 @@ public class UserController {
 
         try {
             java.util.Map<String, Object> detail = new java.util.HashMap<>();
-            if (req.role() != null) detail.put("role", req.role());
-            if (req.assignedApplicationIds() != null) detail.put("assignedApplicationIds", req.assignedApplicationIds());
-            auditWriter.write("UPDATE_USER", updateAuth.getName(),
-                callerIsSysAdmin ? "SYS_ADMIN" : "ADMIN",
-                null, null, id, detail, "SUCCESS", httpRequest);
+
+            if (req.role() != null && !req.role().equals(oldRole)) {
+                detail.put("oldRole", oldRole);
+                detail.put("newRole", req.role());
+            }
+
+            if (req.assignedApplicationIds() != null) {
+                java.util.Set<Long> before = new java.util.HashSet<>(oldAssignedIds);
+                java.util.Set<Long> after = new java.util.HashSet<>(req.assignedApplicationIds());
+
+                java.util.Set<Long> addedIds = new java.util.HashSet<>(after);
+                addedIds.removeAll(before);
+                java.util.Set<Long> removedIds = new java.util.HashSet<>(before);
+                removedIds.removeAll(after);
+
+                if (!addedIds.isEmpty()) detail.put("assignedApplications", resolveAppNames(addedIds));
+                if (!removedIds.isEmpty()) detail.put("unassignedApplications", resolveAppNames(removedIds));
+            }
+
+            // Only write a row if something actually changed. A PUT
+            // with role/assignedApplicationIds identical to current
+            // state (or both null) is a no-op and shouldn't clutter
+            // the audit trail with an empty UPDATE_USER entry.
+            if (!detail.isEmpty()) {
+                auditWriter.write("UPDATE_USER", updateAuth.getName(),
+                    callerIsSysAdmin ? "SYS_ADMIN" : "ADMIN",
+                    null, null, id, detail, "SUCCESS", httpRequest);
+            }
         } catch (Exception auditEx) {
             log.warn("Audit write failed for UPDATE_USER (user id={})", id, auditEx);
         }
 
         return ResponseEntity.ok().build();
+    }
+
+    /** Resolves application ids to "id:name" strings for readable audit details. */
+    private java.util.List<String> resolveAppNames(java.util.Set<Long> ids) {
+        java.util.List<String> result = new java.util.ArrayList<>();
+        for (Long appId : ids) {
+            java.util.List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT name FROM applications WHERE id = ?", appId);
+            String name = rows.isEmpty() ? "unknown" : (String) rows.get(0).get("name");
+            result.add(appId + ":" + name);
+        }
+        return result;
     }
 }
