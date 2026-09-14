@@ -151,10 +151,17 @@ public class UserController {
         String cleartext = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         String hash = encoder.encode(cleartext);
         java.time.Instant now = java.time.Instant.now();
-        jdbc.update(
-            "INSERT INTO users (username, password_hash, role, must_change_password, created_at, updated_at) VALUES (?, ?, ?, true, ?, ?)",
-            username, hash, role, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
-        Long newId = jdbc.queryForObject("SELECT id FROM users WHERE username = ?", Long.class, username);
+        // Get the new row's id directly from the INSERT via RETURNING,
+        // rather than a follow-up SELECT by username. A follow-up
+        // SELECT WHERE username = ? (with no deleted_at filter) can
+        // match more than one row once a username has been deleted
+        // and recreated — soft-deleted rows are kept forever by
+        // design — which throws IncorrectResultSizeDataAccessException
+        // and previously surfaced as an uncaught 500 AFTER the insert
+        // had already committed, silently losing the one-time password.
+        Long newId = jdbc.queryForObject(
+            "INSERT INTO users (username, password_hash, role, must_change_password, created_at, updated_at) VALUES (?, ?, ?, true, ?, ?) RETURNING id",
+            Long.class, username, hash, role, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
         if (assignedIds != null) {
             for (Long appId : assignedIds) {
                 jdbc.update(
