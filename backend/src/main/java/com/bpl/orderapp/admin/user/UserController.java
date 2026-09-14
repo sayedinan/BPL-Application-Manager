@@ -307,11 +307,13 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
     @Transactional
     public ResponseEntity<Void> updateUser(@PathVariable Long id,
-            @Valid @RequestBody UpdateUserRequest req) {
+            @Valid @RequestBody UpdateUserRequest req,
+            HttpServletRequest httpRequest) {
+        var updateAuth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        boolean callerIsSysAdmin = updateAuth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN"));
+
         if (req.role() != null) {
-            boolean callerIsSysAdmin = org.springframework.security.core.context.SecurityContextHolder.getContext()
-                .getAuthentication().getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN"));
             if (!"USER".equals(req.role()) && !callerIsSysAdmin) {
                 throw new com.bpl.orderapp.admin.common.AdminCeilingException();
             }
@@ -326,6 +328,18 @@ public class UserController {
                     id, appId);
             }
         }
+
+        try {
+            java.util.Map<String, Object> detail = new java.util.HashMap<>();
+            if (req.role() != null) detail.put("role", req.role());
+            if (req.assignedApplicationIds() != null) detail.put("assignedApplicationIds", req.assignedApplicationIds());
+            auditWriter.write("UPDATE_USER", updateAuth.getName(),
+                callerIsSysAdmin ? "SYS_ADMIN" : "ADMIN",
+                null, null, id, detail, "SUCCESS", httpRequest);
+        } catch (Exception auditEx) {
+            log.warn("Audit write failed for UPDATE_USER (user id={})", id, auditEx);
+        }
+
         return ResponseEntity.ok().build();
     }
 }
