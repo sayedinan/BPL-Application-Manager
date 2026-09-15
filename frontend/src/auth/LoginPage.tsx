@@ -5,6 +5,7 @@ import { API } from '@/api/endpoints';
 import { useAuth, type CurrentUser } from '@/auth/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
+import { Logo } from '@/components/ui/Logo';
 
 interface LoginResponse {
   id: number;
@@ -67,7 +68,7 @@ export function LoginPage(): JSX.Element {
 
       <div className="relative w-full max-w-sm animate-fade-in rounded-2xl border border-slate-200 bg-white p-8 shadow-popover dark:border-slate-800 dark:bg-surface-darkSubtle">
         <div className="mb-6 flex flex-col items-center text-center">
-          <img src="/logo.png" alt="BPL" className="mb-3 h-14 w-14" />
+          <Logo className="mb-3 h-14 w-14" />
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Sign in</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">BPL Application Admin</p>
         </div>

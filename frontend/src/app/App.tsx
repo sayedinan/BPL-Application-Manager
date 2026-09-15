@@ -12,6 +12,7 @@ import { ApplicationsPage } from '@/app/ApplicationsPage';
 import { UsersPage } from '@/app/UsersPage';
 import { api } from '@/api/client';
 import { API } from '@/api/endpoints';
+import { Logo } from '@/components/ui/Logo';
 
 const queryClient = new QueryClient();
 
@@ -110,7 +111,7 @@ function NavBar() {
   return (
     <nav className="sticky top-0 z-20 flex items-center gap-1 border-b border-slate-200 bg-white/80 px-6 py-3 backdrop-blur transition-theme dark:border-slate-800 dark:bg-surface-dark/80">
       <a href="/" className="mr-4 flex items-center gap-2">
-        <img src="/logo.png" alt="BPL" className="h-8 w-8" />
+        <Logo className="h-8 w-8" />
         <span className="hidden text-sm font-bold tracking-tight text-slate-900 sm:inline dark:text-white">
           BPL Admin
         </span>
