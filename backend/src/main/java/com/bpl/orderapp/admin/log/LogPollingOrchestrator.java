@@ -2,7 +2,6 @@ package com.bpl.orderapp.admin.log;
 
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.ssh.SshConnection;
-import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -17,6 +16,19 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 
+/**
+ * Runs log_script on an interval, only while an application is
+ * currently online.
+ *
+ * <p>Per STATUS-REDESIGN.md §5, "online" is no longer a stored column
+ * this class can query at boot — start/stop of this poller is now
+ * driven entirely by {@link com.bpl.orderapp.admin.status.StatusPollingOrchestrator},
+ * which calls {@link #startPolling}/{@link #stopPolling} whenever it
+ * detects an online/offline transition (including the very first
+ * check after a backend restart, which naturally resumes polling for
+ * anything already online — no separate boot-time query needed here
+ * anymore).
+ */
 @Component
 public class LogPollingOrchestrator {
 
@@ -44,18 +56,10 @@ public class LogPollingOrchestrator {
         this.scheduler.initialize();
     }
 
-    @PostConstruct
-    public void resumePollersForRunningApplications() {
-        List<Long> runningIds = jdbc.queryForList(
-            "SELECT id FROM applications WHERE status = 'RUNNING'", Long.class);
-        for (Long id : runningIds) {
-            log.info("Resuming log poller for already-RUNNING application id={}", id);
-            startPolling(id);
-        }
-    }
-
     public void startPolling(Long applicationId) {
-        stopPolling(applicationId);
+        if (activePollers.containsKey(applicationId)) {
+            return; // already running — avoid restarting on every redundant call
+        }
 
         Integer intervalSeconds = jdbc.queryForObject(
             "SELECT poll_interval_seconds FROM applications WHERE id = ?", Integer.class, applicationId);
@@ -81,14 +85,9 @@ public class LogPollingOrchestrator {
         Map<String, Object> app;
         try {
             app = jdbc.queryForMap(
-                "SELECT status, server_ip, ssh_username, ssh_password_enc, ssh_host_key_fingerprint, log_script FROM applications WHERE id = ?",
+                "SELECT server_ip, ssh_username, ssh_password_enc, ssh_host_key_fingerprint, log_script FROM applications WHERE id = ?",
                 applicationId);
         } catch (org.springframework.dao.EmptyResultDataAccessException e) {
-            stopPolling(applicationId);
-            return;
-        }
-
-        if (!"RUNNING".equals(app.get("status"))) {
             stopPolling(applicationId);
             return;
         }
@@ -104,7 +103,6 @@ public class LogPollingOrchestrator {
             String plainPass = cipher.decrypt(encPass);
             com.jcraft.jsch.Session session = sshConnection.connect(host, user, plainPass, fingerprint);
             SshConnection.SshResult result = sshConnection.runScriptWithTimeout(session, logScript, LOG_SCRIPT_TIMEOUT_MS);
-            session.disconnect();
             rawOutput = result.stdout;
         } catch (Exception e) {
             log.warn("Log poll failed for application id={}: {}", applicationId, e.getMessage());

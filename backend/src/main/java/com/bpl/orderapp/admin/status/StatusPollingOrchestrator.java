@@ -1,6 +1,7 @@
 package com.bpl.orderapp.admin.status;
 
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
+import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
 import com.bpl.orderapp.admin.log.WebSocketBroadcast;
 import com.bpl.orderapp.admin.ssh.SshConnection;
 import jakarta.annotation.PostConstruct;
@@ -57,6 +58,7 @@ public class StatusPollingOrchestrator {
     private final SshCredentialCipher cipher;
     private final SshConnection sshConnection;
     private final WebSocketBroadcast broadcast;
+    private final LogPollingOrchestrator logPollingOrchestrator;
     private final ThreadPoolTaskScheduler scheduler;
 
     private final ConcurrentHashMap<Long, ScheduledFuture<?>> activePollers = new ConcurrentHashMap<>();
@@ -70,11 +72,13 @@ public class StatusPollingOrchestrator {
     private final Set<Long> actionInProgress = ConcurrentHashMap.newKeySet();
 
     public StatusPollingOrchestrator(JdbcTemplate jdbc, SshCredentialCipher cipher,
-            SshConnection sshConnection, WebSocketBroadcast broadcast) {
+            SshConnection sshConnection, WebSocketBroadcast broadcast,
+            LogPollingOrchestrator logPollingOrchestrator) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.sshConnection = sshConnection;
         this.broadcast = broadcast;
+        this.logPollingOrchestrator = logPollingOrchestrator;
         this.scheduler = new ThreadPoolTaskScheduler();
         this.scheduler.setPoolSize(4);
         this.scheduler.setThreadNamePrefix("status-poller-");
@@ -233,5 +237,19 @@ public class StatusPollingOrchestrator {
 
         broadcast.broadcastStatus(applicationId, observedOnline, now.toString());
         log.info("Application id={} transitioned to {}", applicationId, observedOnline ? "ONLINE" : "OFFLINE");
+
+        // The log poller's on/off switch is now driven by this derived
+        // signal, not a stored status column (STATUS-REDESIGN.md §5).
+        // This also naturally handles boot-time resume: a just-started
+        // poller's first check on an already-online application reports
+        // online != previousOnline(false, the ensureStreakRow default),
+        // so this fires without any special "resume on startup" logic —
+        // same "no special-casing needed" pattern already used by the
+        // log dedup algorithm.
+        if (observedOnline) {
+            logPollingOrchestrator.startPolling(applicationId);
+        } else {
+            logPollingOrchestrator.stopPolling(applicationId);
+        }
     }
 }
