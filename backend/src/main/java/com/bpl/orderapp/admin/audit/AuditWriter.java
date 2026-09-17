@@ -31,7 +31,7 @@ public class AuditWriter {
      * observed peer address to whatever the client sent. That means
      * the first entry in this header is attacker-controlled (a
      * client can send any X-Forwarded-For it likes), while the LAST
-     * entry is the address Caddy itself saw on the socket — the one
+     * entry is the address Caddy itself saw on the socket - the one
      * value in this header that's actually trustworthy here. Taking
      * the first entry (a common mistake) would let any caller spoof
      * their audited source_ip. If another trusted proxy is ever
