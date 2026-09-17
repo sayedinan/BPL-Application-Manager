@@ -29,6 +29,7 @@ public class AuditLogController {
     public ResponseEntity<Map<String, Object>> getAuditLogs(
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
+            @RequestParam(required = false) Long applicationId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
@@ -61,6 +62,10 @@ public class AuditLogController {
         if (toTs != null) {
             where.append(where.isEmpty() ? " WHERE " : " AND ").append("timestamp <= ?");
             params.add(toTs);
+        }
+        if (applicationId != null) {
+            where.append(where.isEmpty() ? " WHERE " : " AND ").append("target_application_id = ?");
+            params.add(applicationId);
         }
 
         List<Object> selectParams = new ArrayList<>(params);
