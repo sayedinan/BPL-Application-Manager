@@ -1,5 +1,6 @@
 package com.bpl.orderapp.admin.application;
 
+import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.common.IdempotencyService;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
