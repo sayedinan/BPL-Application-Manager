@@ -64,6 +64,10 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
     return () => { cancelled = true; };
   }, [appId, source]);
 
+  const reconnectDelays = [1000, 2000, 4000, 8000, 16000, 30000];
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const brokerURL = `${wsProtocol}//${window.location.host}/ws`;
@@ -71,6 +75,10 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
     const topic = source === 'application' ? `/topic/application-logs/${appId}` : '/topic/audit-log';
 
     client.onConnect = () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       setReconnectAttempt(0);
       client.subscribe(topic, (msg) => {
         try {
@@ -85,17 +93,29 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
 
     client.activate();
     clientRef.current = client;
-    return () => { client.deactivate(); };
+    return () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      client.deactivate();
+    };
   }, [appId, source]);
-
-  const reconnectDelays = [1000, 2000, 4000, 8000, 16000, 30000];
-  const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   useEffect(() => {
     if (!clientRef.current || !clientRef.current.connected) {
       const delay = reconnectDelays[Math.min(reconnectAttempt, reconnectDelays.length - 1)];
-      const timer = setTimeout(() => { setReconnectAttempt((a) => a + 1); clientRef.current?.activate(); }, delay);
-      return () => clearTimeout(timer);
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null;
+        setReconnectAttempt((a) => a + 1);
+        clientRef.current?.activate();
+      }, delay);
+      return () => {
+        if (reconnectTimerRef.current) {
+          clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+        }
+      };
     }
   }, [reconnectAttempt]);
 

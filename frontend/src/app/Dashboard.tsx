@@ -92,6 +92,7 @@ export function DashboardPlaceholder(): JSX.Element {
   // replacement: WS gives instant updates, the poll is the safety net.
   const reconnectDelays = [1000, 2000, 4000, 8000, 16000, 30000];
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -99,6 +100,10 @@ export function DashboardPlaceholder(): JSX.Element {
     const client = new Client({ brokerURL, debug: () => {} });
 
     client.onConnect = () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       setReconnectAttempt(0);
       client.subscribe('/topic/application-status', (msg) => {
         try {
@@ -118,14 +123,29 @@ export function DashboardPlaceholder(): JSX.Element {
 
     client.activate();
     clientRef.current = client;
-    return () => { client.deactivate(); };
+    return () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      client.deactivate();
+    };
   }, []);
 
   useEffect(() => {
     if (!clientRef.current || !clientRef.current.connected) {
       const delay = reconnectDelays[Math.min(reconnectAttempt, reconnectDelays.length - 1)];
-      const timer = setTimeout(() => { setReconnectAttempt((a) => a + 1); clientRef.current?.activate(); }, delay);
-      return () => clearTimeout(timer);
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null;
+        setReconnectAttempt((a) => a + 1);
+        clientRef.current?.activate();
+      }, delay);
+      return () => {
+        if (reconnectTimerRef.current) {
+          clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+        }
+      };
     }
   }, [reconnectAttempt]);
 

@@ -12,7 +12,9 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -49,7 +51,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
         switch (accessor.getCommand()) {
             case CONNECT -> handleConnect(accessor);
             case SUBSCRIBE -> handleSubscribe(accessor);
-            case DISCONNECT -> handleDisconnect(accessor);
+            case DISCONNECT -> cleanupSession(accessor.getSessionId());
             case UNSUBSCRIBE -> handleUnsubscribe(accessor);
             default -> {}
         }
@@ -106,10 +108,23 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
     }
 
     @Transactional
-    protected void handleDisconnect(StompHeaderAccessor accessor) {
-        String sessionId = accessor.getSessionId();
+    protected void cleanupSession(String sessionId) {
+        if (sessionId == null) return;
         jdbc.update("DELETE FROM websocket_subscriptions WHERE session_id = ?", sessionId);
-        jdbc.update("DELETE FROM websocket_connections WHERE session_id = ?", sessionId);
+        int deleted = jdbc.update("DELETE FROM websocket_connections WHERE session_id = ?", sessionId);
+        String username = sessionUsers.remove(sessionId);
+        if (deleted > 0) {
+            globalConnections.updateAndGet(v -> Math.max(0, v - 1));
+            if (username != null) {
+                AtomicInteger userCount = perUserConnections.get(username);
+                if (userCount != null) userCount.updateAndGet(v -> Math.max(0, v - 1));
+            }
+        }
+    }
+
+    @EventListener
+    public void onSessionDisconnect(SessionDisconnectEvent event) {
+        cleanupSession(event.getSessionId());
     }
 
     private String requireUsername(StompHeaderAccessor accessor) {
