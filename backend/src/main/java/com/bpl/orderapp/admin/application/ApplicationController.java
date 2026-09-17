@@ -12,6 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -134,6 +136,62 @@ public class ApplicationController {
         body.put("statusScript", app.get("status_script"));
         body.put("pollIntervalSeconds", app.get("poll_interval_seconds"));
         body.put("online", statusPollingOrchestrator.isOnline(id));
+        return ResponseEntity.ok(body);
+    }
+
+    @GetMapping("/{id}/stats")
+    public ResponseEntity<Map<String, Object>> getStats(@PathVariable Long id) {
+        java.sql.Timestamp createdAt = jdbc.queryForObject(
+            "SELECT created_at FROM applications WHERE id = ?", java.sql.Timestamp.class, id);
+
+        // Walk every recorded flip chronologically and sum the duration
+        // spent in each state. A brand-new app with zero transitions yet
+        // is assumed offline from creation (it starts stopped by design).
+        List<Map<String, Object>> transitions = jdbc.queryForList(
+            "SELECT online, transitioned_at FROM application_status_transitions " +
+                "WHERE application_id = ? ORDER BY transitioned_at ASC", id);
+
+        long uptimeSeconds = 0;
+        long downtimeSeconds = 0;
+        Instant cursor = createdAt.toInstant();
+        boolean state = false;
+        for (Map<String, Object> t : transitions) {
+            Instant flipAt = ((java.sql.Timestamp) t.get("transitioned_at")).toInstant();
+            long delta = flipAt.getEpochSecond() - cursor.getEpochSecond();
+            if (state) uptimeSeconds += delta; else downtimeSeconds += delta;
+            cursor = flipAt;
+            state = (Boolean) t.get("online");
+        }
+        long tail = Instant.now().getEpochSecond() - cursor.getEpochSecond();
+        if (state) uptimeSeconds += tail; else downtimeSeconds += tail;
+
+        Map<String, Object> streakRow;
+        try {
+            streakRow = jdbc.queryForMap(
+                "SELECT online, streak_started_at FROM application_status_streak WHERE application_id = ?", id);
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            streakRow = null;
+        }
+
+        Timestamp lastRan;
+        try {
+            lastRan = jdbc.queryForObject(
+                "SELECT timestamp FROM audit_logs WHERE target_application_id = ? " +
+                    "AND action_type = 'START_APPLICATION' ORDER BY timestamp DESC LIMIT 1",
+                Timestamp.class, id);
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            lastRan = null;
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("createdAt", createdAt.toInstant().toString());
+        body.put("totalUptimeSeconds", uptimeSeconds);
+        body.put("totalDowntimeSeconds", downtimeSeconds);
+        body.put("currentlyOnline", streakRow != null && Boolean.TRUE.equals(streakRow.get("online")));
+        body.put("currentStreakStartedAt", streakRow != null
+            ? ((java.sql.Timestamp) streakRow.get("streak_started_at")).toInstant().toString()
+            : null);
+        body.put("lastRanAt", lastRan != null ? lastRan.toInstant().toString() : null);
         return ResponseEntity.ok(body);
     }
 
