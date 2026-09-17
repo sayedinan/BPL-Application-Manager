@@ -22,12 +22,13 @@ interface FormState {
   startScript: string;
   stopScript: string;
   logScript: string;
+  statusScript: string;
   pollIntervalSeconds: string;
 }
 
 const EMPTY_FORM: FormState = {
   name: '', serverIp: '', sshUsername: '', sshPassword: '', sshHostKeyFingerprint: '',
-  startScript: '', stopScript: '', logScript: '', pollIntervalSeconds: '5',
+  startScript: '', stopScript: '', logScript: '', statusScript: '', pollIntervalSeconds: '5',
 };
 
 const inputClass =
@@ -82,7 +83,7 @@ export function ApplicationsPage(): JSX.Element {
       await api.post(API.APPLICATIONS.CREATE, {
         name: form.name, serverIp: form.serverIp, sshUsername: form.sshUsername,
         sshPassword: form.sshPassword, sshHostKeyFingerprint: form.sshHostKeyFingerprint,
-        startScript: form.startScript, stopScript: form.stopScript, logScript: form.logScript,
+        startScript: form.startScript, stopScript: form.stopScript, logScript: form.logScript, statusScript: form.statusScript,
         pollIntervalSeconds: pollInterval,
       });
       setForm(EMPTY_FORM);
@@ -130,6 +131,7 @@ export function ApplicationsPage(): JSX.Element {
         startScript: String(detail.startScript ?? ''),
         stopScript: String(detail.stopScript ?? ''),
         logScript: String(detail.logScript ?? ''),
+        statusScript: String(detail.statusScript ?? ''),
         pollIntervalSeconds: String(detail.pollIntervalSeconds ?? '5'),
       });
     } catch (err) {
@@ -159,7 +161,7 @@ export function ApplicationsPage(): JSX.Element {
       await api.put(API.APPLICATIONS.UPDATE(editingId), {
         name: form.name, serverIp: form.serverIp, sshUsername: form.sshUsername,
         sshPassword: form.sshPassword || undefined,
-        startScript: form.startScript, stopScript: form.stopScript, logScript: form.logScript,
+        startScript: form.startScript, stopScript: form.stopScript, logScript: form.logScript, statusScript: form.statusScript,
         pollIntervalSeconds: pollInterval,
       });
       cancelEdit();
@@ -267,6 +269,11 @@ export function ApplicationsPage(): JSX.Element {
             <label className="mb-3 block">
               <span className={labelClass}>Log Script</span>
               <textarea value={form.logScript} onChange={(e) => updateField('logScript', e.target.value)} className={`${inputClass} font-mono`} rows={3} required />
+            </label>
+            <label className="mb-3 block">
+              <span className={labelClass}>Status Script</span>
+              <textarea value={form.statusScript} onChange={(e) => updateField('statusScript', e.target.value)} className={`${inputClass} font-mono`} rows={3} required />
+              <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">Exit 0 = online, non-zero = offline.</span>
             </label>
 
             <label className="mb-5 block">
