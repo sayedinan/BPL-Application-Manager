@@ -114,7 +114,7 @@ export function ApplicationsPage(): JSX.Element {
   }
 
   async function handleEditClick(app: ApplicationSummary) {
-    if (app.online === false) return;
+    if (app.online) return;
     setFormError(null);
     setShowForm(false);
     setTestStatus('untested');
@@ -174,7 +174,7 @@ export function ApplicationsPage(): JSX.Element {
   }
 
   async function handleDelete(app: ApplicationSummary) {
-    if (app.online === false) return;
+    if (app.online) return;
     if (!window.confirm(`Delete "${app.name}"? This cannot be undone.`)) return;
     setDeletingId(app.id);
     try {
