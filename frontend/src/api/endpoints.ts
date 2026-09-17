@@ -24,6 +24,7 @@ export const API = {
     START: (id: number | string) => `/applications/${id}/start`,
     STOP: (id: number | string) => `/applications/${id}/stop`,
     LOGS: (id: number | string) => `/applications/${id}/logs`,
+    STATS: (id: number | string) => `/applications/${id}/stats`,
   },
   USERS: {
     LIST: '/users',
