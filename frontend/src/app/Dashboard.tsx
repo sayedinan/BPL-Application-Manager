@@ -1,37 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Client } from '@stomp/stompjs';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
 import { LogsBox } from '@/app/LogsBox';
 import { Card, PageHeader } from '@/components/ui/Card';
-import { Badge, type BadgeTone } from '@/components/ui/Badge';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
-
-type Status = 'RUNNING' | 'STOPPED' | 'STARTING' | 'STOPPING' | 'ERROR';
 
 interface ApplicationSummary {
   id: number;
   name: string;
-  status: Status;
+  online: boolean;
   startedAt: string | null;
 }
 
-const STATUS_TONE: Record<Status, BadgeTone> = {
-  RUNNING: 'online',
-  STOPPED: 'offline',
-  STARTING: 'pending',
-  STOPPING: 'pending',
-  ERROR: 'error',
-};
-
-const STATUS_LABEL: Record<Status, string> = {
-  RUNNING: 'Online',
-  STOPPED: 'Offline',
-  STARTING: 'Starting…',
-  STOPPING: 'Stopping…',
-  ERROR: 'Error',
-};
+interface StatusEvent {
+  applicationId: number;
+  online: boolean;
+  transitionedAt: string;
+}
 
 function formatRunningTime(startedAt: string | null): string | null {
   if (!startedAt) return null;
@@ -51,8 +40,10 @@ export function DashboardPlaceholder(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<number | null>(null);
+  const [pendingAction, setPendingAction] = useState<'start' | 'stop' | null>(null);
   const [selectedAppId, setSelectedAppId] = useState<number | null>(null);
   const [, setTick] = useState(0);
+  const clientRef = useRef<Client | null>(null);
 
   async function loadApplications() {
     try {
@@ -78,10 +69,55 @@ export function DashboardPlaceholder(): JSX.Element {
     return () => clearInterval(clock);
   }, []);
 
+  // STATUS-REDESIGN.md §2 — global topic, same reconnect-backoff-then-banner
+  // pattern as LogsBox.tsx. This is additive to the 5s poll above, not a
+  // replacement: WS gives instant updates, the poll is the safety net.
+  const reconnectDelays = [1000, 2000, 4000, 8000, 16000, 30000];
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+
+  useEffect(() => {
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const brokerURL = `${wsProtocol}//${window.location.host}/ws`;
+    const client = new Client({ brokerURL, debug: () => {} });
+
+    client.onConnect = () => {
+      setReconnectAttempt(0);
+      client.subscribe('/topic/application-status', (msg) => {
+        try {
+          const d = JSON.parse(msg.body) as StatusEvent;
+          setApps((prev) =>
+            prev.map((a) =>
+              a.id === d.applicationId
+                ? { ...a, online: d.online, startedAt: d.online ? d.transitionedAt : null }
+                : a
+            )
+          );
+        } catch {
+          // malformed frame — ignore, next poll tick will reconcile
+        }
+      });
+    };
+
+    client.activate();
+    clientRef.current = client;
+    return () => { client.deactivate(); };
+  }, []);
+
+  useEffect(() => {
+    if (!clientRef.current || !clientRef.current.connected) {
+      const delay = reconnectDelays[Math.min(reconnectAttempt, reconnectDelays.length - 1)];
+      const timer = setTimeout(() => { setReconnectAttempt((a) => a + 1); clientRef.current?.activate(); }, delay);
+      return () => clearTimeout(timer);
+    }
+  }, [reconnectAttempt]);
+
+  const wsDisconnected = reconnectAttempt >= 10;
+
   async function handleStartStop(app: ApplicationSummary, action: 'start' | 'stop') {
     if (!user) return;
     setActionError(null);
     setPendingId(app.id);
+    setPendingAction(action);
     try {
       const path = action === 'start' ? API.APPLICATIONS.START(app.id) : API.APPLICATIONS.STOP(app.id);
       const idempotencyKey =
@@ -93,12 +129,17 @@ export function DashboardPlaceholder(): JSX.Element {
       });
       await loadApplications();
       if (!res.ok) {
-        setActionError(`Failed to ${action} ${app.name} — check the server connection and scripts.`);
+        if (res.status === 504) {
+          setActionError(`${action === 'start' ? 'Started' : 'Stopped'} ${app.name}, but couldn't confirm within the timeout — check its real state.`);
+        } else {
+          setActionError(`Failed to ${action} ${app.name} — check the server connection and scripts.`);
+        }
       }
     } catch {
       setActionError(`Failed to ${action} ${app.name}.`);
     } finally {
       setPendingId(null);
+      setPendingAction(null);
     }
   }
 
@@ -117,6 +158,9 @@ export function DashboardPlaceholder(): JSX.Element {
 
       {error && <Alert className="mb-4">{error}</Alert>}
       {actionError && <Alert className="mb-4">{actionError}</Alert>}
+      {wsDisconnected && (
+        <Alert className="mb-4">Live status updates disconnected — retrying. Falling back to periodic refresh.</Alert>
+      )}
 
       {apps.length === 0 ? (
         <Card className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
@@ -127,9 +171,8 @@ export function DashboardPlaceholder(): JSX.Element {
       ) : (
         <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {apps.map((app) => {
-            const runningTime = app.status === 'RUNNING' ? formatRunningTime(app.startedAt) : null;
-            const transitional = app.status === 'STARTING' || app.status === 'STOPPING';
-            const online = app.status === 'RUNNING';
+            const runningTime = app.online ? formatRunningTime(app.startedAt) : null;
+            const isPending = pendingId === app.id;
 
             return (
               <Card
@@ -141,7 +184,7 @@ export function DashboardPlaceholder(): JSX.Element {
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="truncate font-semibold text-slate-900 dark:text-white">{app.name}</span>
-                  <Badge tone={STATUS_TONE[app.status]}>{STATUS_LABEL[app.status]}</Badge>
+                  <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>
                 </div>
 
                 {app.startedAt && (
@@ -154,29 +197,27 @@ export function DashboardPlaceholder(): JSX.Element {
                 )}
 
                 <div className="mt-3 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                  {transitional ? (
+                  {isPending ? (
                     <Button size="sm" variant="secondary" disabled className="w-full">
-                      {STATUS_LABEL[app.status]}
+                      {pendingAction === 'start' ? 'Starting…' : 'Stopping…'}
                     </Button>
-                  ) : online ? (
+                  ) : app.online ? (
                     <Button
                       size="sm"
                       variant="danger"
-                      disabled={pendingId === app.id}
                       onClick={() => handleStartStop(app, 'stop')}
                       className="w-full"
                     >
-                      {pendingId === app.id ? 'Stopping…' : 'Stop'}
+                      Stop
                     </Button>
                   ) : (
                     <Button
                       size="sm"
                       variant="primary"
-                      disabled={pendingId === app.id}
                       onClick={() => handleStartStop(app, 'start')}
                       className="w-full"
                     >
-                      {pendingId === app.id ? 'Starting…' : 'Start'}
+                      Start
                     </Button>
                   )}
                 </div>
