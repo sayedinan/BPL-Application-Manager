@@ -2,36 +2,14 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { Button } from '@/components/ui/Button';
-import { Badge, type BadgeTone } from '@/components/ui/Badge';
+import { Badge } from '@/components/ui/Badge';
 import { Card, PageHeader } from '@/components/ui/Card';
 import { Alert } from '@/components/ui/Alert';
-
-type Status = 'RUNNING' | 'STOPPED' | 'STARTING' | 'STOPPING' | 'ERROR';
-
-function isOnline(status: Status): boolean {
-  return status === 'RUNNING';
-}
-function isTransitional(status: Status): boolean {
-  return status === 'STARTING' || status === 'STOPPING';
-}
-function isEditable(status: Status): boolean {
-  return status === 'STOPPED' || status === 'ERROR';
-}
-function statusLabel(status: Status): string {
-  if (isTransitional(status)) return status === 'STARTING' ? 'Starting…' : 'Stopping…';
-  if (status === 'ERROR') return 'Error';
-  return isOnline(status) ? 'Online' : 'Offline';
-}
-function statusTone(status: Status): BadgeTone {
-  if (status === 'ERROR') return 'error';
-  if (isTransitional(status)) return 'pending';
-  return isOnline(status) ? 'online' : 'offline';
-}
 
 interface ApplicationSummary {
   id: number;
   name: string;
-  status: Status;
+  online: boolean;
   startedAt: string | null;
 }
 
@@ -135,7 +113,7 @@ export function ApplicationsPage(): JSX.Element {
   }
 
   async function handleEditClick(app: ApplicationSummary) {
-    if (!isEditable(app.status)) return;
+    if (app.online === false) return;
     setFormError(null);
     setShowForm(false);
     setTestStatus('untested');
@@ -194,7 +172,7 @@ export function ApplicationsPage(): JSX.Element {
   }
 
   async function handleDelete(app: ApplicationSummary) {
-    if (!isEditable(app.status)) return;
+    if (app.online === false) return;
     if (!window.confirm(`Delete "${app.name}"? This cannot be undone.`)) return;
     setDeletingId(app.id);
     try {
@@ -332,28 +310,25 @@ export function ApplicationsPage(): JSX.Element {
                   <tr key={app.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
                     <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{app.name}</td>
                     <td className="px-4 py-3">
-                      <Badge tone={statusTone(app.status)}>{statusLabel(app.status)}</Badge>
-                      {app.status === 'ERROR' && (
-                        <p className="mt-1 text-xs text-status-error dark:text-red-400">Last start/stop attempt failed</p>
-                      )}
+                      <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">
                         <Button
                           size="sm"
                           variant="secondary"
-                          disabled={!isEditable(app.status)}
+                          disabled={app.online}
                           onClick={() => handleEditClick(app)}
-                          title={!isEditable(app.status) ? 'Must be Offline to edit' : undefined}
+                          title={app.online ? 'Must be Offline to edit' : undefined}
                         >
                           Edit
                         </Button>
                         <Button
                           size="sm"
                           variant="danger"
-                          disabled={!isEditable(app.status) || deletingId === app.id}
+                          disabled={app.online || deletingId === app.id}
                           onClick={() => handleDelete(app)}
-                          title={!isEditable(app.status) ? 'Must be Offline to delete' : undefined}
+                          title={app.online ? 'Must be Offline to delete' : undefined}
                         >
                           {deletingId === app.id ? 'Deleting…' : 'Delete'}
                         </Button>
