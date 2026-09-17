@@ -6,15 +6,24 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class SshConnection {
-    // Per-engine cached session; key = host+":"+user+":"+fingerprint hash, value = JSch Session
+    // Cached session; key = host+":"+user+":"+fingerprint+":"+purpose, value = JSch Session.
+    // "purpose" (e.g. "log", "status") keeps the log poller and the status
+    // poller on independent connections even when they target the same
+    // host/user/fingerprint — each has its own schedule and shouldn't
+    // contend on one shared session. Existing call sites that don't pass a
+    // purpose keep working unchanged via the "default" overloads below.
     private final Map<String, Session> sessionCache = new ConcurrentHashMap<>();
 
-    private String cacheKey(String host, String user, String fingerprint) {
-        return host + ":" + user + ":" + (fingerprint == null ? "" : fingerprint);
+    private String cacheKey(String host, String user, String fingerprint, String purpose) {
+        return host + ":" + user + ":" + (fingerprint == null ? "" : fingerprint) + ":" + purpose;
     }
 
     public Session connect(String host, String user, String pass, String fingerprint) throws Exception {
-        String key = cacheKey(host, user, fingerprint);
+        return connect(host, user, pass, fingerprint, "default");
+    }
+
+    public Session connect(String host, String user, String pass, String fingerprint, String purpose) throws Exception {
+        String key = cacheKey(host, user, fingerprint, purpose);
         Session session = sessionCache.get(key);
         if (session != null && session.isConnected()) {
             return session;
@@ -37,7 +46,11 @@ public class SshConnection {
 
     // Only disconnect/remove from cache on genuine connection-level failure
     public void invalidateCache(String host, String user, String fingerprint) {
-        String key = cacheKey(host, user, fingerprint);
+        invalidateCache(host, user, fingerprint, "default");
+    }
+
+    public void invalidateCache(String host, String user, String fingerprint, String purpose) {
+        String key = cacheKey(host, user, fingerprint, purpose);
         Session session = sessionCache.get(key);
         if (session != null) {
             session.disconnect();
@@ -45,9 +58,16 @@ public class SshConnection {
         sessionCache.remove(key);
     }
 
-    // Cleanup when engine stops / deleted — called externally if needed
+    // Cleanup when an application stops / is deleted — called externally.
+    // Callers that need to close BOTH the log and status connections for an
+    // application must call this once per purpose (see status redesign —
+    // stop/delete now has two cached sessions to tear down, not one).
     public void closeConnection(String host, String user, String fingerprint) {
-        String key = cacheKey(host, user, fingerprint);
+        closeConnection(host, user, fingerprint, "default");
+    }
+
+    public void closeConnection(String host, String user, String fingerprint, String purpose) {
+        String key = cacheKey(host, user, fingerprint, purpose);
         Session session = sessionCache.remove(key);
         if (session != null) {
             session.disconnect();
