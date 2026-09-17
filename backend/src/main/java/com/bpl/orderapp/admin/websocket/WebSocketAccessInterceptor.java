@@ -80,6 +80,10 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             jdbc.update("INSERT INTO websocket_subscriptions (session_id, subscription_id, topic_key) VALUES (?, ?, ?)", sessionId, subscriptionId, "audit-log");
             return;
         }
+        if ("/topic/application-status".equals(destination)) {
+            jdbc.update("INSERT INTO websocket_subscriptions (session_id, subscription_id, topic_key) VALUES (?, ?, ?)", sessionId, subscriptionId, "application-status");
+            return;
+        }
         if (destination.startsWith("/topic/application-logs/")) {
             String idPart = destination.substring("/topic/application-logs/".length());
             Long applicationId; try { applicationId = Long.valueOf(idPart); } catch (NumberFormatException e) { throw new MessageDeliveryException("Invalid application id"); }
