@@ -7,6 +7,7 @@ import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
 import com.bpl.orderapp.admin.ssh.SshConnection;
 import com.bpl.orderapp.admin.status.StatusConfirmationTimeoutException;
 import com.bpl.orderapp.admin.status.StatusPollingOrchestrator;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -175,7 +176,7 @@ public class ApplicationController {
     }
 
     @PostMapping
-    public ResponseEntity<Void> createApplication(@RequestBody Map<String, Object> req) {
+    public ResponseEntity<Void> createApplication(@RequestBody Map<String, Object> req, HttpServletRequest httpRequest) {
         String name = (String) req.get("name");
         String serverIp = (String) req.get("serverIp");
         if (serverIp == null || !serverIp.matches("^(\\d{1,3}\\.){3}\\d{1,3}$")) {
@@ -211,13 +212,21 @@ public class ApplicationController {
         statusPollingOrchestrator.startPolling(newId);
         statusPollingOrchestrator.checkNow(newId);
 
+        try {
+            var actor = currentActor();
+            auditWriter.write("CREATE_APPLICATION", actor.get("username"), actor.get("role"),
+                newId, name, null, Map.of("serverIp", serverIp), "SUCCESS", httpRequest);
+        } catch (Exception auditEx) {
+            log.warn("Audit write failed for CREATE_APPLICATION (id={})", newId, auditEx);
+        }
+
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/{id}/start")
     public ResponseEntity<Map<String, Object>> startApplication(@PathVariable Long id,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestParam Long userId) {
+            @RequestParam Long userId, HttpServletRequest httpRequest) {
         try {
             idempotencyService.checkAndStore(idempotencyKey != null ? idempotencyKey : "", userId, id);
         } catch (RuntimeException e) {
@@ -270,13 +279,22 @@ public class ApplicationController {
 
         Map<String, Object> body = new HashMap<>();
         body.put("online", true);
+
+        try {
+            var actor = currentActor();
+            auditWriter.write("START_APPLICATION", actor.get("username"), actor.get("role"),
+                id, null, null, Map.of(), "SUCCESS", httpRequest);
+        } catch (Exception auditEx) {
+            log.warn("Audit write failed for START_APPLICATION (id={})", id, auditEx);
+        }
+
         return ResponseEntity.ok(body);
     }
 
     @PostMapping("/{id}/stop")
     public ResponseEntity<Map<String, Object>> stopApplication(@PathVariable Long id,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestParam Long userId) {
+            @RequestParam Long userId, HttpServletRequest httpRequest) {
         idempotencyService.checkAndStore(idempotencyKey, userId, id);
 
         Map<String, Object> app = jdbc.queryForMap(
@@ -320,6 +338,15 @@ public class ApplicationController {
 
         Map<String, Object> body = new HashMap<>();
         body.put("online", false);
+
+        try {
+            var actor = currentActor();
+            auditWriter.write("STOP_APPLICATION", actor.get("username"), actor.get("role"),
+                id, null, null, Map.of(), "SUCCESS", httpRequest);
+        } catch (Exception auditEx) {
+            log.warn("Audit write failed for STOP_APPLICATION (id={})", id, auditEx);
+        }
+
         return ResponseEntity.ok(body);
     }
 
@@ -341,7 +368,7 @@ public class ApplicationController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Void> updateApplication(@PathVariable Long id, @RequestBody Map<String, Object> req) {
+    public ResponseEntity<Void> updateApplication(@PathVariable Long id, @RequestBody Map<String, Object> req, HttpServletRequest httpRequest) {
         if (statusPollingOrchestrator.isOnline(id)) {
             return ResponseEntity.status(403).build();
         }
@@ -367,11 +394,20 @@ public class ApplicationController {
                 "UPDATE applications SET name=?, server_ip=?::inet, ssh_username=?, start_script=?, stop_script=?, log_script=?, status_script=?, poll_interval_seconds=?, updated_at=NOW() WHERE id=?",
                 name, serverIp, sshUsername, startScript, stopScript, logScript, statusScript, pollInterval, id);
         }
+
+        try {
+            var actor = currentActor();
+            auditWriter.write("UPDATE_APPLICATION", actor.get("username"), actor.get("role"),
+                id, null, null, Map.of(), "SUCCESS", httpRequest);
+        } catch (Exception auditEx) {
+            log.warn("Audit write failed for UPDATE_APPLICATION (id={})", id, auditEx);
+        }
+
         return ResponseEntity.ok().build();
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteApplication(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteApplication(@PathVariable Long id, HttpServletRequest httpRequest) {
         if (statusPollingOrchestrator.isOnline(id)) {
             return ResponseEntity.status(409).build();
         }
@@ -392,6 +428,23 @@ public class ApplicationController {
         sshConnection.closeConnection(host, user, fingerprint);
 
         jdbc.update("DELETE FROM applications WHERE id = ?", id);
+
+        try {
+            var actor = currentActor();
+            auditWriter.write("DELETE_APPLICATION", actor.get("username"), actor.get("role"),
+                id, null, null, Map.of(), "SUCCESS", httpRequest);
+        } catch (Exception auditEx) {
+            log.warn("Audit write failed for DELETE_APPLICATION (id={})", id, auditEx);
+        }
+
         return ResponseEntity.noContent().build();
+    }
+
+    private Map<String, String> currentActor() {
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        String username = auth.getName();
+        String role = jdbc.queryForObject(
+            "SELECT role FROM users WHERE username = ? AND deleted_at IS NULL", String.class, username);
+        return Map.of("username", username, "role", role);
     }
 }
