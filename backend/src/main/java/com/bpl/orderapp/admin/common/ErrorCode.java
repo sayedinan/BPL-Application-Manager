@@ -30,4 +30,10 @@ public final class ErrorCode {
     public static final String SELF_DELETE_FORBIDDEN       = "SELF_DELETE_FORBIDDEN";
     public static final String DUPLICATE_NAME              = "DUPLICATE_NAME";
     public static final String IDEMPOTENCY_CONFLICT        = "IDEMPOTENCY_CONFLICT";
+    // STATUS-REDESIGN.md §3: the start/stop SSH command itself succeeded,
+    // but the status poller never confirmed the expected online/offline
+    // flip within the timeout window. Distinct from SSH_COMMAND_FAILED
+    // (which means the remote command errored) and SSH_CONNECTION_FAILED/
+    // SSH_AUTH_FAILED (which mean we couldn't even reach/authenticate).
+    public static final String STATUS_CONFIRMATION_TIMEOUT = "STATUS_CONFIRMATION_TIMEOUT";
 }

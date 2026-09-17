@@ -55,6 +55,21 @@ public class GlobalExceptionHandler {
             .body(pd);
     }
 
+    @ExceptionHandler(com.bpl.orderapp.admin.status.StatusConfirmationTimeoutException.class)
+    public ResponseEntity<ProblemDetail> handleStatusConfirmationTimeout(
+            com.bpl.orderapp.admin.status.StatusConfirmationTimeoutException ex) {
+        // 504, not 502 — the SSH command succeeded; the remote state
+        // just never confirmed within the window (STATUS-REDESIGN.md §3).
+        ProblemDetail pd = baseProblem(
+            ErrorCode.STATUS_CONFIRMATION_TIMEOUT,
+            HttpStatus.GATEWAY_TIMEOUT,
+            "Timed out waiting for the application's status to confirm the requested change"
+        );
+        return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(pd);
+    }
+
     @ExceptionHandler(com.bpl.orderapp.admin.accountDeletion.SelfDeleteForbiddenException.class)
     public ResponseEntity<ProblemDetail> handleSelfDeleteForbidden(
             com.bpl.orderapp.admin.accountDeletion.SelfDeleteForbiddenException ex) {
