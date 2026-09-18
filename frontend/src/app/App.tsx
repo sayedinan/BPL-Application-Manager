@@ -10,6 +10,7 @@ import { RealChangePasswordPage } from '@/auth/ChangePasswordPage';
 import { DashboardPlaceholder } from '@/app/Dashboard';
 import { ApplicationsPage } from '@/app/ApplicationsPage';
 import { UsersPage } from '@/app/UsersPage';
+import { LogsPage } from '@/app/LogsPage';
 import { api } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { Logo } from '@/components/ui/Logo';
@@ -100,6 +101,7 @@ function NavBar() {
       <NavLink href="/">Dashboard</NavLink>
       {user.role === 'SYS_ADMIN' && <NavLink href="/applications">Applications</NavLink>}
       {(user.role === 'SYS_ADMIN' || user.role === 'ADMIN') && <NavLink href="/users">Users</NavLink>}
+      {(user.role === 'SYS_ADMIN' || user.role === 'ADMIN') && <NavLink href="/logs">Logs</NavLink>}
 
       <div className="ml-auto flex items-center gap-3">
         <ThemeToggle />
@@ -124,6 +126,7 @@ function AppRoutes() {
       <Route path="/" element={<RequireAuth><DashboardPlaceholder /></RequireAuth>} />
       <Route path="/applications" element={<RequireAuth><SysAdminOnly><ApplicationsPage /></SysAdminOnly></RequireAuth>} />
       <Route path="/users" element={<RequireAuth><AdminPlus><UsersPage /></AdminPlus></RequireAuth>} />
+      <Route path="/logs" element={<RequireAuth><AdminPlus><LogsPage /></AdminPlus></RequireAuth>} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/change-password" element={<RequireAuth><RealChangePasswordPage /></RequireAuth>} />
       <Route path="/force-change-password" element={<RequireAuth><Navigate to="/change-password" /></RequireAuth>} />
