@@ -22,6 +22,11 @@ interface AuditLogRow {
   result: string;
 }
 
+interface ApplicationSummary {
+  id: number;
+  name: string;
+}
+
 type LogSource = 'application' | 'audit';
 
 function formatAuditLine(row: AuditLogRow): string {
@@ -30,15 +35,40 @@ function formatAuditLine(row: AuditLogRow): string {
   return `${localTime} ${row.actorUsername}(${row.actorRole}) ${row.actionType} target=${target} result=${row.result}`;
 }
 
-export function LogsBox({ appId, appName, role }: { appId: number | null; appName: string; role?: string }) {
+export function LogsBox({ role }: { role?: string }) {
   const canViewAudit = role === 'SYS_ADMIN' || role === 'ADMIN';
+  const [apps, setApps] = useState<ApplicationSummary[]>([]);
   const [source, setSource] = useState<LogSource>(canViewAudit ? 'audit' : 'application');
+  const [selectedAppId, setSelectedAppId] = useState<number | null>(null);
   const [lines, setLines] = useState<string[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [autoFollow, setAutoFollow] = useState(true);
   const clientRef = useRef<Client | null>(null);
 
+  // Audit Log is always global — every user, every app, chronologically.
+  // The app list below is only used to populate the per-app Application
+  // Log options in the dropdown; it never scopes the audit fetch.
   useEffect(() => {
+    let cancelled = false;
+    async function loadApps() {
+      try {
+        const list = await api.get<ApplicationSummary[]>(API.APPLICATIONS.LIST);
+        if (cancelled) return;
+        setApps(list);
+        setSelectedAppId((prev) => (prev === null && list.length > 0 ? list[0].id : prev));
+      } catch {
+        // app list failure only limits the Application Log options —
+        // Audit Log (if permitted) still works without it
+      }
+    }
+    void loadApps();
+    return () => { cancelled = true; };
+  }, []);
+
+  const selectedApp = apps.find((a) => a.id === selectedAppId);
+
+  useEffect(() => {
+    if (source === 'application' && selectedAppId === null) return;
     let cancelled = false;
     setLines([]);
     setHistoryError(null);
@@ -47,12 +77,10 @@ export function LogsBox({ appId, appName, role }: { appId: number | null; appNam
     async function loadHistory() {
       try {
         if (source === 'application') {
-          if (appId === null) return;
-          const rows = await api.get<LogLineRow[]>(API.APPLICATIONS.LOGS(appId));
+          const rows = await api.get<LogLineRow[]>(API.APPLICATIONS.LOGS(selectedAppId as number));
           if (!cancelled) setLines(rows.map((r) => r.content));
         } else {
-          const scope = appId !== null ? `&applicationId=${appId}` : '';
-          const res = await api.get<{ items: AuditLogRow[] }>(`${API.AUDIT_LOGS}?page=0&size=500${scope}`);
+          const res = await api.get<{ items: AuditLogRow[] }>(`${API.AUDIT_LOGS}?page=0&size=500`);
           if (!cancelled) setLines(res.items.slice().reverse().map(formatAuditLine));
         }
       } catch (err) {
@@ -64,23 +92,16 @@ export function LogsBox({ appId, appName, role }: { appId: number | null; appNam
 
     void loadHistory();
     return () => { cancelled = true; };
-  }, [appId, source]);
-
-  const reconnectDelays = [1000, 2000, 4000, 8000, 16000, 30000];
-  const [reconnectAttempt, setReconnectAttempt] = useState(0);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  }, [source, selectedAppId]);
 
   useEffect(() => {
+    if (source === 'application' && selectedAppId === null) return;
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const brokerURL = `${wsProtocol}//${window.location.host}/ws`;
     const client = new Client({ brokerURL, debug: () => {} });
-    const topic = source === 'application' ? `/topic/application-logs/${appId}` : '/topic/audit-log';
+    const topic = source === 'application' ? `/topic/application-logs/${selectedAppId}` : '/topic/audit-log';
 
     client.onConnect = () => {
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
       setReconnectAttempt(0);
       client.subscribe(topic, (msg) => {
         try {
@@ -95,29 +116,17 @@ export function LogsBox({ appId, appName, role }: { appId: number | null; appNam
 
     client.activate();
     clientRef.current = client;
-    return () => {
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-      client.deactivate();
-    };
-  }, [appId, source]);
+    return () => { client.deactivate(); };
+  }, [source, selectedAppId]);
+
+  const reconnectDelays = [1000, 2000, 4000, 8000, 16000, 30000];
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   useEffect(() => {
     if (!clientRef.current || !clientRef.current.connected) {
       const delay = reconnectDelays[Math.min(reconnectAttempt, reconnectDelays.length - 1)];
-      reconnectTimerRef.current = setTimeout(() => {
-        reconnectTimerRef.current = null;
-        setReconnectAttempt((a) => a + 1);
-        clientRef.current?.activate();
-      }, delay);
-      return () => {
-        if (reconnectTimerRef.current) {
-          clearTimeout(reconnectTimerRef.current);
-          reconnectTimerRef.current = null;
-        }
-      };
+      const timer = setTimeout(() => { setReconnectAttempt((a) => a + 1); clientRef.current?.activate(); }, delay);
+      return () => clearTimeout(timer);
     }
   }, [reconnectAttempt]);
 
@@ -134,16 +143,29 @@ export function LogsBox({ appId, appName, role }: { appId: number | null; appNam
     }
   };
 
+  const selectValue = source === 'audit' ? 'audit' : selectedAppId !== null ? `app-${selectedAppId}` : '';
+
+  function handleSelectChange(value: string) {
+    if (value === 'audit') {
+      setSource('audit');
+    } else if (value.startsWith('app-')) {
+      setSource('application');
+      setSelectedAppId(Number(value.slice(4)));
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900/60">
         <select
-          value={source}
-          onChange={(e) => setSource(e.target.value as LogSource)}
+          value={selectValue}
+          onChange={(e) => handleSelectChange(e.target.value)}
           className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-theme focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-surface-dark dark:text-slate-200"
         >
-          {canViewAudit && <option value="audit">Audit Log — {appName}</option>}
-          {appId !== null && <option value="application">{appName} — Application Log</option>}
+          {canViewAudit && <option value="audit">Audit Log</option>}
+          {apps.map((app) => (
+            <option key={app.id} value={`app-${app.id}`}>{app.name} — Application Log</option>
+          ))}
         </select>
         <span className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
           <span className={`h-1.5 w-1.5 rounded-full ${showBanner ? 'bg-red-500' : 'bg-status-online animate-pulse-soft'}`} />
