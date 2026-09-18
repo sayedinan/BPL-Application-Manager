@@ -159,7 +159,7 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="h-96 overflow-y-auto bg-slate-950 px-4 py-3 font-mono text-xs leading-relaxed text-slate-300"
+          className="h-96 overflow-y-auto bg-slate-100 px-4 py-3 font-mono text-xs leading-relaxed text-slate-800 transition-theme dark:bg-slate-950 dark:text-slate-300"
         >
           <pre className="whitespace-pre-wrap break-all">{lines.length > 0 ? lines.join('\n') : 'No log lines yet…'}</pre>
         </div>
