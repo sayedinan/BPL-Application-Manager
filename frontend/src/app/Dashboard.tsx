@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Client } from '@stomp/stompjs';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
@@ -7,6 +7,8 @@ import { Card, PageHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
+import { UptimeDonut } from '@/components/charts/UptimeDonut';
+import { UptimeBarChart } from '@/components/charts/UptimeBarChart';
 
 interface ApplicationSummary {
   id: number;
@@ -50,8 +52,19 @@ function formatDuration(totalSeconds: number): string {
   return `${m}m`;
 }
 
+function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <Card className="p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">{label}</p>
+      <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{sub}</p>}
+    </Card>
+  );
+}
+
 export function DashboardPlaceholder(): JSX.Element {
   const { user } = useAuth();
+  const canViewAudit = user?.role === 'SYS_ADMIN' || user?.role === 'ADMIN';
   const [apps, setApps] = useState<ApplicationSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,8 +72,8 @@ export function DashboardPlaceholder(): JSX.Element {
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [pendingAction, setPendingAction] = useState<'start' | 'stop' | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [statsCache, setStatsCache] = useState<Record<number, AppStats>>({});
-  const [statsLoading, setStatsLoading] = useState<number | null>(null);
+  const [statsMap, setStatsMap] = useState<Record<number, AppStats>>({});
+  const [actionsToday, setActionsToday] = useState<number | null>(null);
   const [, setTick] = useState(0);
   const clientRef = useRef<Client | null>(null);
 
@@ -87,12 +100,67 @@ export function DashboardPlaceholder(): JSX.Element {
     return () => clearInterval(clock);
   }, []);
 
+  // Powers the KPI strip and the per-app donuts/bar chart. Fetched for
+  // every app in parallel whenever the app list changes shape, and on
+  // a slower independent interval — stats don't need 5s freshness like
+  // online/offline status does, so this stays light on the backend.
+  async function loadAllStats(appList: ApplicationSummary[]) {
+    const entries = await Promise.all(
+      appList.map(async (app) => {
+        try {
+          const s = await api.get<AppStats>(API.APPLICATIONS.STATS(app.id));
+          return [app.id, s] as const;
+        } catch {
+          return null;
+        }
+      })
+    );
+    setStatsMap((prev) => {
+      const next = { ...prev };
+      for (const entry of entries) {
+        if (entry) next[entry[0]] = entry[1];
+      }
+      return next;
+    });
+  }
+
+  const appIdsKey = apps.map((a) => a.id).join(',');
+  useEffect(() => {
+    if (apps.length > 0) void loadAllStats(apps);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appIdsKey]);
+
+  useEffect(() => {
+    if (apps.length === 0) return;
+    const interval = setInterval(() => void loadAllStats(apps), 20000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appIdsKey]);
+
+  useEffect(() => {
+    if (!canViewAudit) return;
+    async function loadActionsToday() {
+      try {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const res = await api.get<{ total: number }>(
+          `${API.AUDIT_LOGS}?page=0&size=1&from=${startOfDay.toISOString()}`
+        );
+        setActionsToday(res.total);
+      } catch {
+        setActionsToday(null);
+      }
+    }
+    void loadActionsToday();
+    const interval = setInterval(() => void loadActionsToday(), 30000);
+    return () => clearInterval(interval);
+  }, [canViewAudit]);
+
   // STATUS-REDESIGN.md §2 — global topic, same reconnect-backoff-then-banner
   // pattern as LogsBox.tsx. This is additive to the 5s poll above, not a
   // replacement: WS gives instant updates, the poll is the safety net.
   const reconnectDelays = [1000, 2000, 4000, 8000, 16000, 30000];
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -100,10 +168,6 @@ export function DashboardPlaceholder(): JSX.Element {
     const client = new Client({ brokerURL, debug: () => {} });
 
     client.onConnect = () => {
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
       setReconnectAttempt(0);
       client.subscribe('/topic/application-status', (msg) => {
         try {
@@ -123,29 +187,14 @@ export function DashboardPlaceholder(): JSX.Element {
 
     client.activate();
     clientRef.current = client;
-    return () => {
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-      client.deactivate();
-    };
+    return () => { client.deactivate(); };
   }, []);
 
   useEffect(() => {
     if (!clientRef.current || !clientRef.current.connected) {
       const delay = reconnectDelays[Math.min(reconnectAttempt, reconnectDelays.length - 1)];
-      reconnectTimerRef.current = setTimeout(() => {
-        reconnectTimerRef.current = null;
-        setReconnectAttempt((a) => a + 1);
-        clientRef.current?.activate();
-      }, delay);
-      return () => {
-        if (reconnectTimerRef.current) {
-          clearTimeout(reconnectTimerRef.current);
-          reconnectTimerRef.current = null;
-        }
-      };
+      const timer = setTimeout(() => { setReconnectAttempt((a) => a + 1); clientRef.current?.activate(); }, delay);
+      return () => clearTimeout(timer);
     }
   }, [reconnectAttempt]);
 
@@ -173,13 +222,7 @@ export function DashboardPlaceholder(): JSX.Element {
           setActionError(`Failed to ${action} ${app.name} — check the server connection and scripts.`);
         }
       }
-      // A start/stop can change uptime/downtime totals — drop any cached
-      // stats for this app so the next expand re-fetches fresh numbers.
-      setStatsCache((prev) => {
-        const next = { ...prev };
-        delete next[app.id];
-        return next;
-      });
+      void loadAllStats(apps);
     } catch {
       setActionError(`Failed to ${action} ${app.name}.`);
     } finally {
@@ -188,22 +231,40 @@ export function DashboardPlaceholder(): JSX.Element {
     }
   }
 
+  const kpis = useMemo(() => {
+    const onlineCount = apps.filter((a) => a.online).length;
+    const statsValues = Object.values(statsMap);
+    const totalUp = statsValues.reduce((s, v) => s + v.totalUptimeSeconds, 0);
+    const totalDown = statsValues.reduce((s, v) => s + v.totalDowntimeSeconds, 0);
+    const avgUptimePct = totalUp + totalDown > 0 ? Math.round((totalUp / (totalUp + totalDown)) * 100) : null;
+
+    let streakLeader: { name: string; seconds: number } | null = null;
+    for (const app of apps) {
+      const s = statsMap[app.id];
+      if (s?.currentlyOnline && s.currentStreakStartedAt) {
+        const seconds = (Date.now() - new Date(s.currentStreakStartedAt).getTime()) / 1000;
+        if (!streakLeader || seconds > streakLeader.seconds) {
+          streakLeader = { name: app.name, seconds };
+        }
+      }
+    }
+
+    return { onlineCount, avgUptimePct, streakLeader };
+  }, [apps, statsMap]);
+
+  const barData = useMemo(
+    () =>
+      apps.map((app) => {
+        const s = statsMap[app.id];
+        const total = s ? s.totalUptimeSeconds + s.totalDowntimeSeconds : 0;
+        const uptimePct = s && total > 0 ? Math.round((s.totalUptimeSeconds / total) * 100) : 0;
+        return { name: app.name, uptimePct };
+      }),
+    [apps, statsMap]
+  );
+
   function toggleDetails(appId: number) {
-    if (expandedId === appId) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(appId);
-    if (!statsCache[appId]) {
-      setStatsLoading(appId);
-      api
-        .get<AppStats>(API.APPLICATIONS.STATS(appId))
-        .then((data) => setStatsCache((prev) => ({ ...prev, [appId]: data })))
-        .catch(() => {
-          // leave uncached — the panel shows a fallback message below
-        })
-        .finally(() => setStatsLoading(null));
-    }
+    setExpandedId((prev) => (prev === appId ? null : appId));
   }
 
   if (loading) {
@@ -225,6 +286,32 @@ export function DashboardPlaceholder(): JSX.Element {
         <Alert className="mb-4">Live status updates disconnected — retrying. Falling back to periodic refresh.</Alert>
       )}
 
+      {apps.length > 0 && (
+        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <KpiCard label="Apps Online" value={`${kpis.onlineCount} / ${apps.length}`} />
+          <KpiCard
+            label="Avg Uptime"
+            value={kpis.avgUptimePct !== null ? `${kpis.avgUptimePct}%` : '—'}
+            sub="lifetime, all apps"
+          />
+          {canViewAudit && (
+            <KpiCard label="Actions Today" value={actionsToday !== null ? String(actionsToday) : '—'} />
+          )}
+          <KpiCard
+            label="Longest Streak"
+            value={kpis.streakLeader ? formatDuration(Math.floor(kpis.streakLeader.seconds)) : '—'}
+            sub={kpis.streakLeader?.name}
+          />
+        </div>
+      )}
+
+      {apps.length > 1 && barData.some((b) => b.uptimePct > 0) && (
+        <Card className="mb-6 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Uptime by application</h2>
+          <UptimeBarChart data={barData} />
+        </Card>
+      )}
+
       {apps.length === 0 ? (
         <Card className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
           {user?.role === 'SYS_ADMIN'
@@ -237,23 +324,29 @@ export function DashboardPlaceholder(): JSX.Element {
             const runningTime = app.online ? formatRunningTime(app.startedAt) : null;
             const isPending = pendingId === app.id;
             const isExpanded = expandedId === app.id;
-            const stats = statsCache[app.id];
+            const stats = statsMap[app.id];
 
             return (
               <Card key={app.id} className="p-4">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="truncate font-semibold text-slate-900 dark:text-white">{app.name}</span>
-                  <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className="truncate font-semibold text-slate-900 dark:text-white">{app.name}</span>
+                      <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>
+                    </div>
+                    {app.startedAt && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Started: {new Date(app.startedAt).toLocaleString()}
+                      </p>
+                    )}
+                    {runningTime && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Running for {runningTime}</p>
+                    )}
+                  </div>
+                  {stats && (
+                    <UptimeDonut uptimeSeconds={stats.totalUptimeSeconds} downtimeSeconds={stats.totalDowntimeSeconds} size={56} />
+                  )}
                 </div>
-
-                {app.startedAt && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Started: {new Date(app.startedAt).toLocaleString()}
-                  </p>
-                )}
-                {runningTime && (
-                  <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">Running for {runningTime}</p>
-                )}
 
                 <div className="mt-3 flex items-center gap-2">
                   {isPending ? (
@@ -281,17 +374,15 @@ export function DashboardPlaceholder(): JSX.Element {
 
                 {isExpanded && (
                   <div className="mt-2 space-y-1 rounded-md bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/50 dark:text-slate-300">
-                    {statsLoading === app.id && !stats ? (
+                    {!stats ? (
                       <p>Loading stats…</p>
-                    ) : stats ? (
+                    ) : (
                       <>
                         <p>Added: {new Date(stats.createdAt).toLocaleDateString()} (since added to BPL admin)</p>
                         <p>Total uptime: {formatDuration(stats.totalUptimeSeconds)}</p>
                         <p>Total downtime: {formatDuration(stats.totalDowntimeSeconds)}</p>
                         <p>Last ran: {stats.lastRanAt ? new Date(stats.lastRanAt).toLocaleString() : 'Never'}</p>
                       </>
-                    ) : (
-                      <p>Couldn't load stats.</p>
                     )}
                   </div>
                 )}
