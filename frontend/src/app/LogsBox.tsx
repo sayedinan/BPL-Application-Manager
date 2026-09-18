@@ -32,7 +32,7 @@ function formatAuditLine(row: AuditLogRow): string {
 
 export function LogsBox({ appId, appName, role }: { appId: number; appName: string; role?: string }) {
   const canViewAudit = role === 'SYS_ADMIN' || role === 'ADMIN';
-  const [source, setSource] = useState<LogSource>('application');
+  const [source, setSource] = useState<LogSource>(canViewAudit ? 'audit' : 'application');
   const [lines, setLines] = useState<string[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [autoFollow, setAutoFollow] = useState(true);
@@ -50,7 +50,7 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
           const rows = await api.get<LogLineRow[]>(API.APPLICATIONS.LOGS(appId));
           if (!cancelled) setLines(rows.map((r) => r.content));
         } else {
-          const res = await api.get<{ items: AuditLogRow[] }>(`${API.AUDIT_LOGS}?page=0&size=500`);
+          const res = await api.get<{ items: AuditLogRow[] }>(`${API.AUDIT_LOGS}?page=0&size=500&applicationId=${appId}`);
           if (!cancelled) setLines(res.items.slice().reverse().map(formatAuditLine));
         }
       } catch (err) {
@@ -140,8 +140,8 @@ export function LogsBox({ appId, appName, role }: { appId: number; appName: stri
           onChange={(e) => setSource(e.target.value as LogSource)}
           className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-theme focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-surface-dark dark:text-slate-200"
         >
+          {canViewAudit && <option value="audit">Audit Log — {appName}</option>}
           <option value="application">{appName} — Application Log</option>
-          {canViewAudit && <option value="audit">Audit Log (Admin+ only)</option>}
         </select>
         <span className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
           <span className={`h-1.5 w-1.5 rounded-full ${showBanner ? 'bg-red-500' : 'bg-status-online animate-pulse-soft'}`} />
