@@ -64,9 +64,6 @@ export function LogsBox({ role }: { role?: string }) {
     void loadApps();
     return () => { cancelled = true; };
   }, []);
-
-  const selectedApp = apps.find((a) => a.id === selectedAppId);
-
   useEffect(() => {
     if (source === 'application' && selectedAppId === null) return;
     let cancelled = false;
