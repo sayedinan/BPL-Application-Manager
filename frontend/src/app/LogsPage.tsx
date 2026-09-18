@@ -25,7 +25,6 @@ export function LogsPage(): JSX.Element {
         const list = await api.get<ApplicationSummary[]>(API.APPLICATIONS.LIST);
         if (cancelled) return;
         setApps(list);
-        setSelectedAppId((prev) => (prev === null && list.length > 0 ? list[0].id : prev));
         setError(null);
       } catch (err) {
         if (!cancelled) setError(err instanceof ApiError ? err.message : 'Failed to load applications.');
@@ -56,20 +55,19 @@ export function LogsPage(): JSX.Element {
           <div className="mb-4">
             <select
               value={selectedAppId ?? ''}
-              onChange={(e) => setSelectedAppId(Number(e.target.value))}
+              onChange={(e) => setSelectedAppId(e.target.value === '' ? null : Number(e.target.value))}
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-theme focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-surface-dark dark:text-slate-200"
             >
+              <option value="">All Applications</option>
               {apps.map((app) => (
                 <option key={app.id} value={app.id}>{app.name}</option>
               ))}
             </select>
           </div>
 
-          {selectedAppId !== null && (
-            <Card className="overflow-hidden">
-              <LogsBox appId={selectedAppId} appName={selectedApp?.name ?? ''} role={user?.role} />
-            </Card>
-          )}
+          <Card className="overflow-hidden">
+            <LogsBox appId={selectedAppId} appName={selectedApp?.name ?? 'All Applications'} role={user?.role} />
+          </Card>
         </>
       )}
     </div>
