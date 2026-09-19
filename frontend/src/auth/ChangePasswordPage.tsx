@@ -31,7 +31,11 @@ export function RealChangePasswordPage(): JSX.Element {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (newPassword.length < 12) { setError('New password must be at least 12 characters.'); return; }
+    if (newPassword.length < 8) { setError('New password must be at least 8 characters.'); return; }
+    if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/\d/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+      setError('New password must include an uppercase letter, a lowercase letter, a number, and a symbol.');
+      return;
+    }
     if (newPassword !== confirmPassword) { setError('New password and confirmation do not match.'); return; }
     if (newPassword === oldPassword) { setError('New password must differ from the current password.'); return; }
     if (!user) { setError('Your session could not be verified. Please sign in again.'); return; }
@@ -98,7 +102,7 @@ export function RealChangePasswordPage(): JSX.Element {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               className={inputClass}
-              minLength={12}
+              minLength={8}
               required
             />
           </div>
@@ -114,7 +118,7 @@ export function RealChangePasswordPage(): JSX.Element {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className={inputClass}
-              minLength={12}
+              minLength={8}
               required
             />
           </div>

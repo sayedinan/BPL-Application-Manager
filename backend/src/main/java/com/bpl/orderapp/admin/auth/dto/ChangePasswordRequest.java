@@ -1,6 +1,7 @@
 package com.bpl.orderapp.admin.auth.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -30,7 +31,11 @@ public record ChangePasswordRequest(
     String oldPassword,
 
     @NotBlank(message = "newPassword must not be blank")
-    @Size(min = 12, max = 256, message = "newPassword must be at least 12 and at most 256 characters")
+    @Size(min = 8, max = 256, message = "newPassword must be at least 8 and at most 256 characters")
+    @Pattern(
+        regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).*$",
+        message = "newPassword must include an uppercase letter, a lowercase letter, a number, and a symbol"
+    )
     String newPassword
 ) {
 }

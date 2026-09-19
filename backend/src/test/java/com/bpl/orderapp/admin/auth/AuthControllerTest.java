@@ -68,7 +68,7 @@ class AuthControllerTest {
     @MockBean private BCryptPasswordEncoder encoder;
     @MockBean private SecurityContextRepository securityContextRepository;
 
-    private static final String TEST_PASSWORD = "the-real-password";
+    private static final String TEST_PASSWORD = "The-real-password1";
     private static final String TEST_HASH = new BCryptPasswordEncoder(10).encode(TEST_PASSWORD);
 
     @Test
@@ -205,7 +205,7 @@ class AuthControllerTest {
     // change-password
     // -----------------------------------------------------------------
 
-    private static final String NEW_PASSWORD = "a-fresh-password-12chars";
+    private static final String NEW_PASSWORD = "A-fresh-password-12chars";
 
     @Test
     void changePassword_succeeds_flipsMustChangePasswordToFalse() throws Exception {
