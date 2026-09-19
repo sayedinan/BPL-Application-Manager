@@ -65,6 +65,24 @@ export function UsersPage(): JSX.Element {
   // reset-password: the cleartext temp password never appears again
   // after this render, so it must be copy-able right here.
   const [createdResult, setCreatedResult] = useState<{ username: string; temporaryPassword: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopyTempPassword() {
+    if (!createdResult) return;
+    try {
+      await navigator.clipboard.writeText(createdResult.temporaryPassword);
+    } catch {
+      // Fallback if the clipboard API is blocked
+      const ta = document.createElement('textarea');
+      ta.value = createdResult.temporaryPassword;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   async function loadUsers() {
     try {
@@ -198,9 +216,14 @@ export function UsersPage(): JSX.Element {
           <code className="block break-all rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-sm dark:border-slate-700 dark:bg-surface-dark dark:text-slate-100">
             {createdResult.temporaryPassword}
           </code>
-          <Button size="sm" variant="secondary" className="mt-3" onClick={() => setCreatedResult(null)}>
-            Dismiss
-          </Button>
+          <div className="mt-3 flex gap-2">
+            <Button size="sm" onClick={() => void handleCopyTempPassword()}>
+              {copied ? 'Copied ✓' : 'Copy password'}
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => { setCreatedResult(null); setCopied(false); }}>
+              Dismiss
+            </Button>
+          </div>
         </Card>
       )}
 
