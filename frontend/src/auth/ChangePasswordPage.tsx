@@ -70,7 +70,9 @@ export function RealChangePasswordPage(): JSX.Element {
         <div className="mb-6 text-center">
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Change Password</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            You must set a new password before continuing.
+            {user?.mustChangePassword
+              ? 'You must set a new password before continuing.'
+              : 'Enter your current password, then choose a new one.'}
           </p>
         </div>
 

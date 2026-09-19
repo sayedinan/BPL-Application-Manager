@@ -109,6 +109,7 @@ function NavBar() {
           <p className="text-sm font-medium leading-tight text-slate-900 dark:text-white">{user.username}</p>
           <p className="text-xs leading-tight text-slate-500 dark:text-slate-400">{user.role}</p>
         </div>
+        <NavLink href="/change-password">Change password</NavLink>
         <button
           onClick={handleLogout}
           className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-theme dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
