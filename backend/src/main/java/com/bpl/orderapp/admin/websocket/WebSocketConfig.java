@@ -10,20 +10,24 @@ import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
+import org.springframework.beans.factory.annotation.Value;
 
 @Configuration
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final WebSocketAccessInterceptor accessInterceptor;
+    private final String allowedOrigin;
 
-    public WebSocketConfig(WebSocketAccessInterceptor accessInterceptor) {
+    public WebSocketConfig(WebSocketAccessInterceptor accessInterceptor,
+                           @Value("${spring.cors.allowed-origins}") String allowedOrigin) {
         this.accessInterceptor = accessInterceptor;
+        this.allowedOrigin = allowedOrigin;
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws");
+        registry.addEndpoint("/ws").setAllowedOrigins(allowedOrigin);
     }
 
     @Override
