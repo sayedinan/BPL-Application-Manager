@@ -115,6 +115,10 @@ public class UserController {
                 "SELECT application_id FROM user_application_assignments WHERE user_id = ?",
                 Long.class, userRowId);
             row.put("assignedApplicationIds", assigned);
+            Integer liveConnections = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM websocket_connections WHERE username = ?",
+                Integer.class, row.get("username"));
+            row.put("online", liveConnections != null && liveConnections > 0);
         }
         return ResponseEntity.ok(users);
     }

@@ -11,6 +11,7 @@ import { DashboardPlaceholder } from '@/app/Dashboard';
 import { ApplicationsPage } from '@/app/ApplicationsPage';
 import { UsersPage } from '@/app/UsersPage';
 import { LogsPage } from '@/app/LogsPage';
+import { PresenceConnection } from '@/app/PresenceConnection';
 import { api } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { Logo } from '@/components/ui/Logo';
@@ -143,6 +144,7 @@ export function App(): JSX.Element {
         <BrowserRouter>
           <AuthProvider>
             <AuthHydrator />
+            <PresenceConnection />
             <div className="min-h-screen bg-surface-subtle transition-theme dark:bg-surface-dark">
               <NavBar />
               <AppRoutes />

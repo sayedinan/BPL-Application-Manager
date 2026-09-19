@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import com.bpl.orderapp.admin.audit.AuditWriter;
 
 @Component
 public class WebSocketAccessInterceptor implements ChannelInterceptor {
@@ -33,7 +34,19 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
     private final ConcurrentHashMap<String, String> sessionUsers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> subscriptionTopics = new ConcurrentHashMap<>();
 
-    public WebSocketAccessInterceptor(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    private static final long CLOSE_GRACE_SECONDS = 30;
+    private final AuditWriter auditWriter;
+    private final java.util.concurrent.ScheduledExecutorService closeScheduler =
+        java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "ws-close-detector");
+            t.setDaemon(true);
+            return t;
+        });
+
+    public WebSocketAccessInterceptor(JdbcTemplate jdbc, AuditWriter auditWriter) {
+        this.jdbc = jdbc;
+        this.auditWriter = auditWriter;
+    }
 
     @jakarta.annotation.PostConstruct
     public void clearStaleStateOnStartup() {
@@ -117,7 +130,10 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             globalConnections.updateAndGet(v -> Math.max(0, v - 1));
             if (username != null) {
                 AtomicInteger userCount = perUserConnections.get(username);
-                if (userCount != null) userCount.updateAndGet(v -> Math.max(0, v - 1));
+                if (userCount != null) {
+                    int remaining = userCount.updateAndGet(v -> Math.max(0, v - 1));
+                    if (remaining == 0) scheduleBrowserClosedCheck(username, java.time.Instant.now());
+                }
             }
         }
     }
@@ -125,6 +141,34 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
     @EventListener
     public void onSessionDisconnect(SessionDisconnectEvent event) {
         cleanupSession(event.getSessionId());
+    }
+
+    // The user's last live connection dropped. Wait a grace period (covers page
+    // refresh / reconnect), then log LOGOUT at the disconnect time if they are
+    // still gone AND still have a live session (a manual logout already removed it).
+    private void scheduleBrowserClosedCheck(String username, java.time.Instant disconnectedAt) {
+        closeScheduler.schedule(() -> {
+            try {
+                recordBrowserClosed(username, disconnectedAt);
+            } catch (Exception e) {
+                log.warn("Browser-closed check failed for '{}'", username, e);
+            }
+        }, CLOSE_GRACE_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    private void recordBrowserClosed(String username, java.time.Instant disconnectedAt) {
+        AtomicInteger current = perUserConnections.get(username);
+        if (current != null && current.get() > 0) return; // reconnected or another tab open
+        Integer sessions = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM spring_session WHERE principal_name = ? AND expiry_time > ?",
+            Integer.class, username, System.currentTimeMillis());
+        if (sessions == null || sessions == 0) return; // already logged out / expired
+        List<String> roles = jdbc.queryForList(
+            "SELECT role FROM users WHERE username = ? AND deleted_at IS NULL", String.class, username);
+        String role = roles.isEmpty() ? "UNKNOWN" : roles.get(0);
+        auditWriter.writeAt(disconnectedAt, "LOGOUT", username, role, Map.of("reason", "BROWSER_CLOSED"), "SUCCESS");
+        jdbc.update("DELETE FROM spring_session WHERE principal_name = ?", username);
+        log.info("Browser closed detected for '{}' at {}; LOGOUT audited, orphaned session removed", username, disconnectedAt);
     }
 
     private String requireUsername(StompHeaderAccessor accessor) {

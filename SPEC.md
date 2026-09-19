@@ -263,7 +263,7 @@ SHELLCHECK_UNAVAILABLE
 ### 5.4 Limits
 | Limit | Value |
 |---|---|
-| Per-user connections | 5 |
+| Per-user connections | 10 |
 | Per-application subscribers | 50 |
 | Global connections | 500 |
 

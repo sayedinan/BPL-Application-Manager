@@ -17,6 +17,12 @@ public class AuditWriter {
         insert(actionType, actorUsername, actorRole, targetAppId, targetAppName, targetUserId, detail, result, extractSourceIp(request));
     }
 
+    /** Writes an audit row with an explicit event time (used when the event is detected after the fact, e.g. browser closed). source_ip = NULL. */
+    public void writeAt(java.time.Instant when, String actionType, String actorUsername, String actorRole, Map<String,Object> detail, String result) {
+        jdbc.update("INSERT INTO audit_logs (timestamp,actor_username,actor_role,action_type,detail,result,source_ip) VALUES (?,?,?,?,?::jsonb,?,NULL)",
+            java.sql.Timestamp.from(when), actorUsername, actorRole, actionType, new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(new HashMap<>(detail)).toString(), result);
+    }
+
     private void insert(String actionType, String actorUsername, String actorRole, Long targetAppId, String targetAppName, Long targetUserId, Map<String,Object> detail, String result, String sourceIp) {
         Map<String,Object> safe = new HashMap<>(detail);
         safe.remove("ssh_password_enc"); safe.remove("temporaryPassword"); safe.remove("password_hash"); safe.remove("password");
