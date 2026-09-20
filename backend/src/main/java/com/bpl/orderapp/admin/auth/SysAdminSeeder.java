@@ -1,4 +1,4 @@
-package com.bpl.orderapp.admin.auth;
+﻿package com.bpl.orderapp.admin.auth;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.util.Base64;
 
 /**
- * One-time seed of the first Sys.Admin account, per SPEC §12.1.
+ * One-time seed of the first Sys.Admin account, per SPEC Â§12.1.
  *
  * <p>Idempotent: checks whether a user with the configured username
  * already exists before doing anything. On a re-run (or any subsequent
@@ -22,18 +22,18 @@ import java.util.Base64;
  * {@code app.bootstrap.sysadmin.username} (default: {@code admin}).
  *
  * <h2>Why a runner and not a Flyway migration</h2>
- * SPEC §12.1 step 1 says "Flyway migration inserts seeded Sys.Admin,"
+ * SPEC Â§12.1 step 1 says "Flyway migration inserts seeded Sys.Admin,"
  * but the rest of the same section requires the initial password to
- * be random and "shown once at deploy" — a SQL migration cannot
+ * be random and "shown once at deploy" â€” a SQL migration cannot
  * generate a random password and emit it to the operator's view
  * portably. A Spring Boot {@link ApplicationRunner} runs at startup,
  * has full access to {@link BCryptPasswordEncoder} for hashing
- * (SPEC §8.1), and can write the cleartext to stdout once.
+ * (SPEC Â§8.1), and can write the cleartext to stdout once.
  *
  * <h2>Audit log</h2>
  * The audit-log-coverage skill says every state-changing action is
- * audited via an aspect/annotation, but §3.2's locked action enum
- * does not include a bootstrap action. Until §3.2 is amended, the
+ * audited via an aspect/annotation, but Â§3.2's locked action enum
+ * does not include a bootstrap action. Until Â§3.2 is amended, the
  * seed insert writes no audit row. When a SYS_ADMIN_BOOTSTRAP value
  * is added to the enum, this class can be wrapped in {@code @Audited}
  * and the change is local to this file.
@@ -41,10 +41,10 @@ import java.util.Base64;
  * <h2>Plaintext handling</h2>
  * The cleartext password exists in this class only:
  * <ol>
- *   <li>Generated in memory by {@link SecureRandom} (24 bytes → 32
+ *   <li>Generated in memory by {@link SecureRandom} (24 bytes â†’ 32
  *       base64url chars; ~192 bits of entropy, well above the
  *       minimum useful length for a one-time bootstrap password).</li>
- *   <li>Hashed with {@link BCryptPasswordEncoder} (strength 10 —
+ *   <li>Hashed with {@link BCryptPasswordEncoder} (strength 10 â€”
  *       Spring Security's default).</li>
  *   <li>Printed to stdout (the SLF4J default in Spring Boot) in a
  *       clearly-marked block so the operator can capture it.</li>
@@ -78,16 +78,15 @@ public class SysAdminSeeder implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         Integer existingCount = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM users WHERE username = ? AND deleted_at IS NULL",
-            Integer.class,
-            username
+            "SELECT COUNT(*) FROM users WHERE role = 'SYS_ADMIN' AND deleted_at IS NULL",
+            Integer.class
         );
         if (existingCount != null && existingCount > 0) {
             log.info("SysAdmin seed skipped: user '{}' already exists.", username);
             return;
         }
 
-        // 24 bytes from SecureRandom → 32 base64url characters
+        // 24 bytes from SecureRandom â†’ 32 base64url characters
         // (no padding), ~192 bits of entropy. Plenty for a one-time
         // bootstrap password that will be rotated on first login.
         SecureRandom rng = new SecureRandom();
@@ -108,7 +107,7 @@ public class SysAdminSeeder implements ApplicationRunner {
         // The ONE place the cleartext password is allowed to be
         // written. The banner is on multiple lines and clearly marked
         // so it stands out in deploy logs. Anything else that prints
-        // the password is a regression — the
+        // the password is a regression â€” the
         // SysAdminSeeder_passwordNeverLoggedThroughLogger test below
         // enforces this.
         //
