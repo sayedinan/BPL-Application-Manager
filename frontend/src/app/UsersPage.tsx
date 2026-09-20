@@ -14,6 +14,7 @@ interface User {
   must_change_password: boolean;
   created_at: string;
   assignedApplicationIds: number[];
+  online?: boolean;
 }
 
 interface Application {
@@ -105,7 +106,12 @@ export function UsersPage(): JSX.Element {
     }
   }
 
-  useEffect(() => { void loadUsers(); void loadApplications(); }, []);
+  useEffect(() => {
+    void loadUsers();
+    void loadApplications();
+    const interval = setInterval(() => void loadUsers(), 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   function resetForm() {
     setNewUsername('');
@@ -297,9 +303,14 @@ export function UsersPage(): JSX.Element {
                       <Badge tone={roleTone(u.role)} dot={false}>{roleLabel(u.role)}</Badge>
                     </td>
                     <td className="px-4 py-3">
-                      {u.must_change_password && (
-                        <Badge tone="pending">Must change password</Badge>
-                      )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone={u.online ? 'online' : 'offline'}>
+                          {u.online ? 'Online' : 'Offline'}
+                        </Badge>
+                        {u.must_change_password && (
+                          <Badge tone="pending">Must change password</Badge>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
                       {new Date(u.created_at).toLocaleDateString()}
