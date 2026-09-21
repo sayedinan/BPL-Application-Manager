@@ -33,13 +33,19 @@ type LogSource = 'application' | 'audit';
 function formatAuditLine(row: AuditLogRow): string {
   const target = row.targetApplicationName ?? (row.targetUserId != null ? `user#${row.targetUserId}` : '-');
   const localTime = new Date(row.timestamp).toLocaleString();
-  const via =
-    row.actionType === 'APPLICATION_ONLINE' || row.actionType === 'APPLICATION_OFFLINE'
-      ? row.detail?.source === 'WEB_APP'
-        ? ` via web app by ${row.detail.triggeredBy ?? row.actorUsername}`
-        : ' (detected outside the web app)'
-      : '';
-  return `${localTime} ${row.actorUsername}(${row.actorRole}) ${row.actionType} target=${target} result=${row.result}${via}`;
+  const app = row.targetApplicationName ?? `application#${row.targetApplicationId ?? '?'}`;
+  switch (row.actionType) {
+    case 'START_APPLICATION':
+      return `${localTime} ${row.actorUsername} started ${app}`;
+    case 'STOP_APPLICATION':
+      return `${localTime} ${row.actorUsername} stopped ${app}`;
+    case 'APPLICATION_ONLINE':
+      return `${localTime} ${app} came online — outside the web app`;
+    case 'APPLICATION_OFFLINE':
+      return `${localTime} ${app} went offline — outside the web app`;
+    default:
+      return `${localTime} ${row.actorUsername}(${row.actorRole}) ${row.actionType} target=${target} result=${row.result}`;
+  }
 }
 
 export function LogsBox({ role }: { role?: string }) {
