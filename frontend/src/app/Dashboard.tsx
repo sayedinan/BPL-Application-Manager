@@ -303,14 +303,6 @@ export function DashboardPlaceholder(): JSX.Element {
                         <p>{stats.currentlyOnline ? 'Online since' : 'Offline since'}: {formatWhen(stats.currentStreakStartedAt)}</p>
                         <p>Last went online: {formatWhen(stats.lastWentOnlineAt)}</p>
                         <p>Last went offline: {formatWhen(stats.lastWentOfflineAt)}</p>
-                        {stats.recentTransitions?.length > 0 && (
-                          <div className="pt-1">
-                            <p className="font-medium">Recent changes</p>
-                            {stats.recentTransitions.map((t, i) => (
-                              <p key={i}>{t.online ? '● Online' : '○ Offline'} — {formatWhen(t.at)}</p>
-                            ))}
-                          </div>
-                        )}
                       </>
                     ) : (
                       <p>Couldn't load stats.</p>
