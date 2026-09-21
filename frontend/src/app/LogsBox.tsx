@@ -19,6 +19,7 @@ interface AuditLogRow {
   targetApplicationId: number | null;
   targetApplicationName: string | null;
   targetUserId: number | null;
+  detail?: { source?: string; triggeredBy?: string } | null;
   result: string;
 }
 
@@ -32,7 +33,13 @@ type LogSource = 'application' | 'audit';
 function formatAuditLine(row: AuditLogRow): string {
   const target = row.targetApplicationName ?? (row.targetUserId != null ? `user#${row.targetUserId}` : '-');
   const localTime = new Date(row.timestamp).toLocaleString();
-  return `${localTime} ${row.actorUsername}(${row.actorRole}) ${row.actionType} target=${target} result=${row.result}`;
+  const via =
+    row.actionType === 'APPLICATION_ONLINE' || row.actionType === 'APPLICATION_OFFLINE'
+      ? row.detail?.source === 'WEB_APP'
+        ? ` via web app by ${row.detail.triggeredBy ?? row.actorUsername}`
+        : ' (detected outside the web app)'
+      : '';
+  return `${localTime} ${row.actorUsername}(${row.actorRole}) ${row.actionType} target=${target} result=${row.result}${via}`;
 }
 
 export function LogsBox({ role }: { role?: string }) {

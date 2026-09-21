@@ -28,6 +28,9 @@ interface AppStats {
   currentlyOnline: boolean;
   currentStreakStartedAt: string | null;
   lastRanAt: string | null;
+  lastWentOnlineAt: string | null;
+  lastWentOfflineAt: string | null;
+  recentTransitions: { online: boolean; at: string }[];
 }
 
 function formatRunningTime(startedAt: string | null): string | null {
@@ -39,6 +42,10 @@ function formatRunningTime(startedAt: string | null): string | null {
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
   return `${h}h ${m}m ${s}s`;
+}
+
+function formatWhen(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleString() : '—';
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -115,6 +122,10 @@ export function DashboardPlaceholder(): JSX.Element {
                 : a
             )
           );
+          api
+            .get<AppStats>(API.APPLICATIONS.STATS(d.applicationId))
+            .then((s) => setStatsCache((prev) => ({ ...prev, [d.applicationId]: s })))
+            .catch(() => {});
         } catch {
           // malformed frame — ignore, next poll tick will reconcile
         }
@@ -289,6 +300,17 @@ export function DashboardPlaceholder(): JSX.Element {
                         <p>Total uptime: {formatDuration(stats.totalUptimeSeconds)}</p>
                         <p>Total downtime: {formatDuration(stats.totalDowntimeSeconds)}</p>
                         <p>Last ran: {stats.lastRanAt ? new Date(stats.lastRanAt).toLocaleString() : 'Never'}</p>
+                        <p>{stats.currentlyOnline ? 'Online since' : 'Offline since'}: {formatWhen(stats.currentStreakStartedAt)}</p>
+                        <p>Last went online: {formatWhen(stats.lastWentOnlineAt)}</p>
+                        <p>Last went offline: {formatWhen(stats.lastWentOfflineAt)}</p>
+                        {stats.recentTransitions?.length > 0 && (
+                          <div className="pt-1">
+                            <p className="font-medium">Recent changes</p>
+                            {stats.recentTransitions.map((t, i) => (
+                              <p key={i}>{t.online ? '● Online' : '○ Offline'} — {formatWhen(t.at)}</p>
+                            ))}
+                          </div>
+                        )}
                       </>
                     ) : (
                       <p>Couldn't load stats.</p>
