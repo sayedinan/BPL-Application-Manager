@@ -63,7 +63,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
     <a
       href={href}
       className={[
-        'rounded-lg px-3 py-1.5 text-sm font-medium transition-theme',
+        'whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-theme',
         active
           ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300'
           : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white',
@@ -91,7 +91,7 @@ function NavBar() {
   }
 
   return (
-    <nav className="sticky top-0 z-20 flex items-center gap-1 border-b border-slate-200 bg-white/80 px-6 py-3 backdrop-blur transition-theme dark:border-slate-800 dark:bg-surface-dark/80">
+    <nav className="sticky top-0 z-20 flex flex-wrap items-center gap-x-1 gap-y-1 border-b border-slate-200 bg-white/80 px-3 py-2 sm:px-6 sm:py-3 backdrop-blur transition-theme dark:border-slate-800 dark:bg-surface-dark/80">
       <a href="/" className="mr-4 flex items-center gap-2">
         <Logo className="h-8 w-8" />
         <span className="hidden text-sm font-bold tracking-tight text-slate-900 sm:inline dark:text-white">
@@ -104,7 +104,7 @@ function NavBar() {
       {(user.role === 'SYS_ADMIN' || user.role === 'ADMIN') && <NavLink href="/users">Users</NavLink>}
       {(user.role === 'SYS_ADMIN' || user.role === 'ADMIN') && <NavLink href="/logs">Logs</NavLink>}
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex flex-wrap items-center gap-1 sm:gap-3">
         <ThemeToggle />
         <div className="hidden text-right sm:block">
           <p className="text-sm font-medium leading-tight text-slate-900 dark:text-white">{user.username}</p>
@@ -113,7 +113,7 @@ function NavBar() {
         <NavLink href="/change-password">Change password</NavLink>
         <button
           onClick={handleLogout}
-          className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-theme dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+          className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-theme dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
         >
           Log out
         </button>

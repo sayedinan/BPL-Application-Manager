@@ -303,8 +303,8 @@ export function ApplicationsPage(): JSX.Element {
             No applications yet. Add one above.
           </Card>
         ) : (
-          <Card className="overflow-hidden">
-            <table className="w-full text-sm">
+          <Card className="overflow-x-auto">
+            <table className="w-full min-w-[20rem] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">
                   <th className="px-4 py-3 font-medium">Name</th>
