@@ -1,5 +1,6 @@
 package com.bpl.orderapp.admin.status;
 
+import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
 import com.bpl.orderapp.admin.log.WebSocketBroadcast;
@@ -60,6 +61,7 @@ public class StatusPollingOrchestrator {
     private final WebSocketBroadcast broadcast;
     private final LogPollingOrchestrator logPollingOrchestrator;
     private final ThreadPoolTaskScheduler scheduler;
+    private final AuditWriter auditWriter;
 
     private final ConcurrentHashMap<Long, ScheduledFuture<?>> activePollers = new ConcurrentHashMap<>();
 
@@ -73,7 +75,8 @@ public class StatusPollingOrchestrator {
 
     public StatusPollingOrchestrator(JdbcTemplate jdbc, SshCredentialCipher cipher,
             SshConnection sshConnection, WebSocketBroadcast broadcast,
-            LogPollingOrchestrator logPollingOrchestrator) {
+            LogPollingOrchestrator logPollingOrchestrator, AuditWriter auditWriter) {
+        this.auditWriter = auditWriter;
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.sshConnection = sshConnection;
@@ -125,6 +128,52 @@ public class StatusPollingOrchestrator {
 
     public void resumeFor(Long applicationId) {
         actionInProgress.remove(applicationId);
+    }
+
+    // Who clicked Start/Stop in this web app, so the resulting online/offline
+    // flip can be audited with their name. Set before the script runs, cleared
+    // by ApplicationController once confirmation finishes (success, failure or
+    // timeout) - deliberately outlives pauseFor/resumeFor, because the flip is
+    // detected AFTER the script ends.
+    private record PendingAction(String username, String role, boolean expectedOnline) {}
+    private final ConcurrentHashMap<Long, PendingAction> pendingActions = new ConcurrentHashMap<>();
+
+    public void expectAction(Long applicationId, String username, String role, boolean expectedOnline) {
+        pendingActions.put(applicationId, new PendingAction(username, role, expectedOnline));
+    }
+
+    public void clearExpectedAction(Long applicationId) {
+        pendingActions.remove(applicationId);
+    }
+
+    // One audit row per detected flip. If a web-app action for this
+    // application is pending AND its expected state matches what was observed,
+    // the flip is attributed to that user. Anything else (terminal, crash,
+    // docker restart, reboot) is recorded as system/EXTERNAL.
+    private void writeTransitionAudit(Long applicationId, boolean observedOnline) {
+        try {
+            String name = jdbc.queryForObject(
+                "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
+            PendingAction pending = pendingActions.get(applicationId);
+            boolean viaWebApp = pending != null && pending.expectedOnline() == observedOnline;
+            java.util.Map<String, Object> detail = new java.util.HashMap<>();
+            String actor;
+            String role;
+            if (viaWebApp) {
+                actor = pending.username();
+                role = pending.role();
+                detail.put("source", "WEB_APP");
+                detail.put("triggeredBy", actor);
+            } else {
+                actor = "system";
+                role = "SYSTEM";
+                detail.put("source", "EXTERNAL");
+            }
+            auditWriter.write(observedOnline ? "APPLICATION_ONLINE" : "APPLICATION_OFFLINE",
+                actor, role, applicationId, name, null, detail, "SUCCESS");
+        } catch (Exception e) {
+            log.warn("Audit write failed for status transition (application id={})", applicationId, e);
+        }
     }
 
     // Synchronous, on-demand check. Used by ApplicationController's
@@ -237,6 +286,11 @@ public class StatusPollingOrchestrator {
 
         broadcast.broadcastStatus(applicationId, observedOnline, now.toString());
         log.info("Application id={} transitioned to {}", applicationId, observedOnline ? "ONLINE" : "OFFLINE");
+
+        // First-ever reading (no streak row yet) is an initial state, not a change.
+        if (hadStreakRow) {
+            writeTransitionAudit(applicationId, observedOnline);
+        }
 
         // The log poller's on/off switch is now driven by this derived
         // signal, not a stored status column (STATUS-REDESIGN.md §5).

@@ -192,6 +192,9 @@ public class ApplicationController {
             ? ((java.sql.Timestamp) streakRow.get("streak_started_at")).toInstant().toString()
             : null);
         body.put("lastRanAt", lastRan != null ? lastRan.toInstant().toString() : null);
+        body.put("lastWentOnlineAt", lastTransitionAt(id, true));
+        body.put("lastWentOfflineAt", lastTransitionAt(id, false));
+        body.put("recentTransitions", recentTransitions(id, 10));
         return ResponseEntity.ok(body);
     }
 
@@ -306,6 +309,13 @@ public class ApplicationController {
         String fingerprint = (String) app.get("ssh_host_key_fingerprint");
         String startScript = (String) app.get("start_script");
 
+        try {
+            var startActor = currentActor();
+            statusPollingOrchestrator.expectAction(id, startActor.get("username"), startActor.get("role"), true);
+        } catch (Exception actorEx) {
+            log.warn("Could not resolve actor for start of application id={}", id, actorEx);
+        }
+
         statusPollingOrchestrator.pauseFor(id);
         boolean scriptSucceeded;
         try {
@@ -325,12 +335,14 @@ public class ApplicationController {
         }
 
         if (!scriptSucceeded) {
+            statusPollingOrchestrator.clearExpectedAction(id);
             Map<String, Object> body = new HashMap<>();
             body.put("code", "SSH_COMMAND_FAILED");
             return ResponseEntity.status(502).body(body);
         }
 
         boolean confirmed = waitForConfirmedStatus(id, true, START_CONFIRMATION_TIMEOUT_MS);
+        statusPollingOrchestrator.clearExpectedAction(id);
         if (!confirmed) {
             throw new StatusConfirmationTimeoutException(id, true);
         }
@@ -365,6 +377,13 @@ public class ApplicationController {
         String fingerprint = (String) app.get("ssh_host_key_fingerprint");
         String stopScript = (String) app.get("stop_script");
 
+        try {
+            var stopActor = currentActor();
+            statusPollingOrchestrator.expectAction(id, stopActor.get("username"), stopActor.get("role"), false);
+        } catch (Exception actorEx) {
+            log.warn("Could not resolve actor for stop of application id={}", id, actorEx);
+        }
+
         statusPollingOrchestrator.pauseFor(id);
         boolean scriptSucceeded;
         try {
@@ -384,12 +403,14 @@ public class ApplicationController {
         }
 
         if (!scriptSucceeded) {
+            statusPollingOrchestrator.clearExpectedAction(id);
             Map<String, Object> body = new HashMap<>();
             body.put("code", "SSH_COMMAND_FAILED");
             return ResponseEntity.status(502).body(body);
         }
 
         boolean confirmed = waitForConfirmedStatus(id, false, STOP_CONFIRMATION_TIMEOUT_MS);
+        statusPollingOrchestrator.clearExpectedAction(id);
         if (!confirmed) {
             throw new StatusConfirmationTimeoutException(id, false);
         }
@@ -496,6 +517,27 @@ public class ApplicationController {
         }
 
         return ResponseEntity.noContent().build();
+    }
+
+    private String lastTransitionAt(Long id, boolean online) {
+        List<Timestamp> rows = jdbc.queryForList(
+            "SELECT transitioned_at FROM application_status_transitions " +
+                "WHERE application_id = ? AND online = ? ORDER BY transitioned_at DESC LIMIT 1",
+            Timestamp.class, id, online);
+        return rows.isEmpty() ? null : rows.get(0).toInstant().toString();
+    }
+
+    private List<Map<String, Object>> recentTransitions(Long id, int limit) {
+        return jdbc.query(
+            "SELECT online, transitioned_at FROM application_status_transitions " +
+                "WHERE application_id = ? ORDER BY transitioned_at DESC LIMIT ?",
+            (rs, n) -> {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("online", rs.getBoolean("online"));
+                row.put("at", rs.getTimestamp("transitioned_at").toInstant().toString());
+                return row;
+            },
+            id, limit);
     }
 
     private Map<String, String> currentActor() {
