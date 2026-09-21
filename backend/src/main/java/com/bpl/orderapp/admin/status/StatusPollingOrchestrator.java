@@ -156,21 +156,13 @@ public class StatusPollingOrchestrator {
                 "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
             PendingAction pending = pendingActions.get(applicationId);
             boolean viaWebApp = pending != null && pending.expectedOnline() == observedOnline;
-            java.util.Map<String, Object> detail = new java.util.HashMap<>();
-            String actor;
-            String role;
             if (viaWebApp) {
-                actor = pending.username();
-                role = pending.role();
-                detail.put("source", "WEB_APP");
-                detail.put("triggeredBy", actor);
-            } else {
-                actor = "system";
-                role = "SYSTEM";
-                detail.put("source", "EXTERNAL");
+                return; // START_/STOP_APPLICATION already records who did it
             }
+            java.util.Map<String, Object> detail = new java.util.HashMap<>();
+            detail.put("source", "EXTERNAL");
             auditWriter.write(observedOnline ? "APPLICATION_ONLINE" : "APPLICATION_OFFLINE",
-                actor, role, applicationId, name, null, detail, "SUCCESS");
+                "system", "SYSTEM", applicationId, name, null, detail, "SUCCESS");
         } catch (Exception e) {
             log.warn("Audit write failed for status transition (application id={})", applicationId, e);
         }

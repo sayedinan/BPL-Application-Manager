@@ -506,12 +506,13 @@ public class ApplicationController {
         sshConnection.closeConnection(host, user, fingerprint, "status");
         sshConnection.closeConnection(host, user, fingerprint);
 
+        String deletedName = jdbc.queryForObject("SELECT name FROM applications WHERE id = ?", String.class, id);
         jdbc.update("DELETE FROM applications WHERE id = ?", id);
 
         try {
             var actor = currentActor();
             auditWriter.write("DELETE_APPLICATION", actor.get("username"), actor.get("role"),
-                id, null, null, Map.of(), "SUCCESS", httpRequest);
+                id, deletedName, null, Map.of(), "SUCCESS", httpRequest);
         } catch (Exception auditEx) {
             log.warn("Audit write failed for DELETE_APPLICATION (id={})", id, auditEx);
         }

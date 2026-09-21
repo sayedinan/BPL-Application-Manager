@@ -24,6 +24,16 @@ public class AuditWriter {
     }
 
     private void insert(String actionType, String actorUsername, String actorRole, Long targetAppId, String targetAppName, Long targetUserId, Map<String,Object> detail, String result, String sourceIp) {
+        // Callers often only know the id; fill in the readable name so the
+        // audit row still says WHICH application after it is renamed/deleted.
+        if (targetAppName == null && targetAppId != null) {
+            try {
+                targetAppName = jdbc.queryForObject(
+                    "SELECT name FROM applications WHERE id = ?", String.class, targetAppId);
+            } catch (Exception ignored) {
+                // application already gone - leave the name null
+            }
+        }
         Map<String,Object> safe = new HashMap<>(detail);
         safe.remove("ssh_password_enc"); safe.remove("temporaryPassword"); safe.remove("password_hash"); safe.remove("password");
         jdbc.update("INSERT INTO audit_logs (timestamp,actor_username,actor_role,action_type,target_application_id,target_application_name,target_user_id,detail,result,source_ip) VALUES (NOW(),?,?,?,?,?,?,?::jsonb,?,?)",
