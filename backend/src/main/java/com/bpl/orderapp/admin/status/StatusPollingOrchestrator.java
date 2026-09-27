@@ -4,6 +4,8 @@ import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
 import com.bpl.orderapp.admin.log.WebSocketBroadcast;
+import com.bpl.orderapp.admin.notification.EmailNotificationService;
+import com.bpl.orderapp.admin.notification.NotificationRecipientResolver;
 import com.bpl.orderapp.admin.ssh.SshConnection;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -18,6 +20,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
@@ -62,6 +65,12 @@ public class StatusPollingOrchestrator {
     private final LogPollingOrchestrator logPollingOrchestrator;
     private final ThreadPoolTaskScheduler scheduler;
     private final AuditWriter auditWriter;
+    // Both empty together when spring.mail.username is unset —
+    // NotificationConfig only creates either bean when it's set, so
+    // Spring injects empty Optionals rather than failing to start.
+    // See NotificationConfig's javadoc for why.
+    private final Optional<EmailNotificationService> emailNotificationService;
+    private final Optional<NotificationRecipientResolver> recipientResolver;
 
     private final ConcurrentHashMap<Long, ScheduledFuture<?>> activePollers = new ConcurrentHashMap<>();
 
@@ -75,13 +84,17 @@ public class StatusPollingOrchestrator {
 
     public StatusPollingOrchestrator(JdbcTemplate jdbc, SshCredentialCipher cipher,
             SshConnection sshConnection, WebSocketBroadcast broadcast,
-            LogPollingOrchestrator logPollingOrchestrator, AuditWriter auditWriter) {
+            LogPollingOrchestrator logPollingOrchestrator, AuditWriter auditWriter,
+            Optional<EmailNotificationService> emailNotificationService,
+            Optional<NotificationRecipientResolver> recipientResolver) {
         this.auditWriter = auditWriter;
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.sshConnection = sshConnection;
         this.broadcast = broadcast;
         this.logPollingOrchestrator = logPollingOrchestrator;
+        this.emailNotificationService = emailNotificationService;
+        this.recipientResolver = recipientResolver;
         this.scheduler = new ThreadPoolTaskScheduler();
         this.scheduler.setPoolSize(4);
         this.scheduler.setThreadNamePrefix("status-poller-");
@@ -163,6 +176,15 @@ public class StatusPollingOrchestrator {
             detail.put("source", "EXTERNAL");
             auditWriter.write(observedOnline ? "APPLICATION_ONLINE" : "APPLICATION_OFFLINE",
                 "system", "SYSTEM", applicationId, name, null, detail, "SUCCESS");
+
+            // Notification module: only unexpected OFFLINE transitions
+            // alert anyone (per requirements — not a manual stop, not
+            // recovery back online). This is already inside the
+            // "!viaWebApp" branch above, so it only fires for
+            // externally-detected flips, matching APPLICATION_OFFLINE.
+            if (!observedOnline) {
+                notifyOffline(applicationId, name);
+            }
         } catch (Exception e) {
             log.warn("Audit write failed for status transition (application id={})", applicationId, e);
         }
@@ -296,6 +318,25 @@ public class StatusPollingOrchestrator {
             logPollingOrchestrator.startPolling(applicationId);
         } else {
             logPollingOrchestrator.stopPolling(applicationId);
+        }
+    }
+
+    // Best-effort: notification failures must never affect the
+    // transition/audit logic above, which is why this has its own
+    // try/catch rather than sharing the caller's.
+    private void notifyOffline(Long applicationId, String applicationName) {
+        if (emailNotificationService.isEmpty() || recipientResolver.isEmpty()) {
+            return; // spring.mail.username unset — module inactive
+        }
+        try {
+            java.util.Set<String> recipients = recipientResolver.get().resolveForApplication(applicationId);
+            String subject = "BPL Alert: " + applicationName + " went offline";
+            String body = "Application \"" + applicationName + "\" (id=" + applicationId
+                + ") was detected offline unexpectedly at " + Instant.now()
+                + ". This was not triggered by a Stop action in the dashboard.";
+            emailNotificationService.get().sendToAll(recipients, subject, body);
+        } catch (Exception e) {
+            log.warn("Notification dispatch failed for application id={}", applicationId, e);
         }
     }
 }
