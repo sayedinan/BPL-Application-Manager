@@ -107,7 +107,7 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
     public ResponseEntity<List<Map<String, Object>>> listUsers() {
         List<Map<String, Object>> users = jdbc.queryForList(
-            "SELECT id, username, role, must_change_password, created_at FROM users WHERE deleted_at IS NULL ORDER BY username"
+            "SELECT id, username, role, email, must_change_password, created_at FROM users WHERE deleted_at IS NULL ORDER BY username"
         );
         for (Map<String,Object> row : users) {
             Long userRowId = ((Number) row.get("id")).longValue();
@@ -126,7 +126,7 @@ public class UserController {
     @PostMapping
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
     public ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> createUser(@Valid @RequestBody com.bpl.orderapp.admin.user.dto.CreateUserRequest req, HttpServletRequest httpRequest) {
-        return doCreate(req.username(), req.role(), req.assignedApplicationIds(), httpRequest);
+        return doCreate(req.username(), req.role(), req.email(), req.assignedApplicationIds(), httpRequest);
     }
     @PostMapping("/create-admin")
     @PreAuthorize("hasRole('SYS_ADMIN')")
@@ -136,9 +136,9 @@ public class UserController {
             throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.BAD_REQUEST, "role must be ADMIN or SYS_ADMIN");
         }
-        return doCreate(req.username(), role, req.assignedApplicationIds(), httpRequest);
+        return doCreate(req.username(), role, req.email(), req.assignedApplicationIds(), httpRequest);
     }
-    private ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> doCreate(String username, String role, java.util.List<Long> assignedIds, HttpServletRequest httpRequest) {
+    private ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> doCreate(String username, String role, String email, java.util.List<Long> assignedIds, HttpServletRequest httpRequest) {
         var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         boolean callerIsSysAdmin = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN"));
         if (!"USER".equals(role) && !callerIsSysAdmin) {
@@ -164,8 +164,8 @@ public class UserController {
         // and previously surfaced as an uncaught 500 AFTER the insert
         // had already committed, silently losing the one-time password.
         Long newId = jdbc.queryForObject(
-            "INSERT INTO users (username, password_hash, role, must_change_password, created_at, updated_at) VALUES (?, ?, ?, true, ?, ?) RETURNING id",
-            Long.class, username, hash, role, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
+            "INSERT INTO users (username, password_hash, role, email, must_change_password, created_at, updated_at) VALUES (?, ?, ?, ?, true, ?, ?) RETURNING id",
+            Long.class, username, hash, role, email, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
         if (assignedIds != null) {
             for (Long appId : assignedIds) {
                 jdbc.update(
@@ -181,7 +181,7 @@ public class UserController {
                 currentAuth.getName(),
                 callerIsSysAdmin ? "SYS_ADMIN" : "ADMIN",
                 null, null, newId,
-                java.util.Map.of("username", username, "role", role,
+                java.util.Map.of("username", username, "role", role, "email", email,
                     "assignedApplicationIds", assignedIds == null ? java.util.List.of() : assignedIds),
                 "SUCCESS",
                 httpRequest
@@ -321,8 +321,19 @@ public class UserController {
         // not just the new values. Must happen before either the
         // role UPDATE or the assignment DELETE below.
         String oldRole = jdbc.queryForObject("SELECT role FROM users WHERE id = ?", String.class, id);
+        String oldEmail = jdbc.queryForObject("SELECT email FROM users WHERE id = ?", String.class, id);
         java.util.List<Long> oldAssignedIds = jdbc.queryForList(
             "SELECT application_id FROM user_application_assignments WHERE user_id = ?", Long.class, id);
+
+        // Every user must have an email (notification-module requirement).
+        // Unlike the SSH password field, a present-but-blank value is
+        // rejected outright rather than treated as "clear it" — @Email
+        // on the DTO validates format when non-null but does not by
+        // itself forbid an empty string, so that check lives here.
+        if (req.email() != null && req.email().isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST, "email cannot be blank");
+        }
 
         if (req.role() != null) {
             if (!"USER".equals(req.role()) && !callerIsSysAdmin) {
@@ -339,6 +350,10 @@ public class UserController {
                     id, appId);
             }
         }
+        if (req.email() != null) {
+            jdbc.update("UPDATE users SET email = ?, updated_at = NOW() WHERE id = ?",
+                req.email(), id);
+        }
 
         try {
             java.util.Map<String, Object> detail = new java.util.HashMap<>();
@@ -346,6 +361,11 @@ public class UserController {
             if (req.role() != null && !req.role().equals(oldRole)) {
                 detail.put("oldRole", oldRole);
                 detail.put("newRole", req.role());
+            }
+
+            if (req.email() != null && !req.email().equals(oldEmail)) {
+                detail.put("oldEmail", oldEmail == null ? "" : oldEmail);
+                detail.put("newEmail", req.email());
             }
 
             if (req.assignedApplicationIds() != null) {
