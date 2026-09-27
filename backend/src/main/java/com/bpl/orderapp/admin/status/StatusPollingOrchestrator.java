@@ -18,6 +18,8 @@ import org.springframework.stereotype.Component;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -71,6 +73,19 @@ public class StatusPollingOrchestrator {
     // See NotificationConfig's javadoc for why.
     private final Optional<EmailNotificationService> emailNotificationService;
     private final Optional<NotificationRecipientResolver> recipientResolver;
+
+    // Flap detection for external transitions only (web-app-triggered
+    // start/stop are deliberate one-off actions, never flapping).
+    // 3+ transitions within FLAP_WINDOW marks an application as
+    // flapping and suppresses its emails; audit_logs still records
+    // every single transition regardless — only the email is
+    // suppressed. Flapping is considered resolved once a transition
+    // occurs at least FLAP_QUIET_PERIOD after the previous one.
+    private static final int FLAP_TRANSITION_THRESHOLD = 3;
+    private static final Duration FLAP_WINDOW = Duration.ofMinutes(2);
+    private static final Duration FLAP_QUIET_PERIOD = Duration.ofSeconds(60);
+    private final Map<Long, Deque<Instant>> transitionHistory = new ConcurrentHashMap<>();
+    private final Set<Long> currentlyFlapping = ConcurrentHashMap.newKeySet();
 
     private final ConcurrentHashMap<Long, ScheduledFuture<?>> activePollers = new ConcurrentHashMap<>();
 
@@ -177,14 +192,14 @@ public class StatusPollingOrchestrator {
             auditWriter.write(observedOnline ? "APPLICATION_ONLINE" : "APPLICATION_OFFLINE",
                 "system", "SYSTEM", applicationId, name, null, detail, "SUCCESS");
 
-            // Notification module: only unexpected OFFLINE transitions
-            // alert anyone (per requirements — not a manual stop, not
-            // recovery back online). This is already inside the
-            // "!viaWebApp" branch above, so it only fires for
-            // externally-detected flips, matching APPLICATION_OFFLINE.
-            if (!observedOnline) {
-                notifyOffline(applicationId, name);
-            }
+            // Notification module: this branch only runs for
+            // externally-detected transitions (the "!viaWebApp" check
+            // above already filtered out dashboard-triggered ones —
+            // those are handled separately in ApplicationController,
+            // right after their own START_/STOP_APPLICATION audit
+            // write). Both directions email here now, since either
+            // one happening outside the dashboard is worth flagging.
+            notifyExternalTransition(applicationId, name, observedOnline);
         } catch (Exception e) {
             log.warn("Audit write failed for status transition (application id={})", applicationId, e);
         }
@@ -324,17 +339,48 @@ public class StatusPollingOrchestrator {
     // Best-effort: notification failures must never affect the
     // transition/audit logic above, which is why this has its own
     // try/catch rather than sharing the caller's.
-    private void notifyOffline(Long applicationId, String applicationName) {
+    private void notifyExternalTransition(Long applicationId, String applicationName, boolean observedOnline) {
         if (emailNotificationService.isEmpty() || recipientResolver.isEmpty()) {
             return; // spring.mail.username unset — module inactive
         }
+
+        Instant now = Instant.now();
+        Deque<Instant> history = transitionHistory.computeIfAbsent(applicationId, k -> new ArrayDeque<>());
+        boolean wasFlapping = currentlyFlapping.contains(applicationId);
+        Instant previousTransition = history.peekLast();
+
+        history.addLast(now);
+        while (!history.isEmpty() && Duration.between(history.peekFirst(), now).compareTo(FLAP_WINDOW) > 0) {
+            history.pollFirst();
+        }
+
+        if (history.size() >= FLAP_TRANSITION_THRESHOLD) {
+            currentlyFlapping.add(applicationId);
+            log.warn("Application id={} is flapping ({} transitions in the last {}) — suppressing email (audit log still records this transition)",
+                applicationId, history.size(), FLAP_WINDOW);
+            return;
+        }
+
+        String flapNote = null;
+        if (wasFlapping) {
+            boolean stabilized = previousTransition != null
+                && Duration.between(previousTransition, now).compareTo(FLAP_QUIET_PERIOD) >= 0;
+            if (!stabilized) {
+                return; // still inside a flap burst, just below the count threshold this instant
+            }
+            currentlyFlapping.remove(applicationId);
+            flapNote = "(This application was flapping between online/offline states recently "
+                + "— this reflects its current, now-stabilized state. See the Audit Log for the "
+                + "full transition history during that period.)";
+        }
+
         try {
-            java.util.Set<String> recipients = recipientResolver.get().resolveForApplication(applicationId);
-            String subject = "BPL Alert: " + applicationName + " went offline";
-            String body = "Application \"" + applicationName + "\" (id=" + applicationId
-                + ") was detected offline unexpectedly at " + Instant.now()
-                + ". This was not triggered by a Stop action in the dashboard.";
-            emailNotificationService.get().sendToAll(recipients, subject, body);
+            Set<String> recipients = recipientResolver.get().resolveForApplication(applicationId);
+            emailNotificationService.get().notifyLifecycleEvent(
+                recipients, applicationName,
+                observedOnline ? EmailNotificationService.LifecycleEventType.EXTERNAL_ONLINE
+                               : EmailNotificationService.LifecycleEventType.EXTERNAL_OFFLINE,
+                null, null, flapNote);
         } catch (Exception e) {
             log.warn("Notification dispatch failed for application id={}", applicationId, e);
         }

@@ -45,11 +45,15 @@ public class ApplicationController {
     private final AuditWriter auditWriter;
     private final LogPollingOrchestrator logPollingOrchestrator;
     private final StatusPollingOrchestrator statusPollingOrchestrator;
+    private final java.util.Optional<com.bpl.orderapp.admin.notification.EmailNotificationService> emailNotificationService;
+    private final java.util.Optional<com.bpl.orderapp.admin.notification.NotificationRecipientResolver> recipientResolver;
 
     public ApplicationController(JdbcTemplate jdbc, SshCredentialCipher cipher,
             IdempotencyService idempotencyService, SshConnection sshConnection,
             AuditWriter auditWriter, LogPollingOrchestrator logPollingOrchestrator,
-            StatusPollingOrchestrator statusPollingOrchestrator) {
+            StatusPollingOrchestrator statusPollingOrchestrator,
+            java.util.Optional<com.bpl.orderapp.admin.notification.EmailNotificationService> emailNotificationService,
+            java.util.Optional<com.bpl.orderapp.admin.notification.NotificationRecipientResolver> recipientResolver) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.idempotencyService = idempotencyService;
@@ -57,6 +61,8 @@ public class ApplicationController {
         this.auditWriter = auditWriter;
         this.logPollingOrchestrator = logPollingOrchestrator;
         this.statusPollingOrchestrator = statusPollingOrchestrator;
+        this.emailNotificationService = emailNotificationService;
+        this.recipientResolver = recipientResolver;
     }
 
     @GetMapping
@@ -357,6 +363,7 @@ public class ApplicationController {
         } catch (Exception auditEx) {
             log.warn("Audit write failed for START_APPLICATION (id={})", id, auditEx);
         }
+        notifyWebAppAction(id, com.bpl.orderapp.admin.notification.EmailNotificationService.LifecycleEventType.STARTED_VIA_DASHBOARD);
 
         return ResponseEntity.ok(body);
     }
@@ -425,8 +432,32 @@ public class ApplicationController {
         } catch (Exception auditEx) {
             log.warn("Audit write failed for STOP_APPLICATION (id={})", id, auditEx);
         }
+        notifyWebAppAction(id, com.bpl.orderapp.admin.notification.EmailNotificationService.LifecycleEventType.STOPPED_VIA_DASHBOARD);
 
         return ResponseEntity.ok(body);
+    }
+
+    // Best-effort: notification failures must never affect the
+    // start/stop flow above (audit write already happened, response
+    // already prepared) — hence its own try/catch rather than
+    // sharing the caller's, and called outside that caller's own
+    // try/catch so a mail failure never gets logged as if it were an
+    // audit-write failure.
+    private void notifyWebAppAction(Long applicationId,
+            com.bpl.orderapp.admin.notification.EmailNotificationService.LifecycleEventType eventType) {
+        if (emailNotificationService.isEmpty() || recipientResolver.isEmpty()) {
+            return;
+        }
+        try {
+            var actor = currentActor();
+            String appName = jdbc.queryForObject(
+                "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
+            java.util.Set<String> recipients = recipientResolver.get().resolveForApplication(applicationId);
+            emailNotificationService.get().notifyLifecycleEvent(
+                recipients, appName, eventType, actor.get("username"), actor.get("role"), null);
+        } catch (Exception e) {
+            log.warn("Notification dispatch failed for application id={}", applicationId, e);
+        }
     }
 
     // STATUS-REDESIGN.md §3 — poll on the dedicated status connection
