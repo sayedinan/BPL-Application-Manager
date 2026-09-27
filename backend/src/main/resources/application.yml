@@ -15,6 +15,30 @@ spring:
     validate-on-migrate: true
     out-of-order: false
 
+  # Notification module (application-offline email alerts). Host/port
+  # are fixed here since Gmail SMTP is the chosen provider; username
+  # and password come from the environment and default to empty so
+  # the app still boots with the mail feature simply inactive (see
+  # NotificationConfig — it's @ConditionalOnProperty on
+  # spring.mail.username, unlike DB_PASSWORD/SSH_CIPHER_KEY which are
+  # required). Timeouts are set explicitly because Spring Boot's
+  # defaults are infinite, which would let a hung SMTP connection
+  # block a thread forever.
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 3000
+          writetimeout: 5000
+
 management:
   endpoints:
     web:
