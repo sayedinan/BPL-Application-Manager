@@ -41,6 +41,12 @@ services:
 
       SSH_CIPHER_KEY: ${SSH_CIPHER_KEY}
 
+      # Optional — notification module no-ops (no emails sent) if
+      # these are unset on the host. Not required like DB_PASSWORD.
+      MAIL_USERNAME: ${MAIL_USERNAME}
+
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+
       CORS_ORIGIN: ${CORS_ORIGIN}
 
       SERVER_PORT: 8080
