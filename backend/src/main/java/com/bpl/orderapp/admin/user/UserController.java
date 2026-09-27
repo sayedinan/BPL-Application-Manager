@@ -322,8 +322,34 @@ public class UserController {
         // role UPDATE or the assignment DELETE below.
         String oldRole = jdbc.queryForObject("SELECT role FROM users WHERE id = ?", String.class, id);
         String oldEmail = jdbc.queryForObject("SELECT email FROM users WHERE id = ?", String.class, id);
+        String oldUsername = jdbc.queryForObject("SELECT username FROM users WHERE id = ?", String.class, id);
         java.util.List<Long> oldAssignedIds = jdbc.queryForList(
             "SELECT application_id FROM user_application_assignments WHERE user_id = ?", Long.class, id);
+
+        // Row-level guard: only Sys.Admin may edit a Sys.Admin row at
+        // all (any field). Mirrors deleteUser's existing check and
+        // the frontend's canManageRow visibility rule — previously
+        // this was only enforced by hiding the Edit button, not by
+        // the backend itself.
+        if ("SYS_ADMIN".equals(oldRole) && !callerIsSysAdmin) {
+            throw new com.bpl.orderapp.admin.common.AdminCeilingException();
+        }
+
+        // Username, if present, must be non-blank and not already
+        // taken by another active user (mirrors doCreate's duplicate
+        // check).
+        if (req.username() != null) {
+            if (req.username().isBlank()) {
+                throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "username cannot be blank");
+            }
+            java.util.List<Map<String, Object>> existing = jdbc.queryForList(
+                "SELECT id FROM users WHERE username = ? AND deleted_at IS NULL AND id != ?",
+                req.username(), id);
+            if (!existing.isEmpty()) {
+                throw new com.bpl.orderapp.admin.common.DuplicateNameException(req.username());
+            }
+        }
 
         // Every user must have an email (notification-module requirement).
         // Unlike the SSH password field, a present-but-blank value is
@@ -354,6 +380,9 @@ public class UserController {
             jdbc.update("UPDATE users SET email = ?, updated_at = NOW() WHERE id = ?",
                 req.email(), id);
         }
+        if (req.username() != null) {
+            jdbc.update("UPDATE users SET username = ?, updated_at = NOW() WHERE id = ?", req.username(), id);
+        }
 
         try {
             java.util.Map<String, Object> detail = new java.util.HashMap<>();
@@ -366,6 +395,11 @@ public class UserController {
             if (req.email() != null && !req.email().equals(oldEmail)) {
                 detail.put("oldEmail", oldEmail == null ? "" : oldEmail);
                 detail.put("newEmail", req.email());
+            }
+
+            if (req.username() != null && !req.username().equals(oldUsername)) {
+                detail.put("oldUsername", oldUsername);
+                detail.put("newUsername", req.username());
             }
 
             if (req.assignedApplicationIds() != null) {

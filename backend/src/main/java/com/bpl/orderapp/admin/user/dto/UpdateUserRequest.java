@@ -25,12 +25,14 @@ import java.util.List;
  * gate itself (the security filter chain does, when it lands).
  */
 public record UpdateUserRequest(
+    String username,
     String role,
     List<Long> assignedApplicationIds,
     @Email String email
 ) {
     public boolean hasChange() {
-        return role != null
+        return username != null
+            || role != null
             || (assignedApplicationIds != null && !assignedApplicationIds.isEmpty())
             || email != null;
     }
