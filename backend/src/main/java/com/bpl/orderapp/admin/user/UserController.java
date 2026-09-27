@@ -166,7 +166,13 @@ public class UserController {
         Long newId = jdbc.queryForObject(
             "INSERT INTO users (username, password_hash, role, email, must_change_password, created_at, updated_at) VALUES (?, ?, ?, ?, true, ?, ?) RETURNING id",
             Long.class, username, hash, role, email, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
-        if (assignedIds != null) {
+        // Admin/Sys.Admin see all applications regardless of
+        // assignment rows (RBAC checks role first everywhere else in
+        // the app) — so assignments are only meaningful, and only
+        // stored, for USER-role accounts. Silently dropping them here
+        // for other roles keeps user_application_assignments free of
+        // rows that would otherwise be dead data from day one.
+        if (assignedIds != null && "USER".equals(role)) {
             for (Long appId : assignedIds) {
                 jdbc.update(
                     "INSERT INTO user_application_assignments (user_id, application_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
@@ -368,13 +374,25 @@ public class UserController {
             jdbc.update("UPDATE users SET role = ?, updated_at = NOW() WHERE id = ?",
                 req.role(), id);
         }
-        if (req.assignedApplicationIds() != null) {
-            jdbc.update("DELETE FROM user_application_assignments WHERE user_id = ?", id);
-            for (Long appId : req.assignedApplicationIds()) {
-                jdbc.update(
-                    "INSERT INTO user_application_assignments (user_id, application_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
-                    id, appId);
+        // Effective role after this update: either the new one being
+        // set, or the existing one if role isn't being changed.
+        String effectiveRole = req.role() != null ? req.role() : oldRole;
+
+        if ("USER".equals(effectiveRole)) {
+            if (req.assignedApplicationIds() != null) {
+                jdbc.update("DELETE FROM user_application_assignments WHERE user_id = ?", id);
+                for (Long appId : req.assignedApplicationIds()) {
+                    jdbc.update(
+                        "INSERT INTO user_application_assignments (user_id, application_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                        id, appId);
+                }
             }
+        } else if ("USER".equals(oldRole)) {
+            // Promoting away from USER: clear any assignments this
+            // account had, since Admin/Sys.Admin ignore them anyway —
+            // leaving them behind is exactly the stale-data case
+            // flagged in the frontend review above.
+            jdbc.update("DELETE FROM user_application_assignments WHERE user_id = ?", id);
         }
         if (req.email() != null) {
             jdbc.update("UPDATE users SET email = ?, updated_at = NOW() WHERE id = ?",

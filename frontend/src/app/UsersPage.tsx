@@ -411,26 +411,34 @@ export function UsersPage(): JSX.Element {
             )}
           </label>
 
-          <fieldset className="mb-4">
-            <legend className={labelClass}>Assigned Applications</legend>
-            {applications.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">No applications available.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {applications.map((app) => (
-                  <label key={app.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={editAssignedIds.includes(app.id)}
-                      onChange={() => toggleAssigned(app.id)}
-                      className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600"
-                    />
-                    {app.name}
-                  </label>
-                ))}
-              </div>
-            )}
-          </fieldset>
+          {editRole === 'USER' && (
+            <fieldset className="mb-4">
+              <legend className={labelClass}>Assigned Applications</legend>
+              {applications.length === 0 ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">No applications available.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {applications.map((app) => (
+                    <label key={app.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={editAssignedIds.includes(app.id)}
+                        onChange={() => toggleAssigned(app.id)}
+                        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600"
+                      />
+                      {app.name}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </fieldset>
+          )}
+
+          {editRole !== 'USER' && (
+            <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+              Admin and Sys.Admin see all applications — no assignment needed.
+            </p>
+          )}
 
           {editError && <Alert className="mb-4">{editError}</Alert>}
 
