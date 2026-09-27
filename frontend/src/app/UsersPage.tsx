@@ -11,6 +11,7 @@ interface User {
   id: number;
   username: string;
   role: 'SYS_ADMIN' | 'ADMIN' | 'USER';
+  email: string | null;
   must_change_password: boolean;
   created_at: string;
   assignedApplicationIds: number[];
@@ -51,6 +52,8 @@ export function UsersPage(): JSX.Element {
 
   const [applications, setApplications] = useState<Application[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editUsername, setEditUsername] = useState('');
+  const [editEmail, setEditEmail] = useState('');
   const [editRole, setEditRole] = useState<'USER' | 'ADMIN' | 'SYS_ADMIN'>('USER');
   const [editAssignedIds, setEditAssignedIds] = useState<number[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -121,6 +124,8 @@ export function UsersPage(): JSX.Element {
 
   function openEdit(u: User) {
     setEditingUser(u);
+    setEditUsername(u.username);
+    setEditEmail(u.email ?? '');
     setEditRole(u.role);
     setEditAssignedIds(u.assignedApplicationIds ?? []);
     setEditError(null);
@@ -134,10 +139,20 @@ export function UsersPage(): JSX.Element {
 
   async function handleSaveEdit() {
     if (!editingUser) return;
+    if (!editUsername.trim()) {
+      setEditError('Username cannot be blank.');
+      return;
+    }
+    if (!editEmail.trim()) {
+      setEditError('Email cannot be blank.');
+      return;
+    }
     setSavingEdit(true);
     setEditError(null);
     try {
       await api.put(API.USERS.UPDATE(editingUser.id), {
+        username: editUsername.trim(),
+        email: editEmail.trim(),
         role: editRole,
         assignedApplicationIds: editAssignedIds,
       });
@@ -281,6 +296,7 @@ export function UsersPage(): JSX.Element {
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">
                 <th className="px-4 py-3 font-medium">Username</th>
+                <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Role</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Created</th>
@@ -298,6 +314,9 @@ export function UsersPage(): JSX.Element {
                     <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">
                       {u.username}
                       {isSelf && <span className="ml-2 text-xs font-normal text-slate-400">(you)</span>}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                      {u.email ?? <span className="text-slate-400 italic">none</span>}
                     </td>
                     <td className="px-4 py-3">
                       <Badge tone={roleTone(u.role)} dot={false}>{roleLabel(u.role)}</Badge>
@@ -349,8 +368,48 @@ export function UsersPage(): JSX.Element {
       {editingUser && (
         <Card className="mt-6 max-w-md animate-fade-in p-5">
           <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
-            Edit &quot;{editingUser.username}&quot; — Assigned Applications
+            Edit &quot;{editingUser.username}&quot;
           </h2>
+
+          <label className="mb-3 block">
+            <span className={labelClass}>Username</span>
+            <input
+              value={editUsername}
+              onChange={(e) => setEditUsername(e.target.value)}
+              className={inputClass}
+              required
+            />
+          </label>
+
+          <label className="mb-3 block">
+            <span className={labelClass}>Email</span>
+            <input
+              type="email"
+              value={editEmail}
+              onChange={(e) => setEditEmail(e.target.value)}
+              className={inputClass}
+              required
+            />
+          </label>
+
+          <label className="mb-4 block">
+            <span className={labelClass}>Role</span>
+            <select
+              value={editRole}
+              onChange={(e) => setEditRole(e.target.value as 'USER' | 'ADMIN' | 'SYS_ADMIN')}
+              className={inputClass}
+              disabled={editingUser.role === 'SYS_ADMIN' && !canCreateAdmin}
+            >
+              <option value="USER">User</option>
+              {canCreateAdmin && <option value="ADMIN">Admin</option>}
+              {canCreateAdmin && <option value="SYS_ADMIN">Sys.Admin</option>}
+            </select>
+            {!canCreateAdmin && (
+              <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                Only Sys.Admin can change roles to/from Admin or Sys.Admin.
+              </span>
+            )}
+          </label>
 
           <fieldset className="mb-4">
             <legend className={labelClass}>Assigned Applications</legend>
