@@ -40,6 +40,8 @@ dependencies {
 
     // WebSocket / STOMP (SPEC §5)
     implementation("org.springframework.boot:spring-boot-starter-websocket")
+    // Email notifications for application offline alerts (notification module)
+    implementation("org.springframework.boot:spring-boot-starter-mail")
 
     // Actuator (SPEC §11.3)
     implementation("org.springframework.boot:spring-boot-starter-actuator")
