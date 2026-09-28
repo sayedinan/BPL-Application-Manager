@@ -7,8 +7,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Works out who should receive an offline-alert email for a given
- * application.
+ * Works out who should receive an offline-alert notification (email
+ * or SMS) for a given application.
  *
  * <p>Recipients are the union of:
  * <ul>
@@ -53,6 +53,36 @@ public class NotificationRecipientResolver {
                 + "AND u.email IS NOT NULL AND u.deleted_at IS NULL",
             String.class, applicationId);
         recipients.addAll(assignedUserEmails);
+
+        return recipients;
+    }
+
+    /**
+     * Same recipient rule as {@link #resolveForApplication}, but
+     * returns phone numbers (for {@code SmsNotificationService})
+     * instead of email addresses. A separate method rather than a
+     * shared/parameterized query — the two channels' recipient
+     * columns and null-filtering are similar enough today that a
+     * shared helper is tempting, but keeping them independent means
+     * a future divergence (e.g. SMS restricted to SYS_ADMIN only)
+     * doesn't require unwinding a shared implementation.
+     */
+    public Set<String> resolvePhoneNumbersForApplication(Long applicationId) {
+        Set<String> recipients = new LinkedHashSet<>();
+
+        List<String> adminPhoneNumbers = jdbc.queryForList(
+            "SELECT phone_number FROM users WHERE role IN ('SYS_ADMIN','ADMIN') "
+                + "AND phone_number IS NOT NULL AND deleted_at IS NULL",
+            String.class);
+        recipients.addAll(adminPhoneNumbers);
+
+        List<String> assignedUserPhoneNumbers = jdbc.queryForList(
+            "SELECT u.phone_number FROM users u "
+                + "JOIN user_application_assignments a ON a.user_id = u.id "
+                + "WHERE a.application_id = ? AND u.role = 'USER' "
+                + "AND u.phone_number IS NOT NULL AND u.deleted_at IS NULL",
+            String.class, applicationId);
+        recipients.addAll(assignedUserPhoneNumbers);
 
         return recipients;
     }
