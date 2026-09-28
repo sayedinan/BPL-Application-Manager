@@ -12,6 +12,7 @@ interface User {
   username: string;
   role: 'SYS_ADMIN' | 'ADMIN' | 'USER';
   email: string | null;
+  phone_number: string | null;
   must_change_password: boolean;
   created_at: string;
   assignedApplicationIds: number[];
@@ -56,6 +57,11 @@ export function UsersPage(): JSX.Element {
   const [editEmail, setEditEmail] = useState('');
   const [editRole, setEditRole] = useState<'USER' | 'ADMIN' | 'SYS_ADMIN'>('USER');
   const [editAssignedIds, setEditAssignedIds] = useState<number[]>([]);
+  // Stores only the 9 digits after the locked "8801" prefix — the
+  // prefix is rendered separately in the input and prepended back on
+  // save, matching how the backend/DB expect the full "8801XXXXXXXXX"
+  // value (V15 migration / UpdateUserRequest's @Pattern).
+  const [editPhoneDigits, setEditPhoneDigits] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -126,6 +132,9 @@ export function UsersPage(): JSX.Element {
     setEditingUser(u);
     setEditUsername(u.username);
     setEditEmail(u.email ?? '');
+    // Strip the "8801" prefix back off for editing — u.phone_number
+    // is either null, or the full 13-digit stored value.
+    setEditPhoneDigits(u.phone_number ? u.phone_number.slice(4) : '');
     setEditRole(u.role);
     setEditAssignedIds(u.assignedApplicationIds ?? []);
     setEditError(null);
@@ -147,12 +156,24 @@ export function UsersPage(): JSX.Element {
       setEditError('Email cannot be blank.');
       return;
     }
+    // Phone number is genuinely optional (unlike email) — blank digits
+    // means "clear it" (sent as empty string, per UpdateUserRequest's
+    // tri-state: empty clears, omitted/undefined leaves alone, we
+    // always send a value here since the field is always rendered).
+    // A non-blank value must be exactly 9 digits, matching the 13-char
+    // total the backend's @Pattern expects once "8801" is prepended.
+    const trimmedDigits = editPhoneDigits.trim();
+    if (trimmedDigits && !/^\d{9}$/.test(trimmedDigits)) {
+      setEditError('Phone number must be exactly 9 digits after 8801.');
+      return;
+    }
     setSavingEdit(true);
     setEditError(null);
     try {
       await api.put(API.USERS.UPDATE(editingUser.id), {
         username: editUsername.trim(),
         email: editEmail.trim(),
+        phoneNumber: trimmedDigits ? `8801${trimmedDigits}` : '',
         role: editRole,
         assignedApplicationIds: editAssignedIds,
       });
@@ -297,6 +318,7 @@ export function UsersPage(): JSX.Element {
               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">
                 <th className="px-4 py-3 font-medium">Username</th>
                 <th className="px-4 py-3 font-medium">Email</th>
+                <th className="px-4 py-3 font-medium">Phone</th>
                 <th className="px-4 py-3 font-medium">Role</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Created</th>
@@ -317,6 +339,13 @@ export function UsersPage(): JSX.Element {
                     </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                       {u.email ?? <span className="text-slate-400 italic">none</span>}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                      {u.phone_number ? (
+                        <span className="font-mono text-xs">{u.phone_number}</span>
+                      ) : (
+                        <span className="text-slate-400 italic">none</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <Badge tone={roleTone(u.role)} dot={false}>{roleLabel(u.role)}</Badge>
@@ -390,6 +419,24 @@ export function UsersPage(): JSX.Element {
               className={inputClass}
               required
             />
+          </label>
+
+          <label className="mb-3 block">
+            <span className={labelClass}>Phone number (optional — for SMS alerts)</span>
+            <div className="flex items-center gap-2">
+              <span className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                8801
+              </span>
+              <input
+                type="tel"
+                inputMode="numeric"
+                value={editPhoneDigits}
+                onChange={(e) => setEditPhoneDigits(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                placeholder="791027113"
+                maxLength={9}
+                className={inputClass}
+              />
+            </div>
           </label>
 
           <label className="mb-4 block">
