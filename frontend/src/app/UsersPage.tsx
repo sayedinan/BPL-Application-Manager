@@ -68,6 +68,8 @@ export function UsersPage(): JSX.Element {
   const [showForm, setShowForm] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newRole, setNewRole] = useState<'USER' | 'ADMIN' | 'SYS_ADMIN'>('USER');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPhoneDigits, setNewPhoneDigits] = useState('');
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -125,6 +127,8 @@ export function UsersPage(): JSX.Element {
   function resetForm() {
     setNewUsername('');
     setNewRole('USER');
+    setNewEmail('');
+    setNewPhoneDigits('');
     setFormError(null);
   }
 
@@ -193,12 +197,27 @@ export function UsersPage(): JSX.Element {
       setFormError('Username is required.');
       return;
     }
+    if (!newEmail.trim()) {
+      setFormError('Email is required.');
+      return;
+    }
+    const trimmedDigits = newPhoneDigits.trim();
+    if (!/^\d{9}$/.test(trimmedDigits)) {
+      setFormError('Phone number is required — exactly 9 digits after 8801.');
+      return;
+    }
     setCreating(true);
     try {
       const path = newRole === 'USER' ? API.USERS.CREATE : '/users/create-admin';
       const res = await api.post<{ id: number; username: string; role: string; temporaryPassword: string }>(
         path,
-        { username: newUsername.trim(), role: newRole, assignedApplicationIds: [] },
+        {
+        username: newUsername.trim(),
+        role: newRole,
+        email: newEmail.trim(),
+        phoneNumber: `8801${trimmedDigits}`,
+        assignedApplicationIds: [],
+      },
       );
       setCreatedResult({ username: res.username, temporaryPassword: res.temporaryPassword });
       resetForm();
@@ -282,6 +301,36 @@ export function UsersPage(): JSX.Element {
                 required
               />
             </label>
+            <label className="mb-3 block">
+              <span className={labelClass}>Email</span>
+              <input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                className={inputClass}
+                required
+              />
+            </label>
+
+            <label className="mb-3 block">
+              <span className={labelClass}>Phone number</span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                  8801
+                </span>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  value={newPhoneDigits}
+                  onChange={(e) => setNewPhoneDigits(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                  placeholder="791027113"
+                  maxLength={9}
+                  className={inputClass}
+                  required
+                />
+              </div>
+            </label>
+
             <label className="mb-4 block">
               <span className={labelClass}>Role</span>
               <select

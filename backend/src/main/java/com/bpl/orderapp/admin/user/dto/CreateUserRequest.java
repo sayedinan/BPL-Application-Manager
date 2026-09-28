@@ -15,6 +15,7 @@ public record CreateUserRequest(
     // constraint exactly: "8801" + 9 digits, since the frontend
     // assembles this full value (locked "8801" prefix + typed
     // digits) before it ever reaches this DTO.
+    @NotBlank
     @Pattern(regexp = "^8801[0-9]{9}$", message = "phoneNumber must be 8801 followed by 9 digits")
     String phoneNumber,
     List<Long> assignedApplicationIds
