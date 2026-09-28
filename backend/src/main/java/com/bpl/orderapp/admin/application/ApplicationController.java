@@ -45,15 +45,13 @@ public class ApplicationController {
     private final AuditWriter auditWriter;
     private final LogPollingOrchestrator logPollingOrchestrator;
     private final StatusPollingOrchestrator statusPollingOrchestrator;
-    private final java.util.Optional<com.bpl.orderapp.admin.notification.EmailNotificationService> emailNotificationService;
-    private final java.util.Optional<com.bpl.orderapp.admin.notification.NotificationRecipientResolver> recipientResolver;
+    private final java.util.List<com.bpl.orderapp.admin.notification.Notifier> notifiers;
 
     public ApplicationController(JdbcTemplate jdbc, SshCredentialCipher cipher,
             IdempotencyService idempotencyService, SshConnection sshConnection,
             AuditWriter auditWriter, LogPollingOrchestrator logPollingOrchestrator,
             StatusPollingOrchestrator statusPollingOrchestrator,
-            java.util.Optional<com.bpl.orderapp.admin.notification.EmailNotificationService> emailNotificationService,
-            java.util.Optional<com.bpl.orderapp.admin.notification.NotificationRecipientResolver> recipientResolver) {
+            java.util.List<com.bpl.orderapp.admin.notification.Notifier> notifiers) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.idempotencyService = idempotencyService;
@@ -61,8 +59,7 @@ public class ApplicationController {
         this.auditWriter = auditWriter;
         this.logPollingOrchestrator = logPollingOrchestrator;
         this.statusPollingOrchestrator = statusPollingOrchestrator;
-        this.emailNotificationService = emailNotificationService;
-        this.recipientResolver = recipientResolver;
+        this.notifiers = notifiers;
     }
 
     @GetMapping
@@ -445,15 +442,22 @@ public class ApplicationController {
     // audit-write failure.
     private void notifyWebAppAction(Long applicationId,
             com.bpl.orderapp.admin.notification.LifecycleEventType eventType) {
-        if (emailNotificationService.isEmpty() || recipientResolver.isEmpty()) {
+        if (notifiers.isEmpty()) {
             return;
         }
         try {
             var actor = currentActor();
             String appName = jdbc.queryForObject(
                 "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
-            emailNotificationService.get().notifyLifecycleEvent(
-                applicationId, appName, eventType, actor.get("username"), actor.get("role"), null);
+            for (com.bpl.orderapp.admin.notification.Notifier notifier : notifiers) {
+                try {
+                    notifier.notifyLifecycleEvent(
+                        applicationId, appName, eventType, actor.get("username"), actor.get("role"), null);
+                } catch (Exception e) {
+                    log.warn("Notification dispatch failed ({}) for application id={}",
+                        notifier.getClass().getSimpleName(), applicationId, e);
+                }
+            }
         } catch (Exception e) {
             log.warn("Notification dispatch failed for application id={}", applicationId, e);
         }
