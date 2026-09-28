@@ -36,7 +36,7 @@ public record UpdateUserRequest(
     String role,
     List<Long> assignedApplicationIds,
     @Email String email,
-    @Pattern(regexp = "^8801[0-9]{9}$", message = "phoneNumber must be 8801 followed by 9 digits")
+    @Pattern(regexp = "^8801[0-9]{9}$|^$", message = "phoneNumber must be 8801 followed by 9 digits, or empty to clear it")
     String phoneNumber
 ) {
     public boolean hasChange() {
