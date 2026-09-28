@@ -1,6 +1,5 @@
 package com.bpl.orderapp.admin.notification;
 
-import java.util.Set;
 
 /**
  * A channel that can deliver an application-lifecycle notification.
@@ -26,6 +25,6 @@ public interface Notifier {
      * @param flapNote optional extra sentence appended to the body (used when a
      *                 flapping application has just stabilized); null for the normal case
      */
-    void notifyLifecycleEvent(Set<String> recipients, String appName, LifecycleEventType eventType,
+    void notifyLifecycleEvent(Long applicationId, String appName, LifecycleEventType eventType,
             String actorUsername, String actorRole, String flapNote);
 }

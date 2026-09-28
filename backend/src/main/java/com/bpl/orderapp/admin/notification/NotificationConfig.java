@@ -7,6 +7,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.javamail.JavaMailSender;
 
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
+
+import java.util.Optional;
+
 /**
  * Wires the notification module's beans — but only when Gmail
  * credentials are actually configured.
@@ -45,7 +50,31 @@ public class NotificationConfig {
     @Bean
     public EmailNotificationService emailNotificationService(
             JavaMailSender mailSender,
-            @Value("${spring.mail.username}") String fromAddress) {
-        return new EmailNotificationService(mailSender, fromAddress);
+            @Value("${spring.mail.username}") String fromAddress,
+            NotificationRecipientResolver recipientResolver) {
+        return new EmailNotificationService(mailSender, fromAddress, recipientResolver);
+    }
+
+    @Bean
+    @ConditionalOnExpression("'${durbar.sms.user-id:}' != ''")
+    public DurbarSmsClient durbarSmsClient(
+            @Value("${durbar.sms.base-url}") String baseUrl,
+            @Value("${durbar.sms.user-id}") String userId,
+            @Value("${durbar.sms.password}") String password) {
+        RestClient restClient = RestClient.builder()
+                .baseUrl(baseUrl)
+                .requestFactory(new SimpleClientHttpRequestFactory())
+                .build();
+        return new DurbarSmsClient(restClient, userId, password);
+    }
+
+    @Bean
+    @ConditionalOnExpression("'${durbar.sms.user-id:}' != ''")
+    public SmsNotificationService smsNotificationService(
+            DurbarSmsClient durbarSmsClient,
+            JdbcTemplate jdbc,
+            NotificationRecipientResolver recipientResolver,
+            Optional<EmailNotificationService> emailNotificationService) {
+        return new SmsNotificationService(durbarSmsClient, jdbc, recipientResolver, emailNotificationService);
     }
 }

@@ -40,35 +40,34 @@ public class SmsNotificationService implements Notifier {
 
     private final DurbarSmsClient durbarSmsClient;
     private final JdbcTemplate jdbc;
+    private final NotificationRecipientResolver recipientResolver;
     private final Optional<EmailNotificationService> emailNotificationService;
 
     public SmsNotificationService(DurbarSmsClient durbarSmsClient, JdbcTemplate jdbc,
+            NotificationRecipientResolver recipientResolver,
             Optional<EmailNotificationService> emailNotificationService) {
         this.durbarSmsClient = durbarSmsClient;
         this.jdbc = jdbc;
+        this.recipientResolver = recipientResolver;
         this.emailNotificationService = emailNotificationService;
     }
 
     @Async
     @Override
-    public void notifyLifecycleEvent(Set<String> recipients, String appName, LifecycleEventType eventType,
+    public void notifyLifecycleEvent(Long applicationId, String appName, LifecycleEventType eventType,
             String actorUsername, String actorRole, String flapNote) {
+        Set<String> recipients = recipientResolver.resolvePhoneNumbersForApplication(applicationId);
         if (recipients.isEmpty()) {
             return;
         }
         String smsText = buildMessage(appName, eventType, actorUsername, actorRole, flapNote);
         for (String phoneNumber : recipients) {
-            sendOne(null, phoneNumber, eventType, smsText);
+            sendOne(applicationId, phoneNumber, eventType, smsText);
         }
     }
 
-    // applicationId is separate from the recipients/appName already
-    // passed to notifyLifecycleEvent because that method's signature
-    // (shared with EmailNotificationService via Notifier) doesn't
-    // carry it — logging keys off phone number + event type + time
-    // instead, and applicationId in sms_send_log is left null for
-    // this call path. (A future overload could thread it through if
-    // per-application SMS reporting turns out to need it.)
+    // applicationId is now threaded through to logAttempt so
+    // sms_send_log records which application triggered the SMS.
     private void sendOne(Long applicationId, String phoneNumber, LifecycleEventType eventType, String smsText) {
         DurbarSmsClient.SmsSendResult result;
         try {

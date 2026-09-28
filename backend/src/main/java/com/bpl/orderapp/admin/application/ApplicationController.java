@@ -452,9 +452,8 @@ public class ApplicationController {
             var actor = currentActor();
             String appName = jdbc.queryForObject(
                 "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
-            java.util.Set<String> recipients = recipientResolver.get().resolveForApplication(applicationId);
             emailNotificationService.get().notifyLifecycleEvent(
-                recipients, appName, eventType, actor.get("username"), actor.get("role"), null);
+                applicationId, appName, eventType, actor.get("username"), actor.get("role"), null);
         } catch (Exception e) {
             log.warn("Notification dispatch failed for application id={}", applicationId, e);
         }

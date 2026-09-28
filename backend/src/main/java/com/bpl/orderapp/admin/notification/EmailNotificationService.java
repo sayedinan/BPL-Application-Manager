@@ -47,8 +47,9 @@ public class EmailNotificationService implements Notifier {
      */
     @Async
     @Override
-    public void notifyLifecycleEvent(Set<String> recipients, String appName, LifecycleEventType eventType,
+    public void notifyLifecycleEvent(Long applicationId, String appName, LifecycleEventType eventType,
             String actorUsername, String actorRole, String flapNote) {
+        Set<String> recipients = recipientResolver.resolveForApplication(applicationId);
         if (recipients.isEmpty()) {
             return;
         }

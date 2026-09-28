@@ -376,9 +376,8 @@ public class StatusPollingOrchestrator {
         }
 
         try {
-            Set<String> recipients = recipientResolver.get().resolveForApplication(applicationId);
             emailNotificationService.get().notifyLifecycleEvent(
-                recipients, applicationName,
+                applicationId, applicationName,
                 observedOnline ? LifecycleEventType.EXTERNAL_ONLINE
                                : LifecycleEventType.EXTERNAL_OFFLINE,
                 null, null, flapNote);
