@@ -1,6 +1,5 @@
 package com.bpl.orderapp.admin.notification;
 
-
 /**
  * A channel that can deliver an application-lifecycle notification.
  *

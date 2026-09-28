@@ -4,9 +4,8 @@ import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
 import com.bpl.orderapp.admin.log.WebSocketBroadcast;
-import com.bpl.orderapp.admin.notification.EmailNotificationService;
 import com.bpl.orderapp.admin.notification.LifecycleEventType;
-import com.bpl.orderapp.admin.notification.NotificationRecipientResolver;
+import com.bpl.orderapp.admin.notification.Notifier;
 import com.bpl.orderapp.admin.ssh.SshConnection;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -23,7 +22,6 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
@@ -68,12 +66,10 @@ public class StatusPollingOrchestrator {
     private final LogPollingOrchestrator logPollingOrchestrator;
     private final ThreadPoolTaskScheduler scheduler;
     private final AuditWriter auditWriter;
-    // Both empty together when spring.mail.username is unset —
-    // NotificationConfig only creates either bean when it's set, so
-    // Spring injects empty Optionals rather than failing to start.
-    // See NotificationConfig's javadoc for why.
-    private final Optional<EmailNotificationService> emailNotificationService;
-    private final Optional<NotificationRecipientResolver> recipientResolver;
+    // Spring auto-injects every bean implementing Notifier — empty
+    // list if neither email nor SMS is configured, one entry if only
+    // one is, two if both are. See NotificationConfig.
+    private final List<Notifier> notifiers;
 
     // Flap detection for external transitions only (web-app-triggered
     // start/stop are deliberate one-off actions, never flapping).
@@ -101,16 +97,14 @@ public class StatusPollingOrchestrator {
     public StatusPollingOrchestrator(JdbcTemplate jdbc, SshCredentialCipher cipher,
             SshConnection sshConnection, WebSocketBroadcast broadcast,
             LogPollingOrchestrator logPollingOrchestrator, AuditWriter auditWriter,
-            Optional<EmailNotificationService> emailNotificationService,
-            Optional<NotificationRecipientResolver> recipientResolver) {
+            List<Notifier> notifiers) {
         this.auditWriter = auditWriter;
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.sshConnection = sshConnection;
         this.broadcast = broadcast;
         this.logPollingOrchestrator = logPollingOrchestrator;
-        this.emailNotificationService = emailNotificationService;
-        this.recipientResolver = recipientResolver;
+        this.notifiers = notifiers;
         this.scheduler = new ThreadPoolTaskScheduler();
         this.scheduler.setPoolSize(4);
         this.scheduler.setThreadNamePrefix("status-poller-");
@@ -341,8 +335,8 @@ public class StatusPollingOrchestrator {
     // transition/audit logic above, which is why this has its own
     // try/catch rather than sharing the caller's.
     private void notifyExternalTransition(Long applicationId, String applicationName, boolean observedOnline) {
-        if (emailNotificationService.isEmpty() || recipientResolver.isEmpty()) {
-            return; // spring.mail.username unset — module inactive
+        if (notifiers.isEmpty()) {
+            return; // neither email nor SMS configured — module inactive
         }
 
         Instant now = Instant.now();
@@ -375,14 +369,16 @@ public class StatusPollingOrchestrator {
                 + "full transition history during that period.)";
         }
 
-        try {
-            emailNotificationService.get().notifyLifecycleEvent(
-                applicationId, applicationName,
-                observedOnline ? LifecycleEventType.EXTERNAL_ONLINE
-                               : LifecycleEventType.EXTERNAL_OFFLINE,
-                null, null, flapNote);
-        } catch (Exception e) {
-            log.warn("Notification dispatch failed for application id={}", applicationId, e);
+        LifecycleEventType eventType = observedOnline
+            ? LifecycleEventType.EXTERNAL_ONLINE
+            : LifecycleEventType.EXTERNAL_OFFLINE;
+        for (Notifier notifier : notifiers) {
+            try {
+                notifier.notifyLifecycleEvent(applicationId, applicationName, eventType, null, null, flapNote);
+            } catch (Exception e) {
+                log.warn("Notification dispatch failed ({}) for application id={}",
+                    notifier.getClass().getSimpleName(), applicationId, e);
+            }
         }
     }
 }
