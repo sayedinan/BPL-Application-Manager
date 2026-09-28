@@ -39,6 +39,12 @@ spring:
           timeout: 3000
           writetimeout: 5000
 
+durbar:
+  sms:
+    base-url: https://sms.durbar71.com
+    user-id: ${SMS_USER_ID:}
+    password: ${SMS_PASSWORD:}
+
 management:
   endpoints:
     web:
