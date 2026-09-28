@@ -86,4 +86,17 @@ public class NotificationRecipientResolver {
 
         return recipients;
     }
+
+    /**
+     * SYS_ADMIN/ADMIN emails only, with no application scoping — used
+     * by {@link EmailNotificationService#sendAdminAlert} for
+     * operational alerts (e.g. "SMS gateway failed") that aren't tied
+     * to a specific application's assigned users.
+     */
+    public Set<String> resolveAdminEmails() {
+        return new LinkedHashSet<>(jdbc.queryForList(
+            "SELECT email FROM users WHERE role IN ('SYS_ADMIN','ADMIN') "
+                + "AND email IS NOT NULL AND deleted_at IS NULL",
+            String.class));
+    }
 }

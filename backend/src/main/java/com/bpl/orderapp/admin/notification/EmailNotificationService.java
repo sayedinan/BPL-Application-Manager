@@ -30,10 +30,13 @@ public class EmailNotificationService implements Notifier {
 
     private final JavaMailSender mailSender;
     private final String fromAddress;
+    private final NotificationRecipientResolver recipientResolver;
 
-    public EmailNotificationService(JavaMailSender mailSender, String fromAddress) {
+    public EmailNotificationService(JavaMailSender mailSender, String fromAddress,
+            NotificationRecipientResolver recipientResolver) {
         this.mailSender = mailSender;
         this.fromAddress = fromAddress;
+        this.recipientResolver = recipientResolver;
     }
 
     /**
@@ -82,6 +85,19 @@ public class EmailNotificationService implements Notifier {
             body = body + " " + flapNote;
         }
         sendToAll(recipients, subject, body);
+    }
+
+    /**
+     * Sends an operational alert email to all SYS_ADMIN/ADMIN users,
+     * not tied to any application's lifecycle event. Currently used
+     * by {@code SmsNotificationService} to report Durbar send
+     * failures, but deliberately generic (subject/body, no enum) so
+     * it can be reused for other admin-facing alerts later.
+     */
+    @Async
+    public void sendAdminAlert(String subject, String body) {
+        Set<String> admins = recipientResolver.resolveAdminEmails();
+        sendToAll(admins, subject, body);
     }
 
     // Plain (non-@Async) helper — notifyLifecycleEvent above is the
