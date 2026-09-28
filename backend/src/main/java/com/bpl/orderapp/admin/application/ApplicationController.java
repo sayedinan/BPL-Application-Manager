@@ -363,7 +363,7 @@ public class ApplicationController {
         } catch (Exception auditEx) {
             log.warn("Audit write failed for START_APPLICATION (id={})", id, auditEx);
         }
-        notifyWebAppAction(id, com.bpl.orderapp.admin.notification.EmailNotificationService.LifecycleEventType.STARTED_VIA_DASHBOARD);
+        notifyWebAppAction(id, com.bpl.orderapp.admin.notification.LifecycleEventType.STARTED_VIA_DASHBOARD);
 
         return ResponseEntity.ok(body);
     }
@@ -432,7 +432,7 @@ public class ApplicationController {
         } catch (Exception auditEx) {
             log.warn("Audit write failed for STOP_APPLICATION (id={})", id, auditEx);
         }
-        notifyWebAppAction(id, com.bpl.orderapp.admin.notification.EmailNotificationService.LifecycleEventType.STOPPED_VIA_DASHBOARD);
+        notifyWebAppAction(id, com.bpl.orderapp.admin.notification.LifecycleEventType.STOPPED_VIA_DASHBOARD);
 
         return ResponseEntity.ok(body);
     }
@@ -444,7 +444,7 @@ public class ApplicationController {
     // try/catch so a mail failure never gets logged as if it were an
     // audit-write failure.
     private void notifyWebAppAction(Long applicationId,
-            com.bpl.orderapp.admin.notification.EmailNotificationService.LifecycleEventType eventType) {
+            com.bpl.orderapp.admin.notification.LifecycleEventType eventType) {
         if (emailNotificationService.isEmpty() || recipientResolver.isEmpty()) {
             return;
         }

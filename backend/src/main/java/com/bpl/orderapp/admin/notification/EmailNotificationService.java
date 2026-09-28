@@ -24,22 +24,9 @@ import java.util.Set;
  * than four near-duplicate methods — also keeps the door open for
  * this same mailer to send OTP codes later without restructuring.
  */
-public class EmailNotificationService {
+public class EmailNotificationService implements Notifier {
 
     private static final Logger log = LoggerFactory.getLogger(EmailNotificationService.class);
-
-    /** The four application-lifecycle events that trigger an email. */
-    public enum LifecycleEventType {
-        /** Started via the BPL dashboard by a logged-in actor. Routine, calm wording. */
-        STARTED_VIA_DASHBOARD,
-        /** Stopped via the BPL dashboard by a logged-in actor. Routine, calm wording. */
-        STOPPED_VIA_DASHBOARD,
-        /** Came online without dashboard involvement. Urgent wording — nothing
-         *  outside the dashboard should ever be controlling these applications. */
-        EXTERNAL_ONLINE,
-        /** Went offline without dashboard involvement. Urgent wording — same reasoning. */
-        EXTERNAL_OFFLINE
-    }
 
     private final JavaMailSender mailSender;
     private final String fromAddress;
@@ -56,6 +43,7 @@ public class EmailNotificationService {
      *                 flapping application has just stabilized); null for the normal case
      */
     @Async
+    @Override
     public void notifyLifecycleEvent(Set<String> recipients, String appName, LifecycleEventType eventType,
             String actorUsername, String actorRole, String flapNote) {
         if (recipients.isEmpty()) {

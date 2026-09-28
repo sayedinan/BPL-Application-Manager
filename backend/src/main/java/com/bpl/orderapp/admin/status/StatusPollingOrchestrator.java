@@ -5,6 +5,7 @@ import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
 import com.bpl.orderapp.admin.log.WebSocketBroadcast;
 import com.bpl.orderapp.admin.notification.EmailNotificationService;
+import com.bpl.orderapp.admin.notification.LifecycleEventType;
 import com.bpl.orderapp.admin.notification.NotificationRecipientResolver;
 import com.bpl.orderapp.admin.ssh.SshConnection;
 import jakarta.annotation.PostConstruct;
@@ -378,8 +379,8 @@ public class StatusPollingOrchestrator {
             Set<String> recipients = recipientResolver.get().resolveForApplication(applicationId);
             emailNotificationService.get().notifyLifecycleEvent(
                 recipients, applicationName,
-                observedOnline ? EmailNotificationService.LifecycleEventType.EXTERNAL_ONLINE
-                               : EmailNotificationService.LifecycleEventType.EXTERNAL_OFFLINE,
+                observedOnline ? LifecycleEventType.EXTERNAL_ONLINE
+                               : LifecycleEventType.EXTERNAL_OFFLINE,
                 null, null, flapNote);
         } catch (Exception e) {
             log.warn("Notification dispatch failed for application id={}", applicationId, e);
