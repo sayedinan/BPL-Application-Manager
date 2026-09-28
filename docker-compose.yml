@@ -47,6 +47,12 @@ services:
 
       MAIL_PASSWORD: ${MAIL_PASSWORD}
 
+      # Optional — SMS notification module (Durbar) no-ops if unset,
+      # same reasoning as MAIL_USERNAME/MAIL_PASSWORD above.
+      SMS_USER_ID: ${SMS_USER_ID}
+
+      SMS_PASSWORD: ${SMS_PASSWORD}
+
       CORS_ORIGIN: ${CORS_ORIGIN}
 
       SERVER_PORT: 8080
