@@ -53,7 +53,7 @@ public class EmailNotificationService implements Notifier {
         if (recipients.isEmpty()) {
             return;
         }
-        String timestamp = Instant.now().toString();
+        String timestamp = NotificationTimeFormatter.format(Instant.now());
         String subject;
         String body;
         switch (eventType) {

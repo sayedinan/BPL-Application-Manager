@@ -104,7 +104,7 @@ public class SmsNotificationService implements Notifier {
         String subject = "⚠️ BPL ALERT: SMS delivery failed";
         String body = "An SMS notification (" + eventType + ") to " + phoneNumber
             + " failed to send via Durbar. Reason: " + result.message()
-            + ". Detected at " + Instant.now() + ".";
+            + ". Detected at " + NotificationTimeFormatter.format(Instant.now()) + ".";
         emailNotificationService.get().sendAdminAlert(subject, body);
     }
 
