@@ -29,6 +29,7 @@ const inputClass =
   'placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
   'dark:border-slate-700 dark:bg-surface-dark dark:text-slate-100';
 const labelClass = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function roleTone(role: User['role']): BadgeTone {
   if (role === 'SYS_ADMIN') return 'error';
@@ -71,7 +72,10 @@ export function UsersPage(): JSX.Element {
   const [newEmail, setNewEmail] = useState('');
   const [newPhoneDigits, setNewPhoneDigits] = useState('');
   const [creating, setCreating] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null); // server-side / duplicate errors
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   // Shown exactly once after a successful create — same pattern as
   // reset-password: the cleartext temp password never appears again
@@ -130,6 +134,9 @@ export function UsersPage(): JSX.Element {
     setNewEmail('');
     setNewPhoneDigits('');
     setFormError(null);
+    setUsernameError(null);
+    setEmailError(null);
+    setPhoneError(null);
   }
 
   function openEdit(u: User) {
@@ -158,6 +165,10 @@ export function UsersPage(): JSX.Element {
     }
     if (!editEmail.trim()) {
       setEditError('Email cannot be blank.');
+      return;
+    }
+    if (!EMAIL_REGEX.test(editEmail.trim())) {
+      setEditError('Enter a valid email address.');
       return;
     }
     // Phone number is genuinely optional (unlike email) — blank digits
@@ -193,19 +204,29 @@ export function UsersPage(): JSX.Element {
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     setFormError(null);
+    setUsernameError(null);
+    setEmailError(null);
+    setPhoneError(null);
+
+    let hasError = false;
     if (!newUsername.trim()) {
-      setFormError('Username is required.');
-      return;
+      setUsernameError('Username is required.');
+      hasError = true;
     }
     if (!newEmail.trim()) {
-      setFormError('Email is required.');
-      return;
+      setEmailError('Email is required.');
+      hasError = true;
+    } else if (!EMAIL_REGEX.test(newEmail.trim())) {
+      setEmailError('Enter a valid email address.');
+      hasError = true;
     }
     const trimmedDigits = newPhoneDigits.trim();
     if (!/^\d{9}$/.test(trimmedDigits)) {
-      setFormError('Phone number is required — exactly 9 digits after 8801.');
-      return;
+      setPhoneError('Phone number is required — exactly 9 digits after 8801.');
+      hasError = true;
     }
+    if (hasError) return;
+
     setCreating(true);
     try {
       const path = newRole === 'USER' ? API.USERS.CREATE : '/users/create-admin';
@@ -300,6 +321,9 @@ export function UsersPage(): JSX.Element {
                 className={inputClass}
                 required
               />
+              {usernameError && (
+                <span className="mt-1 block text-xs text-red-500">{usernameError}</span>
+              )}
             </label>
             <label className="mb-3 block">
               <span className={labelClass}>Email</span>
@@ -310,6 +334,9 @@ export function UsersPage(): JSX.Element {
                 className={inputClass}
                 required
               />
+              {emailError && (
+                <span className="mt-1 block text-xs text-red-500">{emailError}</span>
+              )}
             </label>
 
             <label className="mb-3 block">
@@ -323,12 +350,15 @@ export function UsersPage(): JSX.Element {
                   inputMode="numeric"
                   value={newPhoneDigits}
                   onChange={(e) => setNewPhoneDigits(e.target.value.replace(/\D/g, '').slice(0, 9))}
-                  placeholder="791027113"
+                  placeholder="XXXXXXXXX"
                   maxLength={9}
                   className={inputClass}
                   required
                 />
               </div>
+              {phoneError && (
+                <span className="mt-1 block text-xs text-red-500">{phoneError}</span>
+              )}
             </label>
 
             <label className="mb-4 block">
@@ -481,7 +511,7 @@ export function UsersPage(): JSX.Element {
                 inputMode="numeric"
                 value={editPhoneDigits}
                 onChange={(e) => setEditPhoneDigits(e.target.value.replace(/\D/g, '').slice(0, 9))}
-                placeholder="791027113"
+                placeholder="XXXXXXXXX"
                 maxLength={9}
                 className={inputClass}
               />
