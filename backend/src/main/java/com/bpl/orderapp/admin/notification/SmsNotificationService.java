@@ -60,7 +60,7 @@ public class SmsNotificationService implements Notifier {
         if (recipients.isEmpty()) {
             return;
         }
-        String smsText = buildMessage(appName, eventType, actorUsername, actorRole, flapNote);
+        String smsText = buildMessage(applicationId, appName, eventType, actorUsername, actorRole, flapNote);
         for (String phoneNumber : recipients) {
             sendOne(applicationId, phoneNumber, eventType, smsText);
         }
@@ -108,23 +108,54 @@ public class SmsNotificationService implements Notifier {
         emailNotificationService.get().sendAdminAlert(subject, body);
     }
 
-    private String buildMessage(String appName, LifecycleEventType eventType, String actorUsername,
-            String actorRole, String flapNote) {
+    private String buildMessage(Long applicationId, String appName, LifecycleEventType eventType,
+            String actorUsername, String actorRole, String flapNote) {
+        String customMessage = fetchCustomMessage(applicationId, eventType);
         String message;
-        switch (eventType) {
-            case STARTED_VIA_DASHBOARD ->
-                message = "BPL: " + appName + " started via dashboard by " + actorUsername + " (" + actorRole + ").";
-            case STOPPED_VIA_DASHBOARD ->
-                message = "BPL: " + appName + " stopped via dashboard by " + actorUsername + " (" + actorRole + ").";
-            case EXTERNAL_ONLINE ->
-                message = "BPL ALERT: " + appName + " came online OUTSIDE the dashboard. Please verify.";
-            case EXTERNAL_OFFLINE ->
-                message = "BPL ALERT: " + appName + " went offline OUTSIDE the dashboard. Please investigate.";
-            default -> throw new IllegalArgumentException("Unknown lifecycle event type: " + eventType);
+        if (customMessage != null) {
+            message = NotificationMessageTemplates.substitute(
+                customMessage, appName, actorUsername, actorRole,
+                NotificationTimeFormatter.format(Instant.now()));
+        } else {
+            switch (eventType) {
+                case STARTED_VIA_DASHBOARD ->
+                    message = "BPL: " + appName + " started via dashboard by " + actorUsername + " (" + actorRole + ").";
+                case STOPPED_VIA_DASHBOARD ->
+                    message = "BPL: " + appName + " stopped via dashboard by " + actorUsername + " (" + actorRole + ").";
+                case EXTERNAL_ONLINE ->
+                    message = "BPL ALERT: " + appName + " came online OUTSIDE the dashboard. Please verify.";
+                case EXTERNAL_OFFLINE ->
+                    message = "BPL ALERT: " + appName + " went offline OUTSIDE the dashboard. Please investigate.";
+                default -> throw new IllegalArgumentException("Unknown lifecycle event type: " + eventType);
+            }
+            if (flapNote != null) {
+                message = message + " (Was flapping, now stabilized.)";
+            }
         }
-        if (flapNote != null) {
-            message = message + " (Was flapping, now stabilized.)";
+        // Enforced here regardless of source (custom or default) —
+        // the DB CHECK constraint only limits the raw template before
+        // {appName} etc. are substituted in, so this is the actual
+        // guarantee that Durbar never receives more than one SMS
+        // segment's worth of text.
+        return NotificationMessageTemplates.truncateForSms(message);
+    }
+
+    // Mirrors EmailNotificationService.fetchCustomMessage exactly,
+    // just against the sms_* columns instead of email_*.
+    private String fetchCustomMessage(Long applicationId, LifecycleEventType eventType) {
+        String column = switch (eventType) {
+            case STARTED_VIA_DASHBOARD -> "sms_start_message";
+            case STOPPED_VIA_DASHBOARD -> "sms_stop_message";
+            case EXTERNAL_ONLINE -> "sms_external_online_message";
+            case EXTERNAL_OFFLINE -> "sms_external_offline_message";
+        };
+        try {
+            String value = jdbc.queryForObject(
+                "SELECT " + column + " FROM applications WHERE id = ?", String.class, applicationId);
+            return (value == null || value.isBlank()) ? null : value;
+        } catch (Exception e) {
+            log.warn("Failed to look up custom {} for application id={}: {}", column, applicationId, e.getMessage());
+            return null;
         }
-        return message;
     }
 }
