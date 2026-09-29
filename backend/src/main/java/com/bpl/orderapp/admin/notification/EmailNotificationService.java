@@ -4,6 +4,7 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
@@ -46,12 +47,14 @@ public class EmailNotificationService implements Notifier {
     private final JavaMailSender mailSender;
     private final String fromAddress;
     private final NotificationRecipientResolver recipientResolver;
+    private final JdbcTemplate jdbc;
 
     public EmailNotificationService(JavaMailSender mailSender, String fromAddress,
-            NotificationRecipientResolver recipientResolver) {
+            NotificationRecipientResolver recipientResolver, JdbcTemplate jdbc) {
         this.mailSender = mailSender;
         this.fromAddress = fromAddress;
         this.recipientResolver = recipientResolver;
+        this.jdbc = jdbc;
     }
 
     /**
@@ -69,6 +72,7 @@ public class EmailNotificationService implements Notifier {
             return;
         }
         String timestamp = NotificationTimeFormatter.format(Instant.now());
+        String customMessage = fetchCustomMessage(applicationId, eventType);
         String subject;
         String headline;
         String detailRows;
@@ -112,9 +116,40 @@ public class EmailNotificationService implements Notifier {
             default -> throw new IllegalArgumentException("Unknown lifecycle event type: " + eventType);
         }
 
+        // Custom message (if this application has one set for this
+        // event) replaces only the headline sentence — the details
+        // table below (Application / By / Detected at) still always
+        // renders, so the admin's custom text doesn't need to repeat
+        // those facts itself.
+        if (customMessage != null) {
+            headline = NotificationMessageTemplates.substitute(
+                customMessage, appName, actorUsername, actorRole, timestamp);
+        }
+
         String callToAction = urgent ? "Please investigate." : null;
         String html = renderTemplate(urgent, headline, detailRows, flapNote, callToAction);
         sendToAll(recipients, subject, html);
+    }
+
+    // Returns null if no custom message is set for this application's
+    // event type (falls back to the hardcoded default), or if the
+    // application row can't be found for any reason — a missing
+    // custom message must never block the default email from sending.
+    private String fetchCustomMessage(Long applicationId, LifecycleEventType eventType) {
+        String column = switch (eventType) {
+            case STARTED_VIA_DASHBOARD -> "email_start_message";
+            case STOPPED_VIA_DASHBOARD -> "email_stop_message";
+            case EXTERNAL_ONLINE -> "email_external_online_message";
+            case EXTERNAL_OFFLINE -> "email_external_offline_message";
+        };
+        try {
+            String value = jdbc.queryForObject(
+                "SELECT " + column + " FROM applications WHERE id = ?", String.class, applicationId);
+            return (value == null || value.isBlank()) ? null : value;
+        } catch (Exception e) {
+            log.warn("Failed to look up custom {} for application id={}: {}", column, applicationId, e.getMessage());
+            return null;
+        }
     }
 
     /**
