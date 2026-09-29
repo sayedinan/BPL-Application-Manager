@@ -51,8 +51,9 @@ public class NotificationConfig {
     public EmailNotificationService emailNotificationService(
             JavaMailSender mailSender,
             @Value("${spring.mail.username}") String fromAddress,
-            NotificationRecipientResolver recipientResolver) {
-        return new EmailNotificationService(mailSender, fromAddress, recipientResolver);
+            NotificationRecipientResolver recipientResolver,
+            JdbcTemplate jdbc) {
+        return new EmailNotificationService(mailSender, fromAddress, recipientResolver, jdbc);
     }
 
     @Bean
