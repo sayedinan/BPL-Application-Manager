@@ -24,11 +24,21 @@ interface FormState {
   logScript: string;
   statusScript: string;
   pollIntervalSeconds: string;
+  emailStartMessage: string;
+  emailStopMessage: string;
+  emailExternalOnlineMessage: string;
+  emailExternalOfflineMessage: string;
+  smsStartMessage: string;
+  smsStopMessage: string;
+  smsExternalOnlineMessage: string;
+  smsExternalOfflineMessage: string;
 }
 
 const EMPTY_FORM: FormState = {
   name: '', serverIp: '', sshUsername: '', sshPassword: '', sshHostKeyFingerprint: '',
   startScript: '', stopScript: '', logScript: '', statusScript: '', pollIntervalSeconds: '5',
+  emailStartMessage: '', emailStopMessage: '', emailExternalOnlineMessage: '', emailExternalOfflineMessage: '',
+  smsStartMessage: '', smsStopMessage: '', smsExternalOnlineMessage: '', smsExternalOfflineMessage: '',
 };
 
 const inputClass =
@@ -84,6 +94,10 @@ export function ApplicationsPage(): JSX.Element {
         name: form.name, serverIp: form.serverIp, sshUsername: form.sshUsername,
         sshPassword: form.sshPassword, sshHostKeyFingerprint: form.sshHostKeyFingerprint,
         startScript: form.startScript, stopScript: form.stopScript, logScript: form.logScript, statusScript: form.statusScript,
+        emailStartMessage: form.emailStartMessage, emailStopMessage: form.emailStopMessage,
+        emailExternalOnlineMessage: form.emailExternalOnlineMessage, emailExternalOfflineMessage: form.emailExternalOfflineMessage,
+        smsStartMessage: form.smsStartMessage, smsStopMessage: form.smsStopMessage,
+        smsExternalOnlineMessage: form.smsExternalOnlineMessage, smsExternalOfflineMessage: form.smsExternalOfflineMessage,
         pollIntervalSeconds: pollInterval,
       });
       setForm(EMPTY_FORM);
@@ -129,6 +143,14 @@ export function ApplicationsPage(): JSX.Element {
         sshPassword: '',
         sshHostKeyFingerprint: '',
         startScript: String(detail.startScript ?? ''),
+        emailStartMessage: String(detail.emailStartMessage ?? ''),
+        emailStopMessage: String(detail.emailStopMessage ?? ''),
+        emailExternalOnlineMessage: String(detail.emailExternalOnlineMessage ?? ''),
+        emailExternalOfflineMessage: String(detail.emailExternalOfflineMessage ?? ''),
+        smsStartMessage: String(detail.smsStartMessage ?? ''),
+        smsStopMessage: String(detail.smsStopMessage ?? ''),
+        smsExternalOnlineMessage: String(detail.smsExternalOnlineMessage ?? ''),
+        smsExternalOfflineMessage: String(detail.smsExternalOfflineMessage ?? ''),
         stopScript: String(detail.stopScript ?? ''),
         logScript: String(detail.logScript ?? ''),
         statusScript: String(detail.statusScript ?? ''),
@@ -162,6 +184,10 @@ export function ApplicationsPage(): JSX.Element {
         name: form.name, serverIp: form.serverIp, sshUsername: form.sshUsername,
         sshPassword: form.sshPassword || undefined,
         startScript: form.startScript, stopScript: form.stopScript, logScript: form.logScript, statusScript: form.statusScript,
+        emailStartMessage: form.emailStartMessage, emailStopMessage: form.emailStopMessage,
+        emailExternalOnlineMessage: form.emailExternalOnlineMessage, emailExternalOfflineMessage: form.emailExternalOfflineMessage,
+        smsStartMessage: form.smsStartMessage, smsStopMessage: form.smsStopMessage,
+        smsExternalOnlineMessage: form.smsExternalOnlineMessage, smsExternalOfflineMessage: form.smsExternalOfflineMessage,
         pollIntervalSeconds: pollInterval,
       });
       cancelEdit();
@@ -275,6 +301,47 @@ export function ApplicationsPage(): JSX.Element {
               <textarea value={form.statusScript} onChange={(e) => updateField('statusScript', e.target.value)} className={`${inputClass} font-mono`} rows={3} required />
               <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">Exit 0 = online, non-zero = offline.</span>
             </label>
+
+            <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-700">
+              <h3 className="mb-1 text-sm font-semibold text-slate-900 dark:text-white">Custom notification messages</h3>
+              <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+                Optional. Leave blank to use the default wording. Placeholders: <code>{'{appName}'}</code>, <code>{'{actor}'}</code>, <code>{'{role}'}</code>, <code>{'{timestamp}'}</code> ({'{actor}'}/{'{role}'} only apply to Start/Stop — external events have no logged-in actor).
+              </p>
+
+              <label className="mb-3 block">
+                <span className={labelClass}>Email — Start message</span>
+                <textarea value={form.emailStartMessage} onChange={(e) => updateField('emailStartMessage', e.target.value)} className={inputClass} rows={2} />
+              </label>
+              <label className="mb-3 block">
+                <span className={labelClass}>Email — Stop message</span>
+                <textarea value={form.emailStopMessage} onChange={(e) => updateField('emailStopMessage', e.target.value)} className={inputClass} rows={2} />
+              </label>
+              <label className="mb-3 block">
+                <span className={labelClass}>Email — External online (⚠️ alert)</span>
+                <textarea value={form.emailExternalOnlineMessage} onChange={(e) => updateField('emailExternalOnlineMessage', e.target.value)} className={inputClass} rows={2} />
+              </label>
+              <label className="mb-4 block">
+                <span className={labelClass}>Email — External offline (⚠️ alert)</span>
+                <textarea value={form.emailExternalOfflineMessage} onChange={(e) => updateField('emailExternalOfflineMessage', e.target.value)} className={inputClass} rows={2} />
+              </label>
+
+              <label className="mb-3 block">
+                <span className={labelClass}>SMS — Start message ({form.smsStartMessage.length}/160)</span>
+                <textarea value={form.smsStartMessage} onChange={(e) => updateField('smsStartMessage', e.target.value)} className={inputClass} rows={2} maxLength={160} />
+              </label>
+              <label className="mb-3 block">
+                <span className={labelClass}>SMS — Stop message ({form.smsStopMessage.length}/160)</span>
+                <textarea value={form.smsStopMessage} onChange={(e) => updateField('smsStopMessage', e.target.value)} className={inputClass} rows={2} maxLength={160} />
+              </label>
+              <label className="mb-3 block">
+                <span className={labelClass}>SMS — External online ({form.smsExternalOnlineMessage.length}/160)</span>
+                <textarea value={form.smsExternalOnlineMessage} onChange={(e) => updateField('smsExternalOnlineMessage', e.target.value)} className={inputClass} rows={2} maxLength={160} />
+              </label>
+              <label className="mb-1 block">
+                <span className={labelClass}>SMS — External offline ({form.smsExternalOfflineMessage.length}/160)</span>
+                <textarea value={form.smsExternalOfflineMessage} onChange={(e) => updateField('smsExternalOfflineMessage', e.target.value)} className={inputClass} rows={2} maxLength={160} />
+              </label>
+            </div>
 
             <label className="mb-5 block">
               <span className={labelClass}>Poll Interval (seconds)</span>
