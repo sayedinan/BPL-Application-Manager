@@ -46,6 +46,18 @@ function roleLabel(role: User['role']): string {
   return 'User';
 }
 
+function describeApiError(err: unknown, fallback: string): string {
+  if (!(err instanceof ApiError)) return fallback;
+  const d = err.details;
+  if (d && typeof d === 'object') {
+    const parts = Object.entries(d as Record<string, unknown>).map(
+      ([field, msg]) => `${field}: ${String(msg)}`,
+    );
+    if (parts.length > 0) return `${err.message} (${parts.join('; ')})`;
+  }
+  return err.message;
+}
+
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
   return (
     <div className="flex items-start justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
@@ -219,7 +231,7 @@ export function UsersPage(): JSX.Element {
       setEditingUser(null);
       await loadUsers();
     } catch (err) {
-      setEditError(err instanceof ApiError ? err.message : 'Failed to update user.');
+      setEditError(describeApiError(err, 'Failed to update user.'));
     } finally {
       setSavingEdit(false);
     }
@@ -270,7 +282,7 @@ export function UsersPage(): JSX.Element {
       setShowForm(false);
       await loadUsers();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : 'Failed to create user.');
+      setFormError(describeApiError(err, 'Failed to create user.'));
     } finally {
       setCreating(false);
     }
