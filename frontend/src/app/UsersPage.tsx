@@ -310,9 +310,12 @@ export function UsersPage(): JSX.Element {
       )}
 
       {showForm && (
-        <Card className="mb-6 max-w-md animate-fade-in p-5">
+        <Card className="mb-6 max-w-md animate-fade-in overflow-hidden">
           <form onSubmit={handleCreate} noValidate>
-            <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">New User</h2>
+            <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-gh-border dark:bg-gh-subtle/60">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white">New User</h2>
+            </div>
+            <div className="bg-slate-100 p-5 dark:bg-gh-inset">
             <label className="mb-3 block">
               <span className={labelClass}>Username</span>
               <input
@@ -382,6 +385,7 @@ export function UsersPage(): JSX.Element {
             <Button type="submit" disabled={creating}>
               {creating ? 'Creating…' : 'Create User'}
             </Button>
+            </div>
           </form>
         </Card>
       )}
@@ -394,7 +398,7 @@ export function UsersPage(): JSX.Element {
         <Card className="overflow-x-auto">
           <table className="w-full min-w-[36rem] text-sm">
             <thead>
-              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-gh-border dark:text-gh-muted">
+              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-gh-border dark:bg-gh-subtle/60 dark:text-gh-muted">
                 <th className="px-4 py-3 font-medium">Username</th>
                 <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Phone</th>
@@ -404,14 +408,14 @@ export function UsersPage(): JSX.Element {
                 <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="bg-slate-100 dark:bg-gh-inset">
               {users.map((u) => {
                 const isSelf = currentUser?.id === u.id;
                 const isSysAdminRow = u.role === 'SYS_ADMIN';
                 const viewerIsSysAdmin = currentUser?.role === 'SYS_ADMIN';
                 const canManageRow = viewerIsSysAdmin || !isSysAdminRow;
                 return (
-                  <tr key={u.id} className="border-b border-slate-100 last:border-0 dark:border-gh-border/60">
+                  <tr key={u.id} className="border-b border-slate-200 last:border-0 dark:border-gh-border">
                     <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">
                       {u.username}
                       {isSelf && <span className="ml-2 text-xs font-normal text-slate-400">(you)</span>}
@@ -474,10 +478,13 @@ export function UsersPage(): JSX.Element {
       )}
 
       {editingUser && (
-        <Card className="mt-6 max-w-md animate-fade-in p-5">
-          <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
-            Edit &quot;{editingUser.username}&quot;
-          </h2>
+        <Card className="mt-6 max-w-md animate-fade-in overflow-hidden">
+          <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-gh-border dark:bg-gh-subtle/60">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+              Edit &quot;{editingUser.username}&quot;
+            </h2>
+          </div>
+          <div className="bg-slate-100 p-5 dark:bg-gh-inset">
 
           <label className="mb-3 block">
             <span className={labelClass}>Username</span>
@@ -575,6 +582,7 @@ export function UsersPage(): JSX.Element {
             <Button variant="secondary" onClick={() => setEditingUser(null)}>
               Cancel
             </Button>
+          </div>
           </div>
         </Card>
       )}
