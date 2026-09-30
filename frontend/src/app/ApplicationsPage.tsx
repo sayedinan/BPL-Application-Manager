@@ -367,7 +367,8 @@ export function ApplicationsPage(): JSX.Element {
         </Modal>
       )}
 
-      (loading ? (
+      {!formOpen && (
+        loading ? (
         <p className="text-sm text-slate-500 dark:text-gh-muted">Loading…</p>
       ) : apps.length === 0 ? (
         <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">
