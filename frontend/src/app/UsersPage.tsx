@@ -661,19 +661,45 @@ export function UsersPage(): JSX.Element {
               {applications.length === 0 ? (
                 <p className="text-xs text-slate-500 dark:text-gh-muted">No applications available.</p>
               ) : (
-                <div className="space-y-1.5">
-                  {applications.map((app) => (
-                    <label key={app.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-gh-fgSoft">
-                      <input
-                        type="checkbox"
-                        checked={editAssignedIds.includes(app.id)}
-                        onChange={() => toggleAssigned(app.id)}
-                        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-gh-border"
-                      />
-                      {app.name}
-                    </label>
-                  ))}
-                </div>
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    {applications.map((app) => {
+                      const selected = editAssignedIds.includes(app.id);
+                      return (
+                        <button
+                          key={app.id}
+                          type="button"
+                          role="checkbox"
+                          aria-checked={selected}
+                          onClick={() => toggleAssigned(app.id)}
+                          className={[
+                            'inline-flex items-center rounded-full border px-4 py-1.5 text-sm font-medium',
+                            'transition-all duration-200 ease-out active:scale-95 motion-reduce:transition-none',
+                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gh-inset',
+                            selected
+                              ? 'scale-105 border-brand-500 bg-brand-600 text-white shadow-[0_0_0_3px_rgba(31,139,250,0.25),0_0_14px_rgba(31,139,250,0.55)]'
+                              : 'border-slate-300 bg-white text-slate-700 hover:border-brand-500 hover:text-brand-600 dark:border-gh-border dark:bg-surface-darkSubtle dark:text-gh-fgSoft dark:hover:border-brand-500 dark:hover:text-white',
+                          ].join(' ')}
+                        >
+                          <span
+                            className={[
+                              'inline-flex items-center overflow-hidden transition-all duration-200 motion-reduce:transition-none',
+                              selected ? 'mr-1.5 w-4 opacity-100' : 'mr-0 w-0 opacity-0',
+                            ].join(' ')}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M5 12l5 5L20 7" />
+                            </svg>
+                          </span>
+                          {app.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500 dark:text-gh-muted">
+                    Click an application to assign it, click again to remove it.
+                  </p>
+                </>
               )}
             </fieldset>
           )}
