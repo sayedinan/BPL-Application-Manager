@@ -16,6 +16,7 @@ import { api } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { Logo } from '@/components/ui/Logo';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { UserMenu } from '@/components/ui/UserMenu';
 
 const queryClient = new QueryClient();
 
@@ -106,17 +107,7 @@ function NavBar() {
 
       <div className="ml-auto flex flex-wrap items-center gap-1 sm:gap-3">
         <ThemeToggle />
-        <div className="hidden text-right sm:block">
-          <p className="text-sm font-medium leading-tight text-slate-900 dark:text-white">{user.username}</p>
-          <p className="text-xs leading-tight text-slate-500 dark:text-gh-muted">{user.role}</p>
-        </div>
-        <NavLink href="/change-password">Change password</NavLink>
-        <button
-          onClick={handleLogout}
-          className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-theme dark:text-gh-fgSoft dark:hover:bg-gh-hover dark:hover:text-white"
-        >
-          Log out
-        </button>
+        <UserMenu username={user.username} role={user.role} onLogout={handleLogout} />
       </div>
     </nav>
   );
