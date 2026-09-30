@@ -251,64 +251,68 @@ export function DashboardPlaceholder(): JSX.Element {
             const stats = statsCache[app.id];
 
             return (
-              <Card key={app.id} className="p-4">
-                <div className="mb-2 flex items-center justify-between gap-2">
+              <Card key={app.id} className="overflow-hidden">
+                {/* Header strip: same look as the Logs dropdown bar */}
+                <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-gh-border dark:bg-gh-subtle/60">
                   <span className="truncate font-semibold text-slate-900 dark:text-white">{app.name}</span>
                   <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>
                 </div>
 
-                {app.startedAt && (
-                  <p className="text-xs text-slate-500 dark:text-gh-muted">
-                    Started: {new Date(app.startedAt).toLocaleString()}
-                  </p>
-                )}
-                {runningTime && (
-                  <p className="mb-2 text-xs text-slate-500 dark:text-gh-muted">Running for {runningTime}</p>
-                )}
-
-                <div className="mt-3 flex items-center gap-2">
-                  {isPending ? (
-                    <Button size="sm" variant="secondary" disabled className="w-full">
-                      {pendingAction === 'start' ? 'Starting…' : 'Stopping…'}
-                    </Button>
-                  ) : app.online ? (
-                    <Button size="sm" variant="danger" onClick={() => handleStartStop(app, 'stop')} className="w-full">
-                      Stop
-                    </Button>
-                  ) : (
-                    <Button size="sm" variant="primary" onClick={() => handleStartStop(app, 'start')} className="w-full">
-                      Start
-                    </Button>
+                {/* Inset body: same fill as the log text area */}
+                <div className="bg-slate-100 p-4 transition-theme dark:bg-gh-inset">
+                  {app.startedAt && (
+                    <p className="text-xs text-slate-500 dark:text-gh-muted">
+                      Started: {new Date(app.startedAt).toLocaleString()}
+                    </p>
                   )}
-                </div>
+                  {runningTime && (
+                    <p className="mb-2 text-xs text-slate-500 dark:text-gh-muted">Running for {runningTime}</p>
+                  )}
 
-                <button
-                  type="button"
-                  onClick={() => toggleDetails(app.id)}
-                  className="mt-2 w-full text-center text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-gh-muted dark:hover:text-gh-fg"
-                >
-                  {isExpanded ? 'Hide details ▲' : 'Details ▼'}
-                </button>
-
-                {isExpanded && (
-                  <div className="mt-2 space-y-1 rounded-md bg-slate-50 p-3 text-xs text-slate-600 dark:bg-gh-hover/50 dark:text-gh-fgSoft">
-                    {statsLoading === app.id && !stats ? (
-                      <p>Loading stats…</p>
-                    ) : stats ? (
-                      <>
-                        <p>Added: {new Date(stats.createdAt).toLocaleDateString()} (since added to BPL admin)</p>
-                        <p>Total uptime: {formatDuration(stats.totalUptimeSeconds)}</p>
-                        <p>Total downtime: {formatDuration(stats.totalDowntimeSeconds)}</p>
-                        <p>Last ran: {stats.lastRanAt ? new Date(stats.lastRanAt).toLocaleString() : 'Never'}</p>
-                        <p>{stats.currentlyOnline ? 'Online since' : 'Offline since'}: {formatWhen(stats.currentStreakStartedAt)}</p>
-                        <p>Last went online: {formatWhen(stats.lastWentOnlineAt)}</p>
-                        <p>Last went offline: {formatWhen(stats.lastWentOfflineAt)}</p>
-                      </>
+                  <div className="mt-3 flex items-center gap-2">
+                    {isPending ? (
+                      <Button size="sm" variant="secondary" disabled className="w-full">
+                        {pendingAction === 'start' ? 'Starting…' : 'Stopping…'}
+                      </Button>
+                    ) : app.online ? (
+                      <Button size="sm" variant="danger" onClick={() => handleStartStop(app, 'stop')} className="w-full">
+                        Stop
+                      </Button>
                     ) : (
-                      <p>Couldn't load stats.</p>
+                      <Button size="sm" variant="primary" onClick={() => handleStartStop(app, 'start')} className="w-full">
+                        Start
+                      </Button>
                     )}
                   </div>
-                )}
+
+                  <button
+                    type="button"
+                    onClick={() => toggleDetails(app.id)}
+                    className="mt-2 w-full text-center text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-gh-muted dark:hover:text-gh-fg"
+                  >
+                    {isExpanded ? 'Hide details ▲' : 'Details ▼'}
+                  </button>
+
+                  {isExpanded && (
+                    <div className="mt-2 space-y-1 rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-600 dark:border-gh-border dark:bg-gh-subtle dark:text-gh-fgSoft">
+                      {statsLoading === app.id && !stats ? (
+                        <p>Loading stats…</p>
+                      ) : stats ? (
+                        <>
+                          <p>Added: {new Date(stats.createdAt).toLocaleDateString()} (since added to BPL admin)</p>
+                          <p>Total uptime: {formatDuration(stats.totalUptimeSeconds)}</p>
+                          <p>Total downtime: {formatDuration(stats.totalDowntimeSeconds)}</p>
+                          <p>Last ran: {stats.lastRanAt ? new Date(stats.lastRanAt).toLocaleString() : 'Never'}</p>
+                          <p>{stats.currentlyOnline ? 'Online since' : 'Offline since'}: {formatWhen(stats.currentStreakStartedAt)}</p>
+                          <p>Last went online: {formatWhen(stats.lastWentOnlineAt)}</p>
+                          <p>Last went offline: {formatWhen(stats.lastWentOfflineAt)}</p>
+                        </>
+                      ) : (
+                        <p>Couldn't load stats.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </Card>
             );
           })}
