@@ -5,6 +5,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Card, PageHeader } from '@/components/ui/Card';
+import { Modal } from '@/components/ui/Modal';
 import { Alert } from '@/components/ui/Alert';
 
 interface User {
@@ -276,11 +277,8 @@ export function UsersPage(): JSX.Element {
         title="Users"
         description="Manage accounts, roles, and application assignments."
         actions={
-          <Button
-            variant={showForm ? 'secondary' : 'primary'}
-            onClick={() => { setShowForm((s) => !s); resetForm(); }}
-          >
-            {showForm ? 'Cancel' : '+ Add User'}
+          <Button onClick={() => { resetForm(); setShowForm(true); }}>
+            + Add User
           </Button>
         }
       />
@@ -310,7 +308,7 @@ export function UsersPage(): JSX.Element {
       )}
 
       {showForm && (
-        <Card className="mb-6 max-w-md animate-fade-in overflow-hidden">
+        <Modal onClose={() => { setShowForm(false); resetForm(); }}>
           <form onSubmit={handleCreate} noValidate>
             <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-gh-border dark:bg-gh-subtle/60">
               <h2 className="text-base font-semibold text-slate-900 dark:text-white">New User</h2>
@@ -387,7 +385,7 @@ export function UsersPage(): JSX.Element {
             </Button>
             </div>
           </form>
-        </Card>
+        </Modal>
       )}
 
       {loading ? (
@@ -477,7 +475,7 @@ export function UsersPage(): JSX.Element {
       )}
 
       {editingUser && (
-        <Card className="mt-6 max-w-md animate-fade-in overflow-hidden">
+        <Modal onClose={() => setEditingUser(null)}>
           <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-gh-border dark:bg-gh-subtle/60">
             <h2 className="text-base font-semibold text-slate-900 dark:text-white">
               Edit &quot;{editingUser.username}&quot;
@@ -583,7 +581,7 @@ export function UsersPage(): JSX.Element {
             </Button>
           </div>
           </div>
-        </Card>
+        </Modal>
       )}
     </div>
   );

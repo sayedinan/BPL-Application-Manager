@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Card, PageHeader } from '@/components/ui/Card';
 import { Alert } from '@/components/ui/Alert';
+import { Modal } from '@/components/ui/Modal';
 
 interface ApplicationSummary {
   id: number;
@@ -221,11 +222,8 @@ export function ApplicationsPage(): JSX.Element {
         title="Applications"
         description="SSH-backed order applications — create, edit, and monitor."
         actions={
-          <Button
-            variant={showForm ? 'secondary' : 'primary'}
-            onClick={() => { if (editingId !== null) cancelEdit(); setShowForm((s) => !s); }}
-          >
-            {showForm ? 'Cancel' : '+ Add Application'}
+          <Button onClick={() => { if (editingId !== null) cancelEdit(); setShowForm(true); }}>
+            + Add Application
           </Button>
         }
       />
@@ -233,7 +231,10 @@ export function ApplicationsPage(): JSX.Element {
       {listError && <Alert className="mb-4">{listError}</Alert>}
 
       {formOpen && (
-        <Card className="mb-6 max-w-xl animate-fade-in overflow-hidden">
+        <Modal
+          widthClass="max-w-xl"
+          onClose={() => { if (editingId !== null) cancelEdit(); else setShowForm(false); }}
+        >
           <form onSubmit={editingId !== null ? handleUpdate : handleCreate} noValidate>
             <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-gh-border dark:bg-gh-subtle/60">
               <h2 className="text-base font-semibold text-slate-900 dark:text-white">
@@ -363,14 +364,13 @@ export function ApplicationsPage(): JSX.Element {
             </div>
             </div>
           </form>
-        </Card>
+        </Modal>
       )}
 
-      {!showForm && editingId === null && (
-        loading ? (
-          <p className="text-sm text-slate-500 dark:text-gh-muted">Loading…</p>
-        ) : apps.length === 0 ? (
-          <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">
+      (loading ? (
+        <p className="text-sm text-slate-500 dark:text-gh-muted">Loading…</p>
+      ) : apps.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">
             No applications yet. Add one above.
           </Card>
         ) : (
