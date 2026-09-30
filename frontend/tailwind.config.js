@@ -5,6 +5,21 @@ export default {
   theme: {
     extend: {
       colors: {
+        // GitHub (Primer) light neutrals. Overrides Tailwind's default slate,
+        // so every existing slate-* class in light mode becomes GitHub gray.
+        slate: {
+          50: '#f6f8fa',
+          100: '#eaeef2',
+          200: '#d0d7de',
+          300: '#afb8c1',
+          400: '#8c959f',
+          500: '#6e7781',
+          600: '#57606a',
+          700: '#424a53',
+          800: '#32383f',
+          900: '#1f2328',
+          950: '#0d1117',
+        },
         // Brand palette pulled from the BPL logo (navy hexagon + cyan power ring).
         brand: {
           50: '#eef6ff',
@@ -21,7 +36,7 @@ export default {
         },
         surface: {
           light: '#ffffff',
-          subtle: '#f6f8fb',
+          subtle: '#ffffff',
           dark: '#0d1117',
           darkSubtle: '#161b22',
         },
