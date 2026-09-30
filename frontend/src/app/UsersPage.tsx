@@ -673,24 +673,13 @@ export function UsersPage(): JSX.Element {
                           aria-checked={selected}
                           onClick={() => toggleAssigned(app.id)}
                           className={[
-                            'inline-flex items-center rounded-full border px-4 py-1.5 text-sm font-medium',
-                            'transition-all duration-200 ease-out active:scale-95 motion-reduce:transition-none',
-                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gh-inset',
+                            'rounded-full border px-3.5 py-1 text-sm transition-colors duration-150',
+                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
                             selected
-                              ? 'scale-105 border-brand-500 bg-brand-600 text-white shadow-[0_0_0_3px_rgba(31,139,250,0.25),0_0_14px_rgba(31,139,250,0.55)]'
-                              : 'border-slate-300 bg-white text-slate-700 hover:border-brand-500 hover:text-brand-600 dark:border-gh-border dark:bg-surface-darkSubtle dark:text-gh-fgSoft dark:hover:border-brand-500 dark:hover:text-white',
+                              ? 'border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-500/40 dark:bg-brand-500/15 dark:text-brand-300'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-gh-border dark:bg-surface-darkSubtle dark:text-gh-muted dark:hover:bg-gh-hover',
                           ].join(' ')}
                         >
-                          <span
-                            className={[
-                              'inline-flex items-center overflow-hidden transition-all duration-200 motion-reduce:transition-none',
-                              selected ? 'mr-1.5 w-4 opacity-100' : 'mr-0 w-0 opacity-0',
-                            ].join(' ')}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <path d="M5 12l5 5L20 7" />
-                            </svg>
-                          </span>
                           {app.name}
                         </button>
                       );
