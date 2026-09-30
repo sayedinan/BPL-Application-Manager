@@ -58,6 +58,28 @@ function describeApiError(err: unknown, fallback: string): string {
   return err.message;
 }
 
+// Turns a server error into { fieldName: message } so each message can be
+// shown right under its input. Returns null if nothing maps to a field.
+function fieldErrorsFrom(err: unknown): Record<string, string> | null {
+  if (!(err instanceof ApiError)) return null;
+  if (err.code === 'DUPLICATE_NAME') return { username: 'This username is already taken.' };
+  const d = err.details;
+  if (!d || typeof d !== 'object') return null;
+  const labels: Record<string, string> = {
+    fullName: 'Full name',
+    username: 'Username',
+    email: 'Email',
+    phoneNumber: 'Phone number',
+  };
+  const out: Record<string, string> = {};
+  for (const [field, msg] of Object.entries(d as Record<string, unknown>)) {
+    if (!labels[field]) continue;
+    const text = String(msg);
+    out[field] = /blank|null|empty/i.test(text) ? `${labels[field]} is required.` : text;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
   return (
     <div className="flex items-start justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
@@ -91,6 +113,7 @@ export function UsersPage(): JSX.Element {
   const [editPhoneDigits, setEditPhoneDigits] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
 
   const [showForm, setShowForm] = useState(false);
   const [newUsername, setNewUsername] = useState('');
@@ -180,6 +203,7 @@ export function UsersPage(): JSX.Element {
     setEditRole(u.role);
     setEditAssignedIds(u.assignedApplicationIds ?? []);
     setEditError(null);
+    setEditErrors({});
   }
 
   function toggleAssigned(appId: number) {
@@ -190,35 +214,21 @@ export function UsersPage(): JSX.Element {
 
   async function handleSaveEdit() {
     if (!editingUser) return;
-    if (!editUsername.trim()) {
-      setEditError('Username cannot be blank.');
-      return;
-    }
-    if (!editFullName.trim()) {
-      setEditError('Full name cannot be blank.');
-      return;
-    }
-    if (!editEmail.trim()) {
-      setEditError('Email cannot be blank.');
-      return;
-    }
-    if (!EMAIL_REGEX.test(editEmail.trim())) {
-      setEditError('Enter a valid email address.');
-      return;
-    }
-    // Phone number is genuinely optional (unlike email) — blank digits
-    // means "clear it" (sent as empty string, per UpdateUserRequest's
-    // tri-state: empty clears, omitted/undefined leaves alone, we
-    // always send a value here since the field is always rendered).
-    // A non-blank value must be exactly 9 digits, matching the 13-char
-    // total the backend's @Pattern expects once "8801" is prepended.
+    const errs: Record<string, string> = {};
+    if (!editFullName.trim()) errs.fullName = 'Full name is required.';
+    if (!editUsername.trim()) errs.username = 'Username is required.';
+    if (!editEmail.trim()) errs.email = 'Email is required.';
+    else if (!EMAIL_REGEX.test(editEmail.trim())) errs.email = 'Enter a valid email address.';
     const trimmedDigits = editPhoneDigits.trim();
     if (trimmedDigits && !/^\d{9}$/.test(trimmedDigits)) {
-      setEditError('Phone number must be exactly 9 digits after 8801.');
-      return;
+      errs.phoneNumber = 'Phone number must be exactly 9 digits after 8801.';
     }
+    setEditErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+
     setSavingEdit(true);
     setEditError(null);
+    setEditErrors({});
     try {
       await api.put(API.USERS.UPDATE(editingUser.id), {
         username: editUsername.trim(),
@@ -231,7 +241,9 @@ export function UsersPage(): JSX.Element {
       setEditingUser(null);
       await loadUsers();
     } catch (err) {
-      setEditError(describeApiError(err, 'Failed to update user.'));
+      const fe = fieldErrorsFrom(err);
+      if (fe) setEditErrors(fe);
+      else setEditError(describeApiError(err, 'Failed to update user.'));
     } finally {
       setSavingEdit(false);
     }
@@ -246,6 +258,10 @@ export function UsersPage(): JSX.Element {
     setPhoneError(null);
 
     let hasError = false;
+    if (!newFullName.trim()) {
+      setFullNameError('Full name is required.');
+      hasError = true;
+    }
     if (!newUsername.trim()) {
       setUsernameError('Username is required.');
       hasError = true;
@@ -271,6 +287,7 @@ export function UsersPage(): JSX.Element {
         path,
         {
         username: newUsername.trim(),
+        fullName: newFullName.trim(),
         role: newRole,
         email: newEmail.trim(),
         phoneNumber: `8801${trimmedDigits}`,
@@ -282,7 +299,15 @@ export function UsersPage(): JSX.Element {
       setShowForm(false);
       await loadUsers();
     } catch (err) {
-      setFormError(describeApiError(err, 'Failed to create user.'));
+      const fe = fieldErrorsFrom(err);
+      if (fe) {
+        if (fe.fullName) setFullNameError(fe.fullName);
+        if (fe.username) setUsernameError(fe.username);
+        if (fe.email) setEmailError(fe.email);
+        if (fe.phoneNumber) setPhoneError(fe.phoneNumber);
+      } else {
+        setFormError(describeApiError(err, 'Failed to create user.'));
+      }
     } finally {
       setCreating(false);
     }
@@ -608,6 +633,7 @@ export function UsersPage(): JSX.Element {
               className={inputClass}
               required
             />
+            {editErrors.fullName && <span className="mt-1 block text-xs text-red-500">{editErrors.fullName}</span>}
           </label>
           <label className="mb-3 block">
             <span className={labelClass}>Username</span>
@@ -617,6 +643,7 @@ export function UsersPage(): JSX.Element {
               className={inputClass}
               required
             />
+            {editErrors.username && <span className="mt-1 block text-xs text-red-500">{editErrors.username}</span>}
           </label>
 
           <label className="mb-3 block">
@@ -628,6 +655,7 @@ export function UsersPage(): JSX.Element {
               className={inputClass}
               required
             />
+            {editErrors.email && <span className="mt-1 block text-xs text-red-500">{editErrors.email}</span>}
           </label>
 
           <label className="mb-3 block">
@@ -646,6 +674,7 @@ export function UsersPage(): JSX.Element {
                 className={inputClass}
               />
             </div>
+            {editErrors.phoneNumber && <span className="mt-1 block text-xs text-red-500">{editErrors.phoneNumber}</span>}
           </label>
 
           <label className="mb-4 block">

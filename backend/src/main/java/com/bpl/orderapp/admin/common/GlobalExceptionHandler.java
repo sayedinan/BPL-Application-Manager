@@ -90,6 +90,18 @@ public class GlobalExceptionHandler {
             .body(pd);
     }
 
+    @ExceptionHandler(DuplicateNameException.class)
+    public ResponseEntity<ProblemDetail> handleDuplicateName(DuplicateNameException ex) {
+        ProblemDetail pd = baseProblem(
+            ErrorCode.DUPLICATE_NAME,
+            HttpStatus.CONFLICT,
+            ex.getMessage()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(pd);
+    }
+
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ProblemDetail> handleNotFound(NotFoundException ex) {
         // 404 with a generic message. Used for "user not found"
