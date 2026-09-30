@@ -10,10 +10,10 @@ export function Card({
     <div
       className={[
         'rounded-xl border bg-white shadow-card transition-theme',
-        'dark:bg-surface-darkSubtle dark:border-slate-800',
+        'dark:bg-surface-darkSubtle dark:border-gh-border',
         selected
           ? 'border-brand-500 ring-1 ring-brand-500'
-          : 'border-slate-200 dark:border-slate-800',
+          : 'border-slate-200 dark:border-gh-border',
         interactive ? 'cursor-pointer hover:shadow-card-hover hover:-translate-y-0.5' : '',
         className,
       ].join(' ')}
@@ -36,7 +36,7 @@ export function PageHeader({
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{title}</h1>
         {description && (
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-gh-muted">{description}</p>
         )}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}

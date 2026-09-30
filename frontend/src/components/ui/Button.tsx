@@ -13,12 +13,12 @@ const VARIANT_CLASSES: Record<Variant, string> = {
     'bg-brand-600 text-white hover:bg-brand-700 focus-visible:ring-brand-500 disabled:bg-brand-600/50',
   secondary:
     'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 focus-visible:ring-brand-500 ' +
-    'dark:bg-surface-darkSubtle dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-800',
+    'dark:bg-surface-darkSubtle dark:text-gh-fg dark:border-gh-border dark:hover:bg-gh-hover',
   danger:
     'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500 disabled:bg-red-600/50',
   ghost:
     'bg-transparent text-slate-600 hover:bg-slate-100 focus-visible:ring-brand-500 ' +
-    'dark:text-slate-300 dark:hover:bg-slate-800',
+    'dark:text-gh-fgSoft dark:hover:bg-gh-hover',
 };
 
 const SIZE_CLASSES: Record<Size, string> = {

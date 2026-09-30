@@ -22,8 +22,19 @@ export default {
         surface: {
           light: '#ffffff',
           subtle: '#f6f8fb',
-          dark: '#0f1720',
-          darkSubtle: '#161f2c',
+          dark: '#0d1117',
+          darkSubtle: '#161b22',
+        },
+        // GitHub (Primer) dark palette - neutral, no blue tint
+        gh: {
+          inset: '#010409',
+          subtle: '#161b22',
+          hover: '#21262d',
+          border: '#30363d',
+          fg: '#e6edf3',
+          fgSoft: '#c9d1d9',
+          muted: '#8d96a0',
+          subtle2: '#6e7681',
         },
         status: {
           online: '#16a34a',

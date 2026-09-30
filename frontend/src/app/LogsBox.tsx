@@ -166,18 +166,18 @@ export function LogsBox({ role }: { role?: string }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900/60">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-gh-border dark:bg-gh-subtle/60">
         <select
           value={selectValue}
           onChange={(e) => handleSelectChange(e.target.value)}
-          className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-theme focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-surface-dark dark:text-slate-200"
+          className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-theme focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gh-border dark:bg-surface-dark dark:text-gh-fg"
         >
           {canViewAudit && <option value="audit">Audit Log</option>}
           {apps.map((app) => (
             <option key={app.id} value={`app-${app.id}`}>{app.name} — Application Log</option>
           ))}
         </select>
-        <span className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+        <span className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-gh-subtle2">
           <span className={`h-1.5 w-1.5 rounded-full ${showBanner ? 'bg-red-500' : 'bg-status-online animate-pulse-soft'}`} />
           {showBanner ? 'Disconnected' : 'Live'}
         </span>
@@ -193,7 +193,7 @@ export function LogsBox({ role }: { role?: string }) {
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="h-96 overflow-y-auto bg-slate-100 px-4 py-3 font-mono text-xs leading-relaxed text-slate-800 transition-theme dark:bg-slate-950 dark:text-slate-300"
+          className="h-96 overflow-y-auto bg-slate-100 px-4 py-3 font-mono text-xs leading-relaxed text-slate-800 transition-theme dark:bg-gh-inset dark:text-gh-fgSoft"
         >
           <pre className="whitespace-pre-wrap break-all">{lines.length > 0 ? lines.join('\n') : 'No log lines yet…'}</pre>
         </div>

@@ -29,7 +29,7 @@ function ForbiddenPage() {
         </svg>
       </div>
       <h1 className="text-xl font-bold text-slate-900 dark:text-white">403 — Access Denied</h1>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">You don't have access to this page.</p>
+      <p className="mt-1 text-sm text-slate-500 dark:text-gh-muted">You don't have access to this page.</p>
     </div>
   );
 }
@@ -38,7 +38,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const { status } = useAuth();
   if (status === 'unknown') {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+      <div className="flex min-h-[70vh] items-center justify-center text-sm text-slate-500 dark:text-gh-muted">
         Loading…
       </div>
     );
@@ -66,7 +66,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
         'whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-theme',
         active
           ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300'
-          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white',
+          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-gh-fgSoft dark:hover:bg-gh-hover dark:hover:text-white',
       ].join(' ')}
     >
       {children}
@@ -91,7 +91,7 @@ function NavBar() {
   }
 
   return (
-    <nav className="sticky top-0 z-20 flex flex-wrap items-center gap-x-1 gap-y-1 border-b border-slate-200 bg-white/80 px-3 py-2 sm:px-6 sm:py-3 backdrop-blur transition-theme dark:border-slate-800 dark:bg-surface-dark/80">
+    <nav className="sticky top-0 z-20 flex flex-wrap items-center gap-x-1 gap-y-1 border-b border-slate-200 bg-white/80 px-3 py-2 sm:px-6 sm:py-3 backdrop-blur transition-theme dark:border-gh-border dark:bg-gh-inset/80">
       <a href="/" className="mr-4 flex items-center gap-2">
         <Logo className="h-8 w-8" />
         <span className="hidden text-sm font-bold tracking-tight text-slate-900 sm:inline dark:text-white">
@@ -108,12 +108,12 @@ function NavBar() {
         <ThemeToggle />
         <div className="hidden text-right sm:block">
           <p className="text-sm font-medium leading-tight text-slate-900 dark:text-white">{user.username}</p>
-          <p className="text-xs leading-tight text-slate-500 dark:text-slate-400">{user.role}</p>
+          <p className="text-xs leading-tight text-slate-500 dark:text-gh-muted">{user.role}</p>
         </div>
         <NavLink href="/change-password">Change password</NavLink>
         <button
           onClick={handleLogout}
-          className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-theme dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+          className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-theme dark:text-gh-fgSoft dark:hover:bg-gh-hover dark:hover:text-white"
         >
           Log out
         </button>

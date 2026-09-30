@@ -27,8 +27,8 @@ interface Application {
 const inputClass =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 ' +
   'placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
-  'dark:border-slate-700 dark:bg-surface-dark dark:text-slate-100';
-const labelClass = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300';
+  'dark:border-gh-border dark:bg-surface-dark dark:text-gh-fg';
+const labelClass = 'mb-1 block text-sm font-medium text-slate-700 dark:text-gh-fgSoft';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function roleTone(role: User['role']): BadgeTone {
@@ -292,10 +292,10 @@ export function UsersPage(): JSX.Element {
           <p className="mb-1 font-semibold text-status-online dark:text-green-400">
             User &quot;{createdResult.username}&quot; created.
           </p>
-          <p className="mb-2 text-sm text-slate-600 dark:text-slate-300">
+          <p className="mb-2 text-sm text-slate-600 dark:text-gh-fgSoft">
             Temporary password (shown once — deliver this out-of-band; it cannot be retrieved again):
           </p>
-          <code className="block break-all rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-sm dark:border-slate-700 dark:bg-surface-dark dark:text-slate-100">
+          <code className="block break-all rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-sm dark:border-gh-border dark:bg-surface-dark dark:text-gh-fg">
             {createdResult.temporaryPassword}
           </code>
           <div className="mt-3 flex gap-2">
@@ -342,7 +342,7 @@ export function UsersPage(): JSX.Element {
             <label className="mb-3 block">
               <span className={labelClass}>Phone number</span>
               <div className="flex items-center gap-2">
-                <span className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                <span className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-gh-border dark:bg-gh-hover dark:text-gh-muted">
                   8801
                 </span>
                 <input
@@ -373,7 +373,7 @@ export function UsersPage(): JSX.Element {
                 {canCreateAdmin && <option value="SYS_ADMIN">Sys.Admin</option>}
               </select>
               {!canCreateAdmin && (
-                <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                <span className="mt-1 block text-xs text-slate-500 dark:text-gh-muted">
                   Only Sys.Admin can create Admin accounts.
                 </span>
               )}
@@ -387,14 +387,14 @@ export function UsersPage(): JSX.Element {
       )}
 
       {loading ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
+        <p className="text-sm text-slate-500 dark:text-gh-muted">Loading…</p>
       ) : users.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">No users yet.</Card>
+        <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">No users yet.</Card>
       ) : (
         <Card className="overflow-x-auto">
           <table className="w-full min-w-[36rem] text-sm">
             <thead>
-              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">
+              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-gh-border dark:text-gh-muted">
                 <th className="px-4 py-3 font-medium">Username</th>
                 <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Phone</th>
@@ -411,15 +411,15 @@ export function UsersPage(): JSX.Element {
                 const viewerIsSysAdmin = currentUser?.role === 'SYS_ADMIN';
                 const canManageRow = viewerIsSysAdmin || !isSysAdminRow;
                 return (
-                  <tr key={u.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
+                  <tr key={u.id} className="border-b border-slate-100 last:border-0 dark:border-gh-border/60">
                     <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">
                       {u.username}
                       {isSelf && <span className="ml-2 text-xs font-normal text-slate-400">(you)</span>}
                     </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                    <td className="px-4 py-3 text-slate-600 dark:text-gh-fgSoft">
                       {u.email ?? <span className="text-slate-400 italic">none</span>}
                     </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                    <td className="px-4 py-3 text-slate-600 dark:text-gh-fgSoft">
                       {u.phone_number ? (
                         <span className="font-mono text-xs">{u.phone_number}</span>
                       ) : (
@@ -439,7 +439,7 @@ export function UsersPage(): JSX.Element {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
+                    <td className="px-4 py-3 text-slate-500 dark:text-gh-muted">
                       {new Date(u.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3">
@@ -503,7 +503,7 @@ export function UsersPage(): JSX.Element {
           <label className="mb-3 block">
             <span className={labelClass}>Phone number (optional — for SMS alerts)</span>
             <div className="flex items-center gap-2">
-              <span className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+              <span className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-gh-border dark:bg-gh-hover dark:text-gh-muted">
                 8801
               </span>
               <input
@@ -531,7 +531,7 @@ export function UsersPage(): JSX.Element {
               {canCreateAdmin && <option value="SYS_ADMIN">Sys.Admin</option>}
             </select>
             {!canCreateAdmin && (
-              <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+              <span className="mt-1 block text-xs text-slate-500 dark:text-gh-muted">
                 Only Sys.Admin can change roles to/from Admin or Sys.Admin.
               </span>
             )}
@@ -541,16 +541,16 @@ export function UsersPage(): JSX.Element {
             <fieldset className="mb-4">
               <legend className={labelClass}>Assigned Applications</legend>
               {applications.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">No applications available.</p>
+                <p className="text-xs text-slate-500 dark:text-gh-muted">No applications available.</p>
               ) : (
                 <div className="space-y-1.5">
                   {applications.map((app) => (
-                    <label key={app.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                    <label key={app.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-gh-fgSoft">
                       <input
                         type="checkbox"
                         checked={editAssignedIds.includes(app.id)}
                         onChange={() => toggleAssigned(app.id)}
-                        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600"
+                        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-gh-border"
                       />
                       {app.name}
                     </label>
@@ -561,7 +561,7 @@ export function UsersPage(): JSX.Element {
           )}
 
           {editRole !== 'USER' && (
-            <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+            <p className="mb-4 text-xs text-slate-500 dark:text-gh-muted">
               Admin and Sys.Admin see all applications — no assignment needed.
             </p>
           )}

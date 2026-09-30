@@ -6,7 +6,7 @@ const TONE_CLASSES: Record<BadgeTone, string> = {
   online:
     'bg-status-onlineBg text-status-online dark:bg-green-500/10 dark:text-green-400',
   offline:
-    'bg-status-offlineBg text-status-offline dark:bg-slate-500/10 dark:text-slate-400',
+    'bg-status-offlineBg text-status-offline dark:bg-slate-500/10 dark:text-gh-muted',
   pending:
     'bg-status-pendingBg text-status-pending dark:bg-amber-500/10 dark:text-amber-400 animate-pulse-soft',
   error:

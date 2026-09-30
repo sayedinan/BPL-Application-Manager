@@ -44,8 +44,8 @@ const EMPTY_FORM: FormState = {
 const inputClass =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 ' +
   'placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
-  'dark:border-slate-700 dark:bg-surface-dark dark:text-slate-100';
-const labelClass = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300';
+  'dark:border-gh-border dark:bg-surface-dark dark:text-gh-fg';
+const labelClass = 'mb-1 block text-sm font-medium text-slate-700 dark:text-gh-fgSoft';
 
 export function ApplicationsPage(): JSX.Element {
   const [apps, setApps] = useState<ApplicationSummary[]>([]);
@@ -266,7 +266,7 @@ export function ApplicationsPage(): JSX.Element {
                 value={form.sshHostKeyFingerprint}
                 readOnly
                 placeholder="Captured after a successful Test Connection"
-                className={`${inputClass} cursor-default bg-slate-50 font-mono text-xs dark:bg-slate-800/50`}
+                className={`${inputClass} cursor-default bg-slate-50 font-mono text-xs dark:bg-gh-hover/50`}
               />
             </label>
 
@@ -299,12 +299,12 @@ export function ApplicationsPage(): JSX.Element {
             <label className="mb-3 block">
               <span className={labelClass}>Status Script</span>
               <textarea value={form.statusScript} onChange={(e) => updateField('statusScript', e.target.value)} className={`${inputClass} font-mono`} rows={3} required />
-              <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">Exit 0 = online, non-zero = offline.</span>
+              <span className="mt-1 block text-xs text-slate-500 dark:text-gh-muted">Exit 0 = online, non-zero = offline.</span>
             </label>
 
-            <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-700">
+            <div className="mt-6 border-t border-slate-200 pt-4 dark:border-gh-border">
               <h3 className="mb-1 text-sm font-semibold text-slate-900 dark:text-white">Custom notification messages</h3>
-              <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+              <p className="mb-4 text-xs text-slate-500 dark:text-gh-muted">
                 Optional. Leave blank to use the default wording. Placeholders: <code>{'{appName}'}</code>, <code>{'{actor}'}</code>, <code>{'{role}'}</code>, <code>{'{timestamp}'}</code> ({'{actor}'}/{'{role}'} only apply to Start/Stop — external events have no logged-in actor).
               </p>
 
@@ -364,16 +364,16 @@ export function ApplicationsPage(): JSX.Element {
 
       {!showForm && editingId === null && (
         loading ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
+          <p className="text-sm text-slate-500 dark:text-gh-muted">Loading…</p>
         ) : apps.length === 0 ? (
-          <Card className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+          <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">
             No applications yet. Add one above.
           </Card>
         ) : (
           <Card className="overflow-x-auto">
             <table className="w-full min-w-[20rem] text-sm">
               <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-gh-border dark:text-gh-muted">
                   <th className="px-4 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium text-right">Actions</th>
@@ -381,7 +381,7 @@ export function ApplicationsPage(): JSX.Element {
               </thead>
               <tbody>
                 {apps.map((app) => (
-                  <tr key={app.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
+                  <tr key={app.id} className="border-b border-slate-100 last:border-0 dark:border-gh-border/60">
                     <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{app.name}</td>
                     <td className="px-4 py-3">
                       <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>

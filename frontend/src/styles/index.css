@@ -9,9 +9,13 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  html.dark {
+    color-scheme: dark;
+  }
+
   body {
     @apply bg-surface-subtle text-slate-900 antialiased;
-    @apply dark:bg-surface-dark dark:text-slate-100;
+    @apply dark:bg-surface-dark dark:text-gh-fg;
   }
 
   ::selection {
@@ -27,7 +31,7 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-slate-300 dark:bg-slate-700;
+    @apply bg-slate-300 dark:bg-gh-border;
     border-radius: 9999px;
   }
 }

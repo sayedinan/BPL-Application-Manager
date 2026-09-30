@@ -219,7 +219,7 @@ export function DashboardPlaceholder(): JSX.Element {
 
   if (loading) {
     return (
-      <div className="p-8 text-sm text-slate-500 dark:text-slate-400">Loading applications…</div>
+      <div className="p-8 text-sm text-slate-500 dark:text-gh-muted">Loading applications…</div>
     );
   }
 
@@ -237,7 +237,7 @@ export function DashboardPlaceholder(): JSX.Element {
       )}
 
       {apps.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+        <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">
           {user?.role === 'SYS_ADMIN'
             ? 'No applications yet. Add one from the Applications page.'
             : 'No applications assigned. Contact your admin.'}
@@ -258,12 +258,12 @@ export function DashboardPlaceholder(): JSX.Element {
                 </div>
 
                 {app.startedAt && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-slate-500 dark:text-gh-muted">
                     Started: {new Date(app.startedAt).toLocaleString()}
                   </p>
                 )}
                 {runningTime && (
-                  <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">Running for {runningTime}</p>
+                  <p className="mb-2 text-xs text-slate-500 dark:text-gh-muted">Running for {runningTime}</p>
                 )}
 
                 <div className="mt-3 flex items-center gap-2">
@@ -285,13 +285,13 @@ export function DashboardPlaceholder(): JSX.Element {
                 <button
                   type="button"
                   onClick={() => toggleDetails(app.id)}
-                  className="mt-2 w-full text-center text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                  className="mt-2 w-full text-center text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-gh-muted dark:hover:text-gh-fg"
                 >
                   {isExpanded ? 'Hide details ▲' : 'Details ▼'}
                 </button>
 
                 {isExpanded && (
-                  <div className="mt-2 space-y-1 rounded-md bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/50 dark:text-slate-300">
+                  <div className="mt-2 space-y-1 rounded-md bg-slate-50 p-3 text-xs text-slate-600 dark:bg-gh-hover/50 dark:text-gh-fgSoft">
                     {statsLoading === app.id && !stats ? (
                       <p>Loading stats…</p>
                     ) : stats ? (
