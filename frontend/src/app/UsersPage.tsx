@@ -7,6 +7,7 @@ import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Card, PageHeader } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { Alert } from '@/components/ui/Alert';
+import { LoadingBlock } from '@/components/ui/Spinner';
 
 interface User {
   id: number;
@@ -380,7 +381,7 @@ export function UsersPage(): JSX.Element {
               )}
             </label>
             {formError && <Alert className="mb-4">{formError}</Alert>}
-            <Button type="submit" disabled={creating}>
+            <Button type="submit" loading={creating}>
               {creating ? 'Creating…' : 'Create User'}
             </Button>
             </div>
@@ -389,7 +390,7 @@ export function UsersPage(): JSX.Element {
       )}
 
       {loading ? (
-        <p className="text-sm text-slate-500 dark:text-gh-muted">Loading…</p>
+        <LoadingBlock className="py-10" />
       ) : users.length === 0 ? (
         <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">No users yet.</Card>
       ) : (
@@ -573,7 +574,7 @@ export function UsersPage(): JSX.Element {
           {editError && <Alert className="mb-4">{editError}</Alert>}
 
           <div className="flex gap-2">
-            <Button onClick={handleSaveEdit} disabled={savingEdit}>
+            <Button onClick={handleSaveEdit} loading={savingEdit}>
               {savingEdit ? 'Saving…' : 'Save'}
             </Button>
             <Button variant="secondary" onClick={() => setEditingUser(null)}>

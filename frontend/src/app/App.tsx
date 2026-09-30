@@ -17,6 +17,7 @@ import { API } from '@/api/endpoints';
 import { Logo } from '@/components/ui/Logo';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { UserMenu } from '@/components/ui/UserMenu';
+import { LoadingBlock } from '@/components/ui/Spinner';
 
 const queryClient = new QueryClient();
 
@@ -39,9 +40,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const { status } = useAuth();
   if (status === 'unknown') {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center text-sm text-slate-500 dark:text-gh-muted">
-        Loading…
-      </div>
+      <LoadingBlock className="min-h-[70vh]" />
     );
   }
   if (status !== 'authenticated') return <Navigate to="/login" replace />;

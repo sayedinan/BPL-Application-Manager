@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Card, PageHeader } from '@/components/ui/Card';
 import { Alert } from '@/components/ui/Alert';
 import { Modal } from '@/components/ui/Modal';
+import { LoadingBlock } from '@/components/ui/Spinner';
 
 interface ApplicationSummary {
   id: number;
@@ -355,7 +356,7 @@ export function ApplicationsPage(): JSX.Element {
             {formError && <Alert className="mb-4">{formError}</Alert>}
 
             <div className="flex gap-2">
-              <Button type="submit" disabled={submitting || testStatus !== 'verified'}>
+              <Button type="submit" loading={submitting} disabled={testStatus !== 'verified'}>
                 {submitting ? (editingId !== null ? 'Saving…' : 'Creating…') : (editingId !== null ? 'Save Changes' : 'Create Application')}
               </Button>
               {editingId !== null && (
@@ -369,7 +370,7 @@ export function ApplicationsPage(): JSX.Element {
 
       {!formOpen && (
         loading ? (
-        <p className="text-sm text-slate-500 dark:text-gh-muted">Loading…</p>
+        <LoadingBlock className="py-10" />
       ) : apps.length === 0 ? (
         <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">
             No applications yet. Add one above.

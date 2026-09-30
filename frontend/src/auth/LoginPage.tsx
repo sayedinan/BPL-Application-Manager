@@ -110,7 +110,7 @@ export function LoginPage(): JSX.Element {
 
           {error && <Alert>{error}</Alert>}
 
-          <Button type="submit" disabled={submitting} className="w-full">
+          <Button type="submit" loading={submitting} className="w-full">
             {submitting ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>

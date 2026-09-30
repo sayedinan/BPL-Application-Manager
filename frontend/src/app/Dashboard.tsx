@@ -6,6 +6,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { Card, PageHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { LoadingBlock } from '@/components/ui/Spinner';
 import { Alert } from '@/components/ui/Alert';
 
 interface ApplicationSummary {
@@ -219,7 +220,7 @@ export function DashboardPlaceholder(): JSX.Element {
 
   if (loading) {
     return (
-      <div className="p-8 text-sm text-slate-500 dark:text-gh-muted">Loading applications…</div>
+      <LoadingBlock label="Loading applications…" className="p-8" />
     );
   }
 
@@ -271,7 +272,7 @@ export function DashboardPlaceholder(): JSX.Element {
 
                   <div className="mt-3 flex items-center gap-2">
                     {isPending ? (
-                      <Button size="sm" variant="secondary" disabled className="w-full">
+                      <Button size="sm" variant="secondary" loading className="w-full">
                         {pendingAction === 'start' ? 'Starting…' : 'Stopping…'}
                       </Button>
                     ) : app.online ? (
@@ -296,7 +297,7 @@ export function DashboardPlaceholder(): JSX.Element {
                   {isExpanded && (
                     <div className="mt-2 space-y-1 rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-600 dark:border-gh-border dark:bg-gh-subtle dark:text-gh-fgSoft">
                       {statsLoading === app.id && !stats ? (
-                        <p>Loading stats…</p>
+                        <LoadingBlock label="Loading stats…" className="justify-start py-1" />
                       ) : stats ? (
                         <>
                           <p>Added: {new Date(stats.createdAt).toLocaleDateString()} (since added to BPL admin)</p>
