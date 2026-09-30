@@ -233,11 +233,14 @@ export function ApplicationsPage(): JSX.Element {
       {listError && <Alert className="mb-4">{listError}</Alert>}
 
       {formOpen && (
-        <Card className="mb-6 max-w-xl animate-fade-in p-5">
+        <Card className="mb-6 max-w-xl animate-fade-in overflow-hidden">
           <form onSubmit={editingId !== null ? handleUpdate : handleCreate} noValidate>
-            <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
-              {editingId !== null ? 'Edit Application' : 'New Application'}
-            </h2>
+            <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-gh-border dark:bg-gh-subtle/60">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+                {editingId !== null ? 'Edit Application' : 'New Application'}
+              </h2>
+            </div>
+            <div className="bg-slate-100 p-5 dark:bg-gh-inset">
 
             <label className="mb-3 block">
               <span className={labelClass}>Name</span>
@@ -358,6 +361,7 @@ export function ApplicationsPage(): JSX.Element {
                 <Button type="button" variant="secondary" onClick={cancelEdit}>Cancel</Button>
               )}
             </div>
+            </div>
           </form>
         </Card>
       )}
@@ -373,15 +377,15 @@ export function ApplicationsPage(): JSX.Element {
           <Card className="overflow-x-auto">
             <table className="w-full min-w-[20rem] text-sm">
               <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-gh-border dark:text-gh-muted">
+                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-gh-border dark:bg-gh-subtle/60 dark:text-gh-muted">
                   <th className="px-4 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="bg-slate-100 dark:bg-gh-inset">
                 {apps.map((app) => (
-                  <tr key={app.id} className="border-b border-slate-100 last:border-0 dark:border-gh-border/60">
+                  <tr key={app.id} className="border-b border-slate-200 last:border-0 dark:border-gh-border">
                     <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{app.name}</td>
                     <td className="px-4 py-3">
                       <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>
