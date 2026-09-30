@@ -12,6 +12,7 @@ import { LoadingBlock } from '@/components/ui/Spinner';
 interface User {
   id: number;
   username: string;
+  full_name: string | null;
   role: 'SYS_ADMIN' | 'ADMIN' | 'USER';
   email: string | null;
   phone_number: string | null;
@@ -45,6 +46,15 @@ function roleLabel(role: User['role']): string {
   return 'User';
 }
 
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
+  return (
+    <div className="flex items-start justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+      <dt className="shrink-0 text-slate-500 dark:text-gh-muted">{label}</dt>
+      <dd className="min-w-0 break-words text-right font-medium text-slate-900 dark:text-gh-fg">{children}</dd>
+    </div>
+  );
+}
+
 export function UsersPage(): JSX.Element {
   const { user: currentUser } = useAuth();
   const canCreateAdmin = currentUser?.role === 'SYS_ADMIN';
@@ -53,10 +63,12 @@ export function UsersPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [detailsUserId, setDetailsUserId] = useState<number | null>(null);
 
   const [applications, setApplications] = useState<Application[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editUsername, setEditUsername] = useState('');
+  const [editFullName, setEditFullName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editRole, setEditRole] = useState<'USER' | 'ADMIN' | 'SYS_ADMIN'>('USER');
   const [editAssignedIds, setEditAssignedIds] = useState<number[]>([]);
@@ -70,12 +82,14 @@ export function UsersPage(): JSX.Element {
 
   const [showForm, setShowForm] = useState(false);
   const [newUsername, setNewUsername] = useState('');
+  const [newFullName, setNewFullName] = useState('');
   const [newRole, setNewRole] = useState<'USER' | 'ADMIN' | 'SYS_ADMIN'>('USER');
   const [newEmail, setNewEmail] = useState('');
   const [newPhoneDigits, setNewPhoneDigits] = useState('');
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null); // server-side / duplicate errors
   const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [fullNameError, setFullNameError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [phoneError, setPhoneError] = useState<string | null>(null);
 
@@ -132,11 +146,13 @@ export function UsersPage(): JSX.Element {
 
   function resetForm() {
     setNewUsername('');
+    setNewFullName('');
     setNewRole('USER');
     setNewEmail('');
     setNewPhoneDigits('');
     setFormError(null);
     setUsernameError(null);
+    setFullNameError(null);
     setEmailError(null);
     setPhoneError(null);
   }
@@ -144,6 +160,7 @@ export function UsersPage(): JSX.Element {
   function openEdit(u: User) {
     setEditingUser(u);
     setEditUsername(u.username);
+    setEditFullName(u.full_name ?? '');
     setEditEmail(u.email ?? '');
     // Strip the "8801" prefix back off for editing — u.phone_number
     // is either null, or the full 13-digit stored value.
@@ -163,6 +180,10 @@ export function UsersPage(): JSX.Element {
     if (!editingUser) return;
     if (!editUsername.trim()) {
       setEditError('Username cannot be blank.');
+      return;
+    }
+    if (!editFullName.trim()) {
+      setEditError('Full name cannot be blank.');
       return;
     }
     if (!editEmail.trim()) {
@@ -189,6 +210,7 @@ export function UsersPage(): JSX.Element {
     try {
       await api.put(API.USERS.UPDATE(editingUser.id), {
         username: editUsername.trim(),
+        fullName: editFullName.trim(),
         email: editEmail.trim(),
         phoneNumber: trimmedDigits ? `8801${trimmedDigits}` : '',
         role: editRole,
@@ -207,6 +229,7 @@ export function UsersPage(): JSX.Element {
     e.preventDefault();
     setFormError(null);
     setUsernameError(null);
+    setFullNameError(null);
     setEmailError(null);
     setPhoneError(null);
 
@@ -272,6 +295,9 @@ export function UsersPage(): JSX.Element {
     }
   }
 
+  const appNameById = new Map(applications.map((a) => [a.id, a.name]));
+  const detailsUser = detailsUserId !== null ? users.find((u) => u.id === detailsUserId) ?? null : null;
+
   return (
     <div className="p-6 sm:p-8 max-w-6xl mx-auto">
       <PageHeader
@@ -315,6 +341,18 @@ export function UsersPage(): JSX.Element {
               <h2 className="text-base font-semibold text-slate-900 dark:text-white">New User</h2>
             </div>
             <div className="bg-slate-100 p-5 dark:bg-gh-inset">
+            <label className="mb-3 block">
+              <span className={labelClass}>Full name</span>
+              <input
+                value={newFullName}
+                onChange={(e) => setNewFullName(e.target.value)}
+                className={inputClass}
+                required
+              />
+              {fullNameError && (
+                <span className="mt-1 block text-xs text-red-500">{fullNameError}</span>
+              )}
+            </label>
             <label className="mb-3 block">
               <span className={labelClass}>Username</span>
               <input
@@ -395,12 +433,11 @@ export function UsersPage(): JSX.Element {
         <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">No users yet.</Card>
       ) : (
         <Card className="overflow-x-auto">
-          <table className="w-full min-w-[36rem] text-sm">
+          <table className="w-full min-w-[44rem] text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-gh-border dark:bg-gh-subtle/60 dark:text-gh-muted">
                 <th className="px-4 py-3 font-medium">Username</th>
-                <th className="px-4 py-3 font-medium">Email</th>
-                <th className="px-4 py-3 font-medium">Phone</th>
+                <th className="px-4 py-3 font-medium">Applications</th>
                 <th className="px-4 py-3 font-medium">Role</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Created</th>
@@ -419,14 +456,19 @@ export function UsersPage(): JSX.Element {
                       {u.username}
                       {isSelf && <span className="ml-2 text-xs font-normal text-slate-400">(you)</span>}
                     </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-gh-fgSoft">
-                      {u.email ?? <span className="text-slate-400 italic">none</span>}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-gh-fgSoft">
-                      {u.phone_number ? (
-                        <span className="font-mono text-xs">{u.phone_number}</span>
+                    <td className="px-4 py-3">
+                      {u.role !== 'USER' ? (
+                        <span className="text-xs text-slate-500 dark:text-gh-muted">All applications</span>
+                      ) : (u.assignedApplicationIds ?? []).length === 0 ? (
+                        <span className="text-xs italic text-slate-400">None assigned</span>
                       ) : (
-                        <span className="text-slate-400 italic">none</span>
+                        <div className="flex flex-wrap gap-1">
+                          {u.assignedApplicationIds.map((appId) => (
+                            <Badge key={appId} tone="neutral" dot={false}>
+                              {appNameById.get(appId) ?? `#${appId}`}
+                            </Badge>
+                          ))}
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -445,27 +487,33 @@ export function UsersPage(): JSX.Element {
                       {new Date(u.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3">
-                      {canManageRow && (
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => openEdit(u)}
-                            title={isSelf ? 'Can edit assignments only (cannot delete self)' : undefined}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            disabled={isSelf || deletingId === u.id}
-                            onClick={() => handleDelete(u)}
-                            title={isSelf ? 'Cannot delete your own account' : undefined}
-                          >
-                            {deletingId === u.id ? 'Deleting…' : 'Delete'}
-                          </Button>
-                        </div>
-                      )}
+                      <div className="flex justify-end gap-2">
+                        <Button size="sm" variant="secondary" onClick={() => setDetailsUserId(u.id)}>
+                          Details
+                        </Button>
+                        {canManageRow && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => openEdit(u)}
+                              title={isSelf ? 'Can edit assignments only (cannot delete self)' : undefined}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              loading={deletingId === u.id}
+                              disabled={isSelf}
+                              onClick={() => handleDelete(u)}
+                              title={isSelf ? 'Cannot delete your own account' : undefined}
+                            >
+                              Delete
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -473,6 +521,62 @@ export function UsersPage(): JSX.Element {
             </tbody>
           </table>
         </Card>
+      )}
+
+      {detailsUser && (
+        <Modal onClose={() => setDetailsUserId(null)} widthClass="max-w-lg">
+          <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-gh-border dark:bg-gh-subtle/60">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">User details</h2>
+          </div>
+          <div className="bg-slate-100 p-5 dark:bg-gh-inset">
+            <dl className="divide-y divide-slate-200 text-sm dark:divide-gh-border">
+              <DetailRow label="Full name">
+                {detailsUser.full_name ?? <span className="font-normal italic text-slate-400">Not set</span>}
+              </DetailRow>
+              <DetailRow label="Username">{detailsUser.username}</DetailRow>
+              <DetailRow label="Email">
+                {detailsUser.email ?? <span className="font-normal italic text-slate-400">none</span>}
+              </DetailRow>
+              <DetailRow label="Phone">
+                {detailsUser.phone_number ? (
+                  <span className="font-mono text-xs">{detailsUser.phone_number}</span>
+                ) : (
+                  <span className="font-normal italic text-slate-400">none</span>
+                )}
+              </DetailRow>
+              <DetailRow label="Role">
+                <Badge tone={roleTone(detailsUser.role)} dot={false}>{roleLabel(detailsUser.role)}</Badge>
+              </DetailRow>
+              <DetailRow label="Status">
+                <span className="inline-flex flex-wrap justify-end gap-1.5">
+                  <Badge tone={detailsUser.online ? 'online' : 'offline'}>
+                    {detailsUser.online ? 'Online' : 'Offline'}
+                  </Badge>
+                  {detailsUser.must_change_password && <Badge tone="pending">Must change password</Badge>}
+                </span>
+              </DetailRow>
+              <DetailRow label="Created">{new Date(detailsUser.created_at).toLocaleString()}</DetailRow>
+              <DetailRow label="Applications">
+                {detailsUser.role !== 'USER' ? (
+                  <span className="font-normal">All applications</span>
+                ) : (detailsUser.assignedApplicationIds ?? []).length === 0 ? (
+                  <span className="font-normal italic text-slate-400">None assigned</span>
+                ) : (
+                  <span className="inline-flex flex-wrap justify-end gap-1">
+                    {detailsUser.assignedApplicationIds.map((appId) => (
+                      <Badge key={appId} tone="neutral" dot={false}>
+                        {appNameById.get(appId) ?? `#${appId}`}
+                      </Badge>
+                    ))}
+                  </span>
+                )}
+              </DetailRow>
+            </dl>
+            <div className="mt-5 flex justify-end">
+              <Button variant="secondary" onClick={() => setDetailsUserId(null)}>Close</Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {editingUser && (
@@ -484,6 +588,15 @@ export function UsersPage(): JSX.Element {
           </div>
           <div className="bg-slate-100 p-5 dark:bg-gh-inset">
 
+          <label className="mb-3 block">
+            <span className={labelClass}>Full name</span>
+            <input
+              value={editFullName}
+              onChange={(e) => setEditFullName(e.target.value)}
+              className={inputClass}
+              required
+            />
+          </label>
           <label className="mb-3 block">
             <span className={labelClass}>Username</span>
             <input
