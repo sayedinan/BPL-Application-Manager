@@ -43,7 +43,7 @@ const EMPTY_FORM: FormState = {
 };
 
 const inputClass =
-  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 ' +
+  'w-full rounded-xl border border-slate-200 bg-white shadow-sm px-3 py-2 text-sm text-slate-900 ' +
   'placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
   'dark:border-gh-border dark:bg-surface-dark dark:text-gh-fg';
 const labelClass = 'mb-1 block text-sm font-medium text-slate-700 dark:text-gh-fgSoft';

@@ -37,6 +37,7 @@ export default {
         surface: {
           light: '#ffffff',
           subtle: '#ffffff',
+          canvas: '#f8f9fc',
           dark: '#0d1117',
           darkSubtle: '#161b22',
         },
@@ -70,7 +71,7 @@ export default {
         '2xl': '1.25rem',
       },
       boxShadow: {
-        card: '0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06)',
+        card: '0 1px 2px 0 rgb(15 23 42 / 0.03), 0 4px 16px -4px rgb(15 23 42 / 0.08)',
         'card-hover': '0 4px 12px -2px rgb(15 23 42 / 0.10), 0 2px 4px -2px rgb(15 23 42 / 0.06)',
         popover: '0 10px 30px -5px rgb(15 23 42 / 0.20)',
       },

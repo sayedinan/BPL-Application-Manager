@@ -9,11 +9,11 @@ export function Card({
   return (
     <div
       className={[
-        'rounded-xl border bg-white shadow-card transition-theme',
+        'rounded-2xl border bg-white shadow-card transition-theme',
         'dark:bg-surface-darkSubtle dark:border-gh-border',
         selected
           ? 'border-brand-500 ring-1 ring-brand-500'
-          : 'border-slate-200 dark:border-gh-border',
+          : 'border-slate-200/70 dark:border-gh-border',
         interactive ? 'cursor-pointer hover:shadow-card-hover hover:-translate-y-0.5' : '',
         className,
       ].join(' ')}

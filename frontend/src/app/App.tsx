@@ -92,7 +92,7 @@ function NavBar() {
   }
 
   return (
-    <nav className="sticky top-0 z-20 flex flex-wrap items-center gap-x-1 gap-y-1 border-b border-slate-200 bg-white/80 px-3 py-2 sm:px-6 sm:py-3 backdrop-blur transition-theme dark:border-gh-border dark:bg-gh-inset/80">
+    <nav className="sticky top-0 z-20 flex flex-wrap items-center gap-x-1 gap-y-1 border-b border-slate-200/70 bg-white/90 shadow-sm px-3 py-2 sm:px-6 sm:py-3 backdrop-blur transition-theme dark:border-gh-border dark:bg-gh-inset/80">
       <a href="/" className="mr-4 flex items-center gap-2">
         <Logo className="h-8 w-8" />
         <span className="hidden text-sm font-bold tracking-tight text-slate-900 sm:inline dark:text-white">
@@ -142,7 +142,7 @@ export function App(): JSX.Element {
           <AuthProvider>
             <AuthHydrator />
             <PresenceConnection />
-            <div className="min-h-screen bg-surface-subtle transition-theme dark:bg-surface-dark">
+            <div className="min-h-screen bg-surface-canvas transition-theme dark:bg-surface-dark">
               <NavBar />
               <AppRoutes />
             </div>

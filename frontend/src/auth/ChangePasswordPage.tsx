@@ -15,7 +15,7 @@ interface ChangePasswordResponse {
 }
 
 const inputClass =
-  'mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 ' +
+  'mt-1 block w-full rounded-xl border border-slate-200 bg-white shadow-sm px-3 py-2 text-sm text-slate-900 ' +
   'transition-theme placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
   'dark:border-gh-border dark:bg-surface-dark dark:text-white';
 
@@ -62,7 +62,7 @@ export function RealChangePasswordPage(): JSX.Element {
   return (
     <div
       data-change-password-page="real"
-      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-surface-subtle px-4 dark:bg-surface-dark"
+      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-surface-canvas px-4 dark:bg-surface-dark"
     >
       <div className="pointer-events-none absolute -top-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-brand-500/20 blur-3xl" />
 
