@@ -470,14 +470,13 @@ export function UsersPage(): JSX.Element {
         <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">No users yet.</Card>
       ) : (
         <Card className="overflow-x-auto">
-          <table className="w-full min-w-[44rem] text-sm">
+          <table className="w-full min-w-[38rem] text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-gh-border dark:bg-gh-subtle/60 dark:text-gh-muted">
                 <th className="px-4 py-3 font-medium">Username</th>
                 <th className="px-4 py-3 font-medium">Applications</th>
                 <th className="px-4 py-3 font-medium">Role</th>
                 <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Created</th>
                 <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
@@ -520,13 +519,19 @@ export function UsersPage(): JSX.Element {
                         </Badge>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-gh-muted">
-                      {new Date(u.created_at).toLocaleDateString()}
-                    </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">
-                        <Button size="sm" variant="secondary" onClick={() => setDetailsUserId(u.id)}>
-                          Details
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setDetailsUserId(u.id)}
+                          title="View details"
+                          aria-label="View details"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
                         </Button>
                         {canManageRow && (
                           <>
