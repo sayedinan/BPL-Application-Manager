@@ -107,7 +107,7 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
     public ResponseEntity<List<Map<String, Object>>> listUsers() {
         List<Map<String, Object>> users = jdbc.queryForList(
-            "SELECT id, username, role, email, phone_number, must_change_password, created_at FROM users WHERE deleted_at IS NULL ORDER BY username"
+            "SELECT id, username, full_name, role, email, phone_number, must_change_password, created_at FROM users WHERE deleted_at IS NULL ORDER BY username"
         );
         for (Map<String,Object> row : users) {
             Long userRowId = ((Number) row.get("id")).longValue();
@@ -126,7 +126,7 @@ public class UserController {
     @PostMapping
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
     public ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> createUser(@Valid @RequestBody com.bpl.orderapp.admin.user.dto.CreateUserRequest req, HttpServletRequest httpRequest) {
-        return doCreate(req.username(), req.role(), req.email(), req.phoneNumber(), req.assignedApplicationIds(), httpRequest);
+        return doCreate(req.username(), req.fullName(), req.role(), req.email(), req.phoneNumber(), req.assignedApplicationIds(), httpRequest);
     }
     @PostMapping("/create-admin")
     @PreAuthorize("hasRole('SYS_ADMIN')")
@@ -136,9 +136,9 @@ public class UserController {
             throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.BAD_REQUEST, "role must be ADMIN or SYS_ADMIN");
         }
-        return doCreate(req.username(), role, req.email(), req.phoneNumber(), req.assignedApplicationIds(), httpRequest);
+        return doCreate(req.username(), req.fullName(), role, req.email(), req.phoneNumber(), req.assignedApplicationIds(), httpRequest);
     }
-    private ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> doCreate(String username, String role, String email, String phoneNumber, java.util.List<Long> assignedIds, HttpServletRequest httpRequest) {
+    private ResponseEntity<com.bpl.orderapp.admin.user.dto.CreateUserResponse> doCreate(String username, String fullName, String role, String email, String phoneNumber, java.util.List<Long> assignedIds, HttpServletRequest httpRequest) {
         var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         boolean callerIsSysAdmin = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN"));
         if (!"USER".equals(role) && !callerIsSysAdmin) {
@@ -164,8 +164,8 @@ public class UserController {
         // and previously surfaced as an uncaught 500 AFTER the insert
         // had already committed, silently losing the one-time password.
         Long newId = jdbc.queryForObject(
-            "INSERT INTO users (username, password_hash, role, email, phone_number, must_change_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, true, ?, ?) RETURNING id",
-            Long.class, username, hash, role, email, phoneNumber, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
+            "INSERT INTO users (username, full_name, password_hash, role, email, phone_number, must_change_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, true, ?, ?) RETURNING id",
+            Long.class, username, fullName.trim(), hash, role, email, phoneNumber, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
         // Admin/Sys.Admin see all applications regardless of
         // assignment rows (RBAC checks role first everywhere else in
         // the app) — so assignments are only meaningful, and only
@@ -187,7 +187,7 @@ public class UserController {
                 currentAuth.getName(),
                 callerIsSysAdmin ? "SYS_ADMIN" : "ADMIN",
                 null, null, newId,
-                java.util.Map.of("username", username, "role", role, "email", email,
+                java.util.Map.of("username", username, "fullName", fullName.trim(), "role", role, "email", email,
                     "phoneNumber", phoneNumber == null ? "" : phoneNumber,
                     "assignedApplicationIds", assignedIds == null ? java.util.List.of() : assignedIds),
                 "SUCCESS",
@@ -331,6 +331,7 @@ public class UserController {
         String oldEmail = jdbc.queryForObject("SELECT email FROM users WHERE id = ?", String.class, id);
         String oldPhoneNumber = jdbc.queryForObject("SELECT phone_number FROM users WHERE id = ?", String.class, id);
         String oldUsername = jdbc.queryForObject("SELECT username FROM users WHERE id = ?", String.class, id);
+        String oldFullName = jdbc.queryForObject("SELECT full_name FROM users WHERE id = ?", String.class, id);
         java.util.List<Long> oldAssignedIds = jdbc.queryForList(
             "SELECT application_id FROM user_application_assignments WHERE user_id = ?", Long.class, id);
 
@@ -369,6 +370,10 @@ public class UserController {
                 org.springframework.http.HttpStatus.BAD_REQUEST, "email cannot be blank");
         }
 
+        if (req.fullName() != null && req.fullName().isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST, "fullName cannot be blank");
+        }
         // phoneNumber, unlike email, genuinely supports being cleared:
         // an empty string means "remove the phone number" (sets NULL
         // below), null means "leave it alone" (per hasChange()'s
@@ -418,6 +423,9 @@ public class UserController {
         if (req.username() != null) {
             jdbc.update("UPDATE users SET username = ?, updated_at = NOW() WHERE id = ?", req.username(), id);
         }
+        if (req.fullName() != null) {
+            jdbc.update("UPDATE users SET full_name = ?, updated_at = NOW() WHERE id = ?", req.fullName().trim(), id);
+        }
 
         try {
             java.util.Map<String, Object> detail = new java.util.HashMap<>();
@@ -440,6 +448,10 @@ public class UserController {
             if (req.username() != null && !req.username().equals(oldUsername)) {
                 detail.put("oldUsername", oldUsername);
                 detail.put("newUsername", req.username());
+            }
+            if (req.fullName() != null && !req.fullName().trim().equals(oldFullName == null ? "" : oldFullName)) {
+                detail.put("oldFullName", oldFullName == null ? "" : oldFullName);
+                detail.put("newFullName", req.fullName().trim());
             }
 
             if (req.assignedApplicationIds() != null) {

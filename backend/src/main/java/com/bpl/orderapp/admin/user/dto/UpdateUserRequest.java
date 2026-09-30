@@ -2,6 +2,7 @@ package com.bpl.orderapp.admin.user.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 
 /**
@@ -33,6 +34,7 @@ import java.util.List;
  */
 public record UpdateUserRequest(
     String username,
+    @Size(max = 150) String fullName,
     String role,
     List<Long> assignedApplicationIds,
     @Email String email,
@@ -41,6 +43,7 @@ public record UpdateUserRequest(
 ) {
     public boolean hasChange() {
         return username != null
+            || fullName != null
             || role != null
             || (assignedApplicationIds != null && !assignedApplicationIds.isEmpty())
             || email != null
