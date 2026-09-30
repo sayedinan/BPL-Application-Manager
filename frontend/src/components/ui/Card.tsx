@@ -9,7 +9,7 @@ export function Card({
   return (
     <div
       className={[
-        'rounded-2xl border bg-white shadow-card transition-theme',
+        'rounded-2xl border bg-white shadow-none transition-theme',
         'dark:bg-surface-darkSubtle dark:border-gh-border',
         selected
           ? 'border-brand-500 ring-1 ring-brand-500'

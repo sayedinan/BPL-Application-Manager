@@ -37,7 +37,7 @@ export default {
         surface: {
           light: '#ffffff',
           subtle: '#ffffff',
-          canvas: '#f8f9fc',
+          canvas: '#ffffff',
           dark: '#0d1117',
           darkSubtle: '#161b22',
         },

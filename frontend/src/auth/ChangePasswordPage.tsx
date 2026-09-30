@@ -64,9 +64,8 @@ export function RealChangePasswordPage(): JSX.Element {
       data-change-password-page="real"
       className="relative flex min-h-screen items-center justify-center overflow-hidden bg-surface-canvas px-4 dark:bg-surface-dark"
     >
-      <div className="pointer-events-none absolute -top-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-brand-500/20 blur-3xl" />
 
-      <Card className="relative w-full max-w-sm animate-fade-in p-8 shadow-popover">
+      <Card className="relative w-full max-w-sm animate-fade-in p-8 !bg-slate-50 !shadow-none dark:!bg-surface-darkSubtle">
         <div className="mb-6 text-center">
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Change Password</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-gh-muted">
