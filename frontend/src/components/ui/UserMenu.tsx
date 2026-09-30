@@ -4,6 +4,8 @@ interface UserMenuProps {
   username: string;
   role: 'SYS_ADMIN' | 'ADMIN' | 'USER';
   onLogout: () => void;
+  email?: string | null;
+  phoneNumber?: string | null;
 }
 
 const ROLE_LABEL: Record<UserMenuProps['role'], string> = {
@@ -12,7 +14,7 @@ const ROLE_LABEL: Record<UserMenuProps['role'], string> = {
   USER: 'User',
 };
 
-export function UserMenu({ username, role, onLogout }: UserMenuProps): JSX.Element {
+export function UserMenu({ username, role, onLogout, email, phoneNumber }: UserMenuProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const initials = username.slice(0, 2).toUpperCase();
@@ -75,6 +77,8 @@ export function UserMenu({ username, role, onLogout }: UserMenuProps): JSX.Eleme
               </span>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{username}</p>
+                {email && <p className="truncate text-xs text-white/80">{email}</p>}
+                {phoneNumber && <p className="truncate font-mono text-xs text-white/70">{phoneNumber}</p>}
                 <span className="mt-1 inline-block rounded-full bg-white/15 px-2 py-0.5 text-xs font-medium">
                   {ROLE_LABEL[role]}
                 </span>

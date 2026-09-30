@@ -26,6 +26,8 @@ export interface CurrentUser {
   role: Role;
   mustChangePassword: boolean;
   assignedApplicationIds: number[];
+  email?: string | null;
+  phoneNumber?: string | null;
 }
 
 export interface AuthState {

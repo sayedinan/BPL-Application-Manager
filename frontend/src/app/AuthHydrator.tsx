@@ -27,6 +27,8 @@ interface MeResponse {
   role: CurrentUser['role'];
   mustChangePassword: boolean;
   assignedApplicationIds: number[];
+  email?: string | null;
+  phoneNumber?: string | null;
 }
 
 export function AuthHydrator(): null {

@@ -413,7 +413,7 @@ public class AuthController {
         //    and the SPA should re-login. (The 401 response
         //    above will trigger that re-login.)
         List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT id, role, must_change_password FROM users " +
+            "SELECT id, role, must_change_password, email, phone_number FROM users " +
                 "WHERE username = ? AND deleted_at IS NULL",
             username
         );
@@ -426,6 +426,8 @@ public class AuthController {
         Long id = ((Number) row.get("id")).longValue();
         String role = (String) row.get("role");
         boolean mustChangePassword = (Boolean) row.get("must_change_password");
+        String email = (String) row.get("email");
+        String phoneNumber = (String) row.get("phone_number");
 
         // 3. Read the assigned application IDs. The join table
         //    is filtered by the same deleted_at IS NULL on the
@@ -441,7 +443,7 @@ public class AuthController {
          .toList();
 
         return ResponseEntity.ok(
-            new MeResponse(id, username, role, mustChangePassword, assignedApplicationIds)
+            new MeResponse(id, username, role, mustChangePassword, assignedApplicationIds, email, phoneNumber)
         );
     }
 

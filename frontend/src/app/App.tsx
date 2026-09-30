@@ -107,7 +107,13 @@ function NavBar() {
 
       <div className="ml-auto flex flex-wrap items-center gap-1 sm:gap-3">
         <ThemeToggle />
-        <UserMenu username={user.username} role={user.role} onLogout={handleLogout} />
+        <UserMenu
+          username={user.username}
+          role={user.role}
+          email={user.email}
+          phoneNumber={user.phoneNumber}
+          onLogout={handleLogout}
+        />
       </div>
     </nav>
   );

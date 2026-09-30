@@ -24,6 +24,8 @@ public record MeResponse(
     String username,
     String role,
     boolean mustChangePassword,
-    List<Long> assignedApplicationIds
+    List<Long> assignedApplicationIds,
+    String email,
+    String phoneNumber
 ) {
 }
