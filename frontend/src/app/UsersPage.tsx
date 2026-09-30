@@ -7,6 +7,7 @@ import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Card, PageHeader } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { Alert } from '@/components/ui/Alert';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LoadingBlock } from '@/components/ui/Spinner';
 
 interface User {
@@ -97,6 +98,7 @@ export function UsersPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<User | null>(null);
   const [detailsUserId, setDetailsUserId] = useState<number | null>(null);
 
   const [applications, setApplications] = useState<Application[]>([]);
@@ -313,14 +315,19 @@ export function UsersPage(): JSX.Element {
     }
   }
 
-  async function handleDelete(user: User) {
+  function handleDelete(user: User) {
     if (currentUser && user.id === currentUser.id) {
       // Defense in depth — the backend also rejects this
       // (SELF_DELETE_FORBIDDEN), but no point round-tripping.
       setError('You cannot delete your own account.');
       return;
     }
-    if (!window.confirm(`Delete user "${user.username}"? This cannot be undone.`)) return;
+    setPendingDelete(user);
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    const user = pendingDelete;
     setDeletingId(user.id);
     try {
       await api.delete(API.USERS.DELETE(user.id));
@@ -329,6 +336,7 @@ export function UsersPage(): JSX.Element {
       setError(err instanceof ApiError ? err.message : `Failed to delete ${user.username}.`);
     } finally {
       setDeletingId(null);
+      setPendingDelete(null);
     }
   }
 
@@ -563,6 +571,21 @@ export function UsersPage(): JSX.Element {
             </tbody>
           </table>
         </Card>
+      )}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete user?"
+          message={
+            <>
+              You are about to permanently delete <strong>{pendingDelete.full_name ?? pendingDelete.username}</strong>{' '}
+              (<span className="font-mono text-xs">{pendingDelete.username}</span>). This cannot be undone.
+            </>
+          }
+          loading={deletingId === pendingDelete.id}
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => setPendingDelete(null)}
+        />
       )}
 
       {detailsUser && (

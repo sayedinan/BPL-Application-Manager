@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Card, PageHeader } from '@/components/ui/Card';
 import { Alert } from '@/components/ui/Alert';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LoadingBlock } from '@/components/ui/Spinner';
 
 interface ApplicationSummary {
@@ -58,6 +59,7 @@ export function ApplicationsPage(): JSX.Element {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ApplicationSummary | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [testStatus, setTestStatus] = useState<'untested' | 'testing' | 'verified' | 'failed'>('untested');
@@ -201,9 +203,14 @@ export function ApplicationsPage(): JSX.Element {
     }
   }
 
-  async function handleDelete(app: ApplicationSummary) {
+  function handleDelete(app: ApplicationSummary) {
     if (app.online) return;
-    if (!window.confirm(`Delete "${app.name}"? This cannot be undone.`)) return;
+    setPendingDelete(app);
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    const app = pendingDelete;
     setDeletingId(app.id);
     try {
       await api.delete(API.APPLICATIONS.DELETE(app.id));
@@ -212,6 +219,7 @@ export function ApplicationsPage(): JSX.Element {
       setListError(err instanceof ApiError ? err.message : `Failed to delete ${app.name}.`);
     } finally {
       setDeletingId(null);
+      setPendingDelete(null);
     }
   }
 
@@ -230,6 +238,21 @@ export function ApplicationsPage(): JSX.Element {
       />
 
       {listError && <Alert className="mb-4">{listError}</Alert>}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete application?"
+          message={
+            <>
+              You are about to permanently delete <strong>{pendingDelete.name}</strong>, including its settings and history.
+              This cannot be undone.
+            </>
+          }
+          loading={deletingId === pendingDelete.id}
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
 
       {formOpen && (
         <Modal
