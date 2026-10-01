@@ -209,7 +209,7 @@ public class ContractParser {
     // a value of the wrong type simply gives null.
     // ------------------------------------------------------------------
 
-    private static JsonNode object(JsonNode parent, String field) {
+    static JsonNode object(JsonNode parent, String field) {
         if (parent == null) {
             return null;
         }
@@ -217,7 +217,7 @@ public class ContractParser {
         return (n != null && n.isObject()) ? n : null;
     }
 
-    private static String text(JsonNode parent, String field) {
+    static String text(JsonNode parent, String field) {
         if (parent == null) {
             return null;
         }
@@ -232,7 +232,7 @@ public class ContractParser {
         return s.length() > MAX_TEXT_LENGTH ? s.substring(0, MAX_TEXT_LENGTH) : s;
     }
 
-    private static Double number(JsonNode parent, String field, double min, double max) {
+    static Double number(JsonNode parent, String field, double min, double max) {
         if (parent == null) {
             return null;
         }
@@ -244,11 +244,11 @@ public class ContractParser {
         return (v >= min && v <= max) ? v : null;
     }
 
-    private static Double percent(JsonNode parent, String field) {
+    static Double percent(JsonNode parent, String field) {
         return number(parent, field, 0, 100);
     }
 
-    private static Double nonNegative(JsonNode parent, String field) {
+    static Double nonNegative(JsonNode parent, String field) {
         return number(parent, field, 0, Double.MAX_VALUE);
     }
 
@@ -263,7 +263,7 @@ public class ContractParser {
         return n.asLong();
     }
 
-    private static Instant instant(JsonNode parent, String field) {
+    static Instant instant(JsonNode parent, String field) {
         String s = text(parent, field);
         if (s == null) {
             return null;
