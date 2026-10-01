@@ -11,7 +11,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LoadingBlock } from '@/components/ui/Spinner';
 
 interface User {
-  id: number;
+  id: string;
   username: string;
   full_name: string | null;
   role: 'SYS_ADMIN' | 'ADMIN' | 'USER';
@@ -97,9 +97,9 @@ export function UsersPage(): JSX.Element {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<User | null>(null);
-  const [detailsUserId, setDetailsUserId] = useState<number | null>(null);
+  const [detailsUserId, setDetailsUserId] = useState<string | null>(null);
 
   const [applications, setApplications] = useState<Application[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -285,7 +285,7 @@ export function UsersPage(): JSX.Element {
     setCreating(true);
     try {
       const path = newRole === 'USER' ? API.USERS.CREATE : '/users/create-admin';
-      const res = await api.post<{ id: number; username: string; role: string; temporaryPassword: string }>(
+      const res = await api.post<{ id: string; username: string; role: string; temporaryPassword: string }>(
         path,
         {
         username: newUsername.trim(),
@@ -481,6 +481,7 @@ export function UsersPage(): JSX.Element {
           <table className="w-full min-w-[38rem] text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-gh-border dark:bg-gh-subtle/60 dark:text-gh-muted">
+                <th className="px-3 py-3 font-medium w-12">#</th>
                 <th className="px-4 py-3 font-medium">Username</th>
                 <th className="px-4 py-3 font-medium">Applications</th>
                 <th className="px-4 py-3 font-medium">Role</th>
@@ -489,13 +490,15 @@ export function UsersPage(): JSX.Element {
               </tr>
             </thead>
             <tbody className="bg-slate-100 dark:bg-gh-inset">
-              {users.map((u) => {
+              {users.map((u, index) => {
+                const rowNum = index + 1;
                 const isSelf = currentUser?.id === u.id;
                 const isSysAdminRow = u.role === 'SYS_ADMIN';
                 const viewerIsSysAdmin = currentUser?.role === 'SYS_ADMIN';
                 const canManageRow = viewerIsSysAdmin || !isSysAdminRow;
                 return (
                   <tr key={u.id} className="border-b border-slate-200 last:border-0 dark:border-gh-border">
+                    <td className="px-3 py-3 text-xs text-slate-400 dark:text-gh-muted">{rowNum}</td>
                     <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">
                       {u.username}
                       {isSelf && <span className="ml-2 text-xs font-normal text-slate-400">(you)</span>}

@@ -20,7 +20,7 @@ import java.util.List;
  * current (no stale state from the moment they logged in).
  */
 public record MeResponse(
-    Long id,
+    java.util.UUID id,
     String username,
     String role,
     boolean mustChangePassword,

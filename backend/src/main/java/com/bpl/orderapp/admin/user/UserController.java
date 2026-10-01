@@ -110,7 +110,7 @@ public class UserController {
             "SELECT id, username, full_name, role, email, phone_number, must_change_password, created_at FROM users WHERE deleted_at IS NULL ORDER BY username"
         );
         for (Map<String,Object> row : users) {
-            Long userRowId = ((Number) row.get("id")).longValue();
+            java.util.UUID userRowId = (java.util.UUID) row.get("id");
             java.util.List<Long> assigned = jdbc.queryForList(
                 "SELECT application_id FROM user_application_assignments WHERE user_id = ?",
                 Long.class, userRowId);
@@ -163,9 +163,9 @@ public class UserController {
         // design — which throws IncorrectResultSizeDataAccessException
         // and previously surfaced as an uncaught 500 AFTER the insert
         // had already committed, silently losing the one-time password.
-        Long newId = jdbc.queryForObject(
+        java.util.UUID newId = jdbc.queryForObject(
             "INSERT INTO users (username, full_name, password_hash, role, email, phone_number, must_change_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, true, ?, ?) RETURNING id",
-            Long.class, username, fullName.trim(), hash, role, email, phoneNumber, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
+            java.util.UUID.class, username, fullName.trim(), hash, role, email, phoneNumber, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
         // Admin/Sys.Admin see all applications regardless of
         // assignment rows (RBAC checks role first everywhere else in
         // the app) — so assignments are only meaningful, and only
@@ -200,7 +200,7 @@ public class UserController {
     }
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
-    public ResponseEntity<Void> deleteUser(@PathVariable Long id, HttpServletRequest httpRequest) {
+    public ResponseEntity<Void> deleteUser(@PathVariable java.util.UUID id, HttpServletRequest httpRequest) {
         var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         boolean callerIsSysAdmin = auth.getAuthorities().stream()
             .anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN"));
@@ -209,7 +209,7 @@ public class UserController {
         if (callerRows.isEmpty()) {
             throw new com.bpl.orderapp.admin.common.InvalidCredentialsException();
         }
-        Long callerId = ((Number) callerRows.get(0).get("id")).longValue();
+        java.util.UUID callerId = (java.util.UUID) callerRows.get(0).get("id");
         com.bpl.orderapp.admin.accountDeletion.AccountDeletionGuard.assertCanDelete(callerId, id);
         List<Map<String, Object>> targetRows = jdbc.queryForList(
             "SELECT role FROM users WHERE id = ? AND deleted_at IS NULL", id);
@@ -248,7 +248,7 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
     @PostMapping("/{id}/reset-password")
-    public ResponseEntity<ResetPasswordResponse> resetPassword(@PathVariable("id") Long id, HttpServletRequest httpRequest) {
+    public ResponseEntity<ResetPasswordResponse> resetPassword(@PathVariable("id") java.util.UUID id, HttpServletRequest httpRequest) {
         var resetAuth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         String resetActorRole = resetAuth.getAuthorities().stream()
             .anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN")) ? "SYS_ADMIN" : "ADMIN";
@@ -322,7 +322,7 @@ public class UserController {
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
     @Transactional
-    public ResponseEntity<Void> updateUser(@PathVariable Long id,
+    public ResponseEntity<Void> updateUser(@PathVariable java.util.UUID id,
             @Valid @RequestBody UpdateUserRequest req,
             HttpServletRequest httpRequest) {
         var updateAuth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();

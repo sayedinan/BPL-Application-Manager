@@ -103,7 +103,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             String idPart = destination.substring("/topic/application-logs/".length());
             Long applicationId; try { applicationId = Long.valueOf(idPart); } catch (NumberFormatException e) { throw new MessageDeliveryException("Invalid application id"); }
             if (role != Role.SYS_ADMIN && role != Role.ADMIN) {
-                Long userId = lookupUserId(username);
+                java.util.UUID userId = lookupUserId(username);
                 List<Long> assigned = jdbc.queryForList("SELECT application_id FROM user_application_assignments WHERE user_id = ?", Long.class, userId);
                 if (!assigned.contains(applicationId)) throw new MessageDeliveryException("Not authorized for this application's logs");
             }
@@ -182,7 +182,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
         return Role.valueOf(rows.get(0));
     }
 
-    private Long lookupUserId(String username) {
-        return jdbc.queryForObject("SELECT id FROM users WHERE username = ? AND deleted_at IS NULL", Long.class, username);
+    private java.util.UUID lookupUserId(String username) {
+        return jdbc.queryForObject("SELECT id FROM users WHERE username = ? AND deleted_at IS NULL", java.util.UUID.class, username);
     }
 }

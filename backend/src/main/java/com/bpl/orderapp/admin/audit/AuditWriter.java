@@ -9,11 +9,11 @@ public class AuditWriter {
     /** Back-compat overload for any call site that genuinely has no
      *  request in scope. Writes source_ip = NULL. Prefer the
      *  HttpServletRequest overload below wherever a request is available. */
-    public void write(String actionType, String actorUsername, String actorRole, Long targetAppId, String targetAppName, Long targetUserId, Map<String,Object> detail, String result) {
+    public void write(String actionType, String actorUsername, String actorRole, Long targetAppId, String targetAppName, java.util.UUID targetUserId, Map<String,Object> detail, String result) {
         insert(actionType, actorUsername, actorRole, targetAppId, targetAppName, targetUserId, detail, result, null);
     }
 
-    public void write(String actionType, String actorUsername, String actorRole, Long targetAppId, String targetAppName, Long targetUserId, Map<String,Object> detail, String result, HttpServletRequest request) {
+    public void write(String actionType, String actorUsername, String actorRole, Long targetAppId, String targetAppName, java.util.UUID targetUserId, Map<String,Object> detail, String result, HttpServletRequest request) {
         insert(actionType, actorUsername, actorRole, targetAppId, targetAppName, targetUserId, detail, result, extractSourceIp(request));
     }
 
@@ -23,7 +23,7 @@ public class AuditWriter {
             java.sql.Timestamp.from(when), actorUsername, actorRole, actionType, new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(new HashMap<>(detail)).toString(), result);
     }
 
-    private void insert(String actionType, String actorUsername, String actorRole, Long targetAppId, String targetAppName, Long targetUserId, Map<String,Object> detail, String result, String sourceIp) {
+    private void insert(String actionType, String actorUsername, String actorRole, Long targetAppId, String targetAppName, java.util.UUID targetUserId, Map<String,Object> detail, String result, String sourceIp) {
         // Callers often only know the id; fill in the readable name so the
         // audit row still says WHICH application after it is renamed/deleted.
         if (targetAppName == null && targetAppId != null) {

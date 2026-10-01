@@ -138,7 +138,7 @@ public class AuthController {
         );
 
         String passwordHash;
-        Long id;
+        java.util.UUID id;
         String username;
         String role;
         boolean mustChangePassword;
@@ -160,7 +160,7 @@ public class AuthController {
         }
 
         Map<String, Object> row = rows.get(0);
-        id = ((Number) row.get("id")).longValue();
+        id = (java.util.UUID) row.get("id");
         username = (String) row.get("username");
         role = (String) row.get("role");
         passwordHash = (String) row.get("password_hash");
@@ -287,7 +287,7 @@ public class AuthController {
         }
 
         Map<String, Object> row = rows.get(0);
-        Long id = ((Number) row.get("id")).longValue();
+        java.util.UUID id = (java.util.UUID) row.get("id");
         String username = (String) row.get("username");
         String role = (String) row.get("role");
         String currentHash = (String) row.get("password_hash");
@@ -423,7 +423,7 @@ public class AuthController {
         }
 
         Map<String, Object> row = rows.get(0);
-        Long id = ((Number) row.get("id")).longValue();
+        java.util.UUID id = (java.util.UUID) row.get("id");
         String role = (String) row.get("role");
         boolean mustChangePassword = (Boolean) row.get("must_change_password");
         String email = (String) row.get("email");

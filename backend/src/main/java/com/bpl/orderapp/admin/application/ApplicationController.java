@@ -75,7 +75,7 @@ public class ApplicationController {
         if (userRows.isEmpty()) {
             throw new com.bpl.orderapp.admin.common.InvalidCredentialsException();
         }
-        Long userId = ((Number) userRows.get(0).get("id")).longValue();
+        java.util.UUID userId = (java.util.UUID) userRows.get(0).get("id");
         String role = (String) userRows.get(0).get("role");
 
         // online/streak_started_at come from application_status_streak
@@ -312,7 +312,7 @@ public class ApplicationController {
     @PostMapping("/{id}/start")
     public ResponseEntity<Map<String, Object>> startApplication(@PathVariable Long id,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestParam Long userId, HttpServletRequest httpRequest) {
+            @RequestParam java.util.UUID userId, HttpServletRequest httpRequest) {
         try {
             idempotencyService.checkAndStore(idempotencyKey != null ? idempotencyKey : "", userId, id);
         } catch (RuntimeException e) {
@@ -390,7 +390,7 @@ public class ApplicationController {
     @PostMapping("/{id}/stop")
     public ResponseEntity<Map<String, Object>> stopApplication(@PathVariable Long id,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestParam Long userId, HttpServletRequest httpRequest) {
+            @RequestParam java.util.UUID userId, HttpServletRequest httpRequest) {
         idempotencyService.checkAndStore(idempotencyKey, userId, id);
 
         Map<String, Object> app = jdbc.queryForMap(

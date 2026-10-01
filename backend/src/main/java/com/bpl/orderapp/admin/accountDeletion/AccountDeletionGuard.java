@@ -82,7 +82,7 @@ public final class AccountDeletionGuard {
      * @throws IllegalArgumentException    if either argument
      *                                   is null
      */
-    public static void assertCanDelete(Long callerUserId, Long targetUserId) {
+    public static void assertCanDelete(java.util.UUID callerUserId, java.util.UUID targetUserId) {
         if (callerUserId == null) {
             throw new IllegalArgumentException("callerUserId must not be null");
         }

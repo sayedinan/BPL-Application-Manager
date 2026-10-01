@@ -13,7 +13,7 @@ public class IdempotencyService {
 
     public IdempotencyService(JdbcTemplate jdbc) { this.jdbc = jdbc; }
 
-    public void checkAndStore(String key, Long userId, Long appId) {
+    public void checkAndStore(String key, java.util.UUID userId, Long appId) {
 
     jdbc.update("DELETE FROM idempotency_keys WHERE expires_at < NOW()");
 

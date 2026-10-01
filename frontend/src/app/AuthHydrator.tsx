@@ -22,7 +22,7 @@ import { API } from '@/api/endpoints';
 import { useAuth, type CurrentUser } from '@/auth/AuthContext';
 
 interface MeResponse {
-  id: number;
+  id: string;
   username: string;
   role: CurrentUser['role'];
   mustChangePassword: boolean;

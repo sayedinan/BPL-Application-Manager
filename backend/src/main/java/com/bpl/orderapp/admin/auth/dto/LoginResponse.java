@@ -19,7 +19,7 @@ package com.bpl.orderapp.admin.auth.dto;
  *                             before reaching any other page (SPEC §8.1)
  */
 public record LoginResponse(
-    Long id,
+    java.util.UUID id,
     String username,
     String role,
     boolean mustChangePassword

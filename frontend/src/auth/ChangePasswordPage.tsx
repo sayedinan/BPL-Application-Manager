@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Alert } from '@/components/ui/Alert';
 
 interface ChangePasswordResponse {
-  id: number;
+  id: string;
   username: string;
   role: string;
   mustChangePassword: boolean;

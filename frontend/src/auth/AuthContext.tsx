@@ -21,7 +21,7 @@ import {
 export type Role = 'SYS_ADMIN' | 'ADMIN' | 'USER';
 
 export interface CurrentUser {
-  id: number;
+  id: string;
   username: string;
   role: Role;
   mustChangePassword: boolean;

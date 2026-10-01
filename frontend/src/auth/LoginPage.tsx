@@ -9,7 +9,7 @@ import { Logo } from '@/components/ui/Logo';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 interface LoginResponse {
-  id: number;
+  id: string;
   username: string;
   role: CurrentUser['role'];
   mustChangePassword: boolean;

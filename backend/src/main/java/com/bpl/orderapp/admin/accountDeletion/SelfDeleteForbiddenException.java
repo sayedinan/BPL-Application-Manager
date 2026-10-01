@@ -21,7 +21,7 @@ package com.bpl.orderapp.admin.accountDeletion;
  */
 public class SelfDeleteForbiddenException extends RuntimeException {
 
-    public SelfDeleteForbiddenException(Long callerUserId, Long targetUserId) {
+    public SelfDeleteForbiddenException(java.util.UUID callerUserId, java.util.UUID targetUserId) {
         super(
             "Self-deletion is forbidden (caller id=" + callerUserId
                 + ", target id=" + targetUserId + ")"
