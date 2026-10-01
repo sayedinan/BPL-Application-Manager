@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -182,6 +183,16 @@ public class GlobalExceptionHandler {
         // than 400, add it here.
         log.warn("Unhandled ResponseStatusException with non-400 status: {}", ex.getStatusCode());
         return handleAny(ex);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ProblemDetail> handleIntegrity(DataIntegrityViolationException ex) {
+        log.warn("Data integrity violation", ex);
+        ProblemDetail pd = baseProblem("DATA_CONFLICT", HttpStatus.CONFLICT,
+            "This change conflicts with existing data.");
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(pd);
     }
 
     @ExceptionHandler(Exception.class)

@@ -224,7 +224,12 @@ public class UserController {
             "SELECT username FROM users WHERE id = ?", id);
         String deletedUsername = deletedUserRows.isEmpty() ? null : (String) deletedUserRows.get(0).get("username");
 
-        jdbc.update("UPDATE users SET deleted_at = NOW() WHERE id = ?", id);
+        jdbc.update("DELETE FROM users WHERE id = ?", id);
+        if (deletedUsername != null) {
+            // Kill live sessions so a deleted user's cookie can't authenticate as a
+            // new user later created with the same username.
+            jdbc.update("DELETE FROM spring_session WHERE principal_name = ?", deletedUsername);
+        }
 
         try {
             auditWriter.write(
