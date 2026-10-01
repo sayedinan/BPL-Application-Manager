@@ -2,6 +2,8 @@ package com.bpl.orderapp.admin.status;
 
 import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
+import com.bpl.orderapp.admin.health.HealthCheckService;
+import com.bpl.orderapp.admin.health.HealthDecision;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
 import com.bpl.orderapp.admin.log.WebSocketBroadcast;
 import com.bpl.orderapp.admin.notification.LifecycleEventType;
@@ -70,6 +72,7 @@ public class StatusPollingOrchestrator {
     // list if neither email nor SMS is configured, one entry if only
     // one is, two if both are. See NotificationConfig.
     private final List<Notifier> notifiers;
+    private final HealthCheckService healthCheckService;
 
     // Flap detection for external transitions only (web-app-triggered
     // start/stop are deliberate one-off actions, never flapping).
@@ -97,7 +100,7 @@ public class StatusPollingOrchestrator {
     public StatusPollingOrchestrator(JdbcTemplate jdbc, SshCredentialCipher cipher,
             SshConnection sshConnection, WebSocketBroadcast broadcast,
             LogPollingOrchestrator logPollingOrchestrator, AuditWriter auditWriter,
-            List<Notifier> notifiers) {
+            List<Notifier> notifiers, HealthCheckService healthCheckService) {
         this.auditWriter = auditWriter;
         this.jdbc = jdbc;
         this.cipher = cipher;
@@ -105,6 +108,7 @@ public class StatusPollingOrchestrator {
         this.broadcast = broadcast;
         this.logPollingOrchestrator = logPollingOrchestrator;
         this.notifiers = notifiers;
+        this.healthCheckService = healthCheckService;
         this.scheduler = new ThreadPoolTaskScheduler();
         this.scheduler.setPoolSize(4);
         this.scheduler.setThreadNamePrefix("status-poller-");
@@ -173,7 +177,7 @@ public class StatusPollingOrchestrator {
     // application is pending AND its expected state matches what was observed,
     // the flip is attributed to that user. Anything else (terminal, crash,
     // docker restart, reboot) is recorded as system/EXTERNAL.
-    private void writeTransitionAudit(Long applicationId, boolean observedOnline) {
+    private void writeTransitionAudit(Long applicationId, boolean observedOnline, String detectedBy) {
         try {
             String name = jdbc.queryForObject(
                 "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
@@ -184,6 +188,7 @@ public class StatusPollingOrchestrator {
             }
             java.util.Map<String, Object> detail = new java.util.HashMap<>();
             detail.put("source", "EXTERNAL");
+            detail.put("detectedBy", detectedBy);
             auditWriter.write(observedOnline ? "APPLICATION_ONLINE" : "APPLICATION_OFFLINE",
                 "system", "SYSTEM", applicationId, name, null, detail, "SUCCESS");
 
@@ -206,7 +211,7 @@ public class StatusPollingOrchestrator {
     // scheduled tick) and immediately after application creation to get
     // a real first reading instead of defaulting to offline forever.
     public boolean checkNow(Long applicationId) {
-        return runCheck(applicationId);
+        return runCheck(applicationId, true);
     }
 
     // Cheap lookup — no SSH, just the streak pointer's last-known value.
@@ -222,14 +227,27 @@ public class StatusPollingOrchestrator {
         if (actionInProgress.contains(applicationId)) {
             return;
         }
-        runCheck(applicationId);
+        runCheck(applicationId, false);
     }
 
     // Runs status_script, determines online/offline, and reconciles
     // against the streak pointer — recording a transition + broadcasting
     // only when the value actually changed. Returns the freshly-observed
     // value either way.
-    private boolean runCheck(Long applicationId) {
+    private boolean runCheck(Long applicationId, boolean force) {
+        // Applications with an enabled health endpoint are checked over
+        // HTTP (HEALTH-MONITORING.md D3); only those without one fall
+        // through to the SSH status_script below.
+        HealthDecision decision = healthCheckService.check(applicationId, force);
+        if (decision != HealthDecision.NOT_CONFIGURED) {
+            if (decision == HealthDecision.UNCHANGED) {
+                return isOnline(applicationId);
+            }
+            boolean healthOnline = decision == HealthDecision.ONLINE;
+            reconcile(applicationId, healthOnline, "HEALTH_API");
+            return healthOnline;
+        }
+
         Map<String, Object> app;
         try {
             app = jdbc.queryForMap(
@@ -267,7 +285,7 @@ public class StatusPollingOrchestrator {
             }
         }
 
-        reconcile(applicationId, online);
+        reconcile(applicationId, online, "STATUS_SCRIPT");
         return online;
     }
 
@@ -282,7 +300,7 @@ public class StatusPollingOrchestrator {
         }
     }
 
-    private void reconcile(Long applicationId, boolean observedOnline) {
+    private void reconcile(Long applicationId, boolean observedOnline, String detectedBy) {
         List<Boolean> rows = jdbc.queryForList(
             "SELECT online FROM application_status_streak WHERE application_id = ?",
             Boolean.class, applicationId);
@@ -313,7 +331,7 @@ public class StatusPollingOrchestrator {
 
         // First-ever reading (no streak row yet) is an initial state, not a change.
         if (hadStreakRow) {
-            writeTransitionAudit(applicationId, observedOnline);
+            writeTransitionAudit(applicationId, observedOnline, detectedBy);
         }
 
         // The log poller's on/off switch is now driven by this derived
