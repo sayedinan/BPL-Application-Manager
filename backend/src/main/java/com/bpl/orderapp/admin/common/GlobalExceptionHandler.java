@@ -103,6 +103,33 @@ public class GlobalExceptionHandler {
             .body(pd);
     }
 
+    @ExceptionHandler(AccessDeniedAppException.class)
+    public ResponseEntity<ProblemDetail> handleAccessDenied(AccessDeniedAppException ex) {
+        ProblemDetail pd = baseProblem(
+            ErrorCode.ACCESS_DENIED,
+            HttpStatus.FORBIDDEN,
+            "You do not have access to this resource"
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(pd);
+    }
+
+    // Thrown by method security (@PreAuthorize) when a role check fails.
+    // Without this handler the catch-all below would turn it into a 500.
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<ProblemDetail> handleMethodSecurityDenied(
+            org.springframework.security.access.AccessDeniedException ex) {
+        ProblemDetail pd = baseProblem(
+            ErrorCode.ACCESS_DENIED,
+            HttpStatus.FORBIDDEN,
+            "You do not have access to this resource"
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(pd);
+    }
+
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ProblemDetail> handleNotFound(NotFoundException ex) {
         // 404 with a generic message. Used for "user not found"

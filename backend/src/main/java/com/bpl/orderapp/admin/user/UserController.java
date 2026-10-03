@@ -248,6 +248,7 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
     @PostMapping("/{id}/reset-password")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
     public ResponseEntity<ResetPasswordResponse> resetPassword(@PathVariable("id") java.util.UUID id, HttpServletRequest httpRequest) {
         var resetAuth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         String resetActorRole = resetAuth.getAuthorities().stream()

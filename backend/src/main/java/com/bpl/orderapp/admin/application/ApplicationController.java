@@ -4,6 +4,8 @@ import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.common.IdempotencyService;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
+import com.bpl.orderapp.admin.security.AccessGuard;
+import com.bpl.orderapp.admin.security.Action;
 import com.bpl.orderapp.admin.ssh.SshConnection;
 import com.bpl.orderapp.admin.status.StatusConfirmationTimeoutException;
 import com.bpl.orderapp.admin.status.StatusPollingOrchestrator;
@@ -46,12 +48,14 @@ public class ApplicationController {
     private final LogPollingOrchestrator logPollingOrchestrator;
     private final StatusPollingOrchestrator statusPollingOrchestrator;
     private final java.util.List<com.bpl.orderapp.admin.notification.Notifier> notifiers;
+    private final AccessGuard accessGuard;
 
     public ApplicationController(JdbcTemplate jdbc, SshCredentialCipher cipher,
             IdempotencyService idempotencyService, SshConnection sshConnection,
             AuditWriter auditWriter, LogPollingOrchestrator logPollingOrchestrator,
             StatusPollingOrchestrator statusPollingOrchestrator,
-            java.util.List<com.bpl.orderapp.admin.notification.Notifier> notifiers) {
+            java.util.List<com.bpl.orderapp.admin.notification.Notifier> notifiers,
+            AccessGuard accessGuard) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.idempotencyService = idempotencyService;
@@ -60,6 +64,7 @@ public class ApplicationController {
         this.logPollingOrchestrator = logPollingOrchestrator;
         this.statusPollingOrchestrator = statusPollingOrchestrator;
         this.notifiers = notifiers;
+        this.accessGuard = accessGuard;
     }
 
     @GetMapping
@@ -123,6 +128,7 @@ public class ApplicationController {
 
     @GetMapping("/{id}")
     public ResponseEntity<Map<String, Object>> getApplication(@PathVariable Long id) {
+        accessGuard.require(Action.ACCESS_APPLICATION);
         Map<String, Object> app = jdbc.queryForMap(
             "SELECT id, name, server_ip, ssh_username, ssh_host_key_fingerprint, start_script, stop_script, log_script, status_script, poll_interval_seconds, " +
             "email_start_message, email_stop_message, email_external_online_message, email_external_offline_message, " +
@@ -153,6 +159,7 @@ public class ApplicationController {
 
     @GetMapping("/{id}/stats")
     public ResponseEntity<Map<String, Object>> getStats(@PathVariable Long id) {
+        accessGuard.requireApplication(Action.LIST_APPLICATIONS, id);
         java.sql.Timestamp createdAt = jdbc.queryForObject(
             "SELECT created_at FROM applications WHERE id = ?", java.sql.Timestamp.class, id);
 
@@ -212,6 +219,7 @@ public class ApplicationController {
 
     @PostMapping("/test-connection")
     public ResponseEntity<Map<String, Object>> testConnection(@RequestBody Map<String, Object> req) {
+        accessGuard.require(Action.UPDATE_APPLICATION);
         String serverIp = (String) req.get("serverIp");
         String sshUsername = (String) req.get("sshUsername");
         String sshPassword = (String) req.get("sshPassword");
@@ -243,6 +251,7 @@ public class ApplicationController {
 
     @GetMapping("/{id}/logs")
     public ResponseEntity<List<Map<String, Object>>> getLogs(@PathVariable Long id) {
+        accessGuard.requireApplication(Action.LIST_APPLICATIONS, id);
         List<Map<String, Object>> rows = jdbc.queryForList(
             "SELECT line_number, content, captured_at FROM application_log_lines WHERE application_id = ? ORDER BY line_number ASC", id);
         return ResponseEntity.ok(rows);
@@ -250,6 +259,7 @@ public class ApplicationController {
 
     @PostMapping
     public ResponseEntity<Void> createApplication(@RequestBody Map<String, Object> req, HttpServletRequest httpRequest) {
+        accessGuard.require(Action.CREATE_APPLICATION);
         String name = (String) req.get("name");
         String serverIp = (String) req.get("serverIp");
         if (serverIp == null || !serverIp.matches("^(\\d{1,3}\\.){3}\\d{1,3}$")) {
@@ -313,6 +323,7 @@ public class ApplicationController {
     public ResponseEntity<Map<String, Object>> startApplication(@PathVariable Long id,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestParam java.util.UUID userId, HttpServletRequest httpRequest) {
+        accessGuard.requireApplication(Action.CONTROL_APPLICATION, id);
         try {
             idempotencyService.checkAndStore(idempotencyKey != null ? idempotencyKey : "", userId, id);
         } catch (RuntimeException e) {
@@ -391,6 +402,7 @@ public class ApplicationController {
     public ResponseEntity<Map<String, Object>> stopApplication(@PathVariable Long id,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestParam java.util.UUID userId, HttpServletRequest httpRequest) {
+        accessGuard.requireApplication(Action.CONTROL_APPLICATION, id);
         idempotencyService.checkAndStore(idempotencyKey, userId, id);
 
         Map<String, Object> app = jdbc.queryForMap(
@@ -504,6 +516,7 @@ public class ApplicationController {
 
     @PutMapping("/{id}")
     public ResponseEntity<Void> updateApplication(@PathVariable Long id, @RequestBody Map<String, Object> req, HttpServletRequest httpRequest) {
+        accessGuard.require(Action.UPDATE_APPLICATION);
         if (statusPollingOrchestrator.isOnline(id)) {
             return ResponseEntity.status(403).build();
         }
@@ -560,6 +573,7 @@ public class ApplicationController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteApplication(@PathVariable Long id, HttpServletRequest httpRequest) {
+        accessGuard.require(Action.DELETE_APPLICATION);
         if (statusPollingOrchestrator.isOnline(id)) {
             return ResponseEntity.status(409).build();
         }

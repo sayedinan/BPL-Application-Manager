@@ -188,6 +188,32 @@ public class HealthCheckService {
         return decision;
     }
 
+    /** Outcome of a one-off {@link #test} run. */
+    public record TestResult(boolean ok, Integer httpStatus, Long responseMs, HealthStatus status,
+                             String error, Instant certNotAfter, HealthSnapshot snapshot) {}
+
+    /**
+     * One-off check of a configuration for the "Test" button. Fetches and
+     * parses exactly like a real check, but stores nothing and never
+     * affects online/offline state. {@code ok} means the response was
+     * usable (parsed into a snapshot), whatever status it reported.
+     */
+    public TestResult test(String url, String format, String apiKey, String tlsPinSha256, String appName) {
+        try {
+            HealthHttpClient.Response response = httpClient.fetch(url, apiKey, tlsPinSha256);
+            try {
+                HealthSnapshot snapshot = interpret(format, response, appName);
+                return new TestResult(true, response.statusCode(), response.responseMs(),
+                    snapshot.status(), null, response.certNotAfter(), snapshot);
+            } catch (InvalidHealthResponseException e) {
+                return new TestResult(false, response.statusCode(), response.responseMs(),
+                    null, e.getMessage(), response.certNotAfter(), null);
+            }
+        } catch (HealthFetchException e) {
+            return new TestResult(false, null, null, null, e.getMessage(), null, null);
+        }
+    }
+
     // Actuator answers 503 with a full body when DOWN, so for that format
     // a 503 is still parsed; every other non-200 is a failed check.
     private HealthSnapshot interpret(String format, HealthHttpClient.Response response, String appName) {
