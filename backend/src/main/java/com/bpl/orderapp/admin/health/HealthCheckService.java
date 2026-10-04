@@ -83,18 +83,20 @@ public class HealthCheckService {
     private final ContractParser contractParser;
     private final ActuatorAdapter actuatorAdapter;
     private final ObjectMapper payloadMapper;
+    private final HealthReadService readService;
 
     private final Map<Long, Instant> lastPolled = new ConcurrentHashMap<>();
     private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
 
     public HealthCheckService(JdbcTemplate jdbc, SshCredentialCipher cipher,
             HealthHttpClient httpClient, ContractParser contractParser,
-            ActuatorAdapter actuatorAdapter, ObjectMapper mapper) {
+            ActuatorAdapter actuatorAdapter, ObjectMapper mapper, HealthReadService readService) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.httpClient = httpClient;
         this.contractParser = contractParser;
         this.actuatorAdapter = actuatorAdapter;
+        this.readService = readService;
         // Own copy so omitting null fields doesn't change JSON output elsewhere.
         this.payloadMapper = mapper.copy().setSerializationInclusion(JsonInclude.Include.NON_NULL);
     }
@@ -185,6 +187,8 @@ public class HealthCheckService {
 
         persist(applicationId, checkedAt, httpStatus != null, httpStatus, responseMs,
             status, snapshot, error, certNotAfter, failures);
+        // Push the new reading to anyone watching this application.
+        readService.publish(applicationId);
         return decision;
     }
 

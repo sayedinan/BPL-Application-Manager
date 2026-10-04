@@ -146,6 +146,16 @@ public class GlobalExceptionHandler {
             .body(pd);
     }
 
+    // A lookup by id that matches no row (queryForMap / queryForObject) means
+    // the thing doesn't exist, e.g. an application deleted while someone still
+    // had its page open. Same 404 as NotFoundException; without this it fell
+    // through to the catch-all and became a 500.
+    @ExceptionHandler(org.springframework.dao.EmptyResultDataAccessException.class)
+    public ResponseEntity<ProblemDetail> handleEmptyResult(
+            org.springframework.dao.EmptyResultDataAccessException ex) {
+        return handleNotFound(new NotFoundException());
+    }
+
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ProblemDetail> handleNotFound(NotFoundException ex) {
         // 404 with a generic message. Used for "user not found"

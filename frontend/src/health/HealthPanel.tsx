@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { api, ApiError } from '@/api/client';
+import { api } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { Alert } from '@/components/ui/Alert';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { LoadingBlock } from '@/components/ui/Spinner';
 import { HealthBadge, timeAgo } from './HealthBadge';
-import type { HealthHistory, HealthLatest, HealthStatus } from './types';
+import { Sparkline } from './Sparkline';
+import type { HealthHistory, HealthStatus } from './types';
+import { useHealthLive } from './useHealthLive';
 
 const RANGES = [
   { hours: 1, label: 'Last hour' },
@@ -13,7 +15,7 @@ const RANGES = [
   { hours: 168, label: 'Last 7 days' },
   { hours: 720, label: 'Last 30 days' },
 ];
-const REFRESH_MS = 10000;
+const HISTORY_REFRESH_MS = 30000;
 
 const selectClass =
   'rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 ' +
@@ -47,12 +49,22 @@ function safeHref(url: string | undefined): string | null {
 }
 
 /** Card with a gray header strip and a darker inset body, like the Dashboard and Logs cards. */
-export function Section({ title, children }: { title: string; children: ReactNode }): JSX.Element {
+export function Section({
+  title,
+  aside,
+  children,
+}: {
+  title: string;
+  /** Small text at the right end of the header strip. */
+  aside?: ReactNode;
+  children: ReactNode;
+}): JSX.Element {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 dark:border-gh-border">
-      <h3 className="border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-gh-border dark:bg-gh-subtle/60 dark:text-gh-muted">
-        {title}
-      </h3>
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-gh-border dark:bg-gh-subtle/60">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-gh-muted">{title}</h3>
+        {aside && <span className="text-xs text-slate-500 dark:text-gh-muted">{aside}</span>}
+      </div>
       <div className="bg-slate-100 p-4 transition-theme dark:bg-gh-inset">{children}</div>
     </section>
   );
@@ -64,6 +76,23 @@ export function Row({ label, children }: { label: string; children: ReactNode })
       <dt className="shrink-0 text-slate-500 dark:text-gh-muted">{label}</dt>
       <dd className="min-w-0 break-words text-right font-medium text-slate-900 dark:text-gh-fg">{children}</dd>
     </div>
+  );
+}
+
+/** Green pulsing dot while readings arrive live; gray "Polling" when the connection is down. */
+function LiveIndicator({ live }: { live: boolean }): JSX.Element {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-gh-muted"
+      title={
+        live
+          ? 'Readings arrive the moment each check finishes'
+          : 'Live connection is down; refreshing every 10 seconds'
+      }
+    >
+      <span className={`h-2 w-2 rounded-full ${live ? 'animate-pulse bg-status-online' : 'bg-slate-400'}`} />
+      {live ? 'LIVE' : 'Polling'}
+    </span>
   );
 }
 
@@ -164,35 +193,27 @@ function ResponseChart({ points }: { points: HealthHistory['points'] }): JSX.Ele
  */
 export function HealthPanel({ applicationId }: { applicationId: number }): JSX.Element {
   const [hours, setHours] = useState(24);
-  const [latest, setLatest] = useState<HealthLatest | null>(null);
   const [history, setHistory] = useState<HealthHistory | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [, setTick] = useState(0);
+  const { latest, samples, live, loading, error } = useHealthLive(applicationId);
 
-  const load = useCallback(async () => {
+  // The long-range chart is not pushed: its points cover minutes to hours,
+  // so a refresh every 30 s is plenty.
+  const loadHistory = useCallback(async () => {
     try {
-      const [l, h] = await Promise.all([
-        api.get<HealthLatest>(API.APPLICATIONS.HEALTH(applicationId)),
-        api.get<HealthHistory>(API.APPLICATIONS.HEALTH_HISTORY(applicationId, hours)),
-      ]);
-      setLatest(l);
-      setHistory(h);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load health data.');
-    } finally {
-      setLoading(false);
+      setHistory(await api.get<HealthHistory>(API.APPLICATIONS.HEALTH_HISTORY(applicationId, hours)));
+    } catch {
+      // keep the previous chart; connection problems show in the live part
     }
   }, [applicationId, hours]);
 
   useEffect(() => {
-    void load();
-    const timer = setInterval(() => void load(), REFRESH_MS);
+    void loadHistory();
+    const timer = setInterval(() => void loadHistory(), HISTORY_REFRESH_MS);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [loadHistory]);
 
-  // Keeps "checked 8s ago" and the uptime counter moving between refreshes.
+  // Keeps "checked 8s ago" and the uptime counter moving between readings.
   useEffect(() => {
     const clock = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(clock);
@@ -215,6 +236,7 @@ export function HealthPanel({ applicationId }: { applicationId: number }): JSX.E
       {latest?.monitored && (
         <div className="flex flex-wrap items-center gap-3">
           <HealthBadge health={latest} />
+          <LiveIndicator live={live} />
           <span className="text-xs text-slate-500 dark:text-gh-muted">
             Last checked {latest.checkedAt ? timeAgo(latest.checkedAt) : '—'}
             {latest.pollIntervalSeconds ? ` · checks about every ${latest.pollIntervalSeconds}s` : ''}
@@ -241,6 +263,20 @@ export function HealthPanel({ applicationId }: { applicationId: number }): JSX.E
             </Alert>
           )}
           {latest.error && <Alert tone="warning">Last check problem: {latest.error}</Alert>}
+
+          {samples.length >= 2 && (
+            <Section
+              title="Live readings"
+              aside={`last ${samples.length} checks, since you opened this page`}
+            >
+              <div className="space-y-4">
+                <Sparkline label="Response time" values={samples.map((x) => x.responseMs)} unit=" ms" />
+                <Sparkline label="CPU" values={samples.map((x) => x.cpu)} unit="%" fixedMax={100} decimals={1} />
+                <Sparkline label="Memory" values={samples.map((x) => x.memory)} unit="%" fixedMax={100} decimals={1} />
+                <Sparkline label="Disk" values={samples.map((x) => x.disk)} unit="%" fixedMax={100} decimals={1} />
+              </div>
+            </Section>
+          )}
 
           <Section title="Vital signs">
             <dl>
