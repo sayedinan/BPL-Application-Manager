@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Client } from '@stomp/stompjs';
+import { Link } from 'react-router-dom';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
@@ -9,7 +10,6 @@ import { Button } from '@/components/ui/Button';
 import { LoadingBlock } from '@/components/ui/Spinner';
 import { Alert } from '@/components/ui/Alert';
 import { HealthSummary } from '@/health/HealthBadge';
-import { HealthDetailsModal } from '@/health/HealthDetailsModal';
 import type { HealthLatest } from '@/health/types';
 
 interface ApplicationSummary {
@@ -25,18 +25,6 @@ interface StatusEvent {
   transitionedAt: string;
 }
 
-interface AppStats {
-  createdAt: string;
-  totalUptimeSeconds: number;
-  totalDowntimeSeconds: number;
-  currentlyOnline: boolean;
-  currentStreakStartedAt: string | null;
-  lastRanAt: string | null;
-  lastWentOnlineAt: string | null;
-  lastWentOfflineAt: string | null;
-  recentTransitions: { online: boolean; at: string }[];
-}
-
 function formatRunningTime(startedAt: string | null): string | null {
   if (!startedAt) return null;
   const ms = Date.now() - new Date(startedAt).getTime();
@@ -48,19 +36,6 @@ function formatRunningTime(startedAt: string | null): string | null {
   return `${h}h ${m}m ${s}s`;
 }
 
-function formatWhen(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString() : '—';
-}
-
-function formatDuration(totalSeconds: number): string {
-  const d = Math.floor(totalSeconds / 86400);
-  const h = Math.floor((totalSeconds % 86400) / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
 export function DashboardPlaceholder(): JSX.Element {
   const { user } = useAuth();
   const [apps, setApps] = useState<ApplicationSummary[]>([]);
@@ -69,15 +44,36 @@ export function DashboardPlaceholder(): JSX.Element {
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [pendingAction, setPendingAction] = useState<'start' | 'stop' | null>(null);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [statsCache, setStatsCache] = useState<Record<number, AppStats>>({});
-  const [statsLoading, setStatsLoading] = useState<number | null>(null);
   const [, setTick] = useState(0);
+  const clientRef = useRef<Client | null>(null);
+
+  async function loadApplications() {
+    try {
+      const list = await api.get<ApplicationSummary[]>(API.APPLICATIONS.LIST);
+      setApps(list);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load applications.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadApplications();
+    const interval = setInterval(() => void loadApplications(), 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const clock = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(clock);
+  }, []);
+
   // Health readings for every card (HEALTH-MONITORING.md). The key only
   // changes when the set of applications does, so the 10s timer is not
   // restarted by every 5s list refresh.
   const [healthById, setHealthById] = useState<Record<number, HealthLatest>>({});
-  const [healthAppId, setHealthAppId] = useState<number | null>(null);
   const appIdsKey = apps.map((a) => a.id).join(',');
 
   useEffect(() => {
@@ -110,31 +106,6 @@ export function DashboardPlaceholder(): JSX.Element {
     };
   }, [appIdsKey]);
 
-  const clientRef = useRef<Client | null>(null);
-
-  async function loadApplications() {
-    try {
-      const list = await api.get<ApplicationSummary[]>(API.APPLICATIONS.LIST);
-      setApps(list);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load applications.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void loadApplications();
-    const interval = setInterval(() => void loadApplications(), 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const clock = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(clock);
-  }, []);
-
   // STATUS-REDESIGN.md §2 — global topic, same reconnect-backoff-then-banner
   // pattern as LogsBox.tsx. This is additive to the 5s poll above, not a
   // replacement: WS gives instant updates, the poll is the safety net.
@@ -163,10 +134,6 @@ export function DashboardPlaceholder(): JSX.Element {
                 : a
             )
           );
-          api
-            .get<AppStats>(API.APPLICATIONS.STATS(d.applicationId))
-            .then((s) => setStatsCache((prev) => ({ ...prev, [d.applicationId]: s })))
-            .catch(() => {});
         } catch {
           // malformed frame — ignore, next poll tick will reconcile
         }
@@ -225,36 +192,11 @@ export function DashboardPlaceholder(): JSX.Element {
           setActionError(`Failed to ${action} ${app.name} — check the server connection and scripts.`);
         }
       }
-      // A start/stop can change uptime/downtime totals — drop any cached
-      // stats for this app so the next expand re-fetches fresh numbers.
-      setStatsCache((prev) => {
-        const next = { ...prev };
-        delete next[app.id];
-        return next;
-      });
     } catch {
       setActionError(`Failed to ${action} ${app.name}.`);
     } finally {
       setPendingId(null);
       setPendingAction(null);
-    }
-  }
-
-  function toggleDetails(appId: number) {
-    if (expandedId === appId) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(appId);
-    if (!statsCache[appId]) {
-      setStatsLoading(appId);
-      api
-        .get<AppStats>(API.APPLICATIONS.STATS(appId))
-        .then((data) => setStatsCache((prev) => ({ ...prev, [appId]: data })))
-        .catch(() => {
-          // leave uncached — the panel shows a fallback message below
-        })
-        .finally(() => setStatsLoading(null));
     }
   }
 
@@ -272,13 +214,6 @@ export function DashboardPlaceholder(): JSX.Element {
       />
 
       {error && <Alert className="mb-4">{error}</Alert>}
-      {healthAppId !== null && (
-        <HealthDetailsModal
-          applicationId={healthAppId}
-          applicationName={apps.find((a) => a.id === healthAppId)?.name ?? ''}
-          onClose={() => setHealthAppId(null)}
-        />
-      )}
       {actionError && <Alert className="mb-4">{actionError}</Alert>}
       {wsDisconnected && (
         <Alert className="mb-4">Live status updates disconnected — retrying. Falling back to periodic refresh.</Alert>
@@ -295,8 +230,6 @@ export function DashboardPlaceholder(): JSX.Element {
           {apps.map((app) => {
             const runningTime = app.online ? formatRunningTime(app.startedAt) : null;
             const isPending = pendingId === app.id;
-            const isExpanded = expandedId === app.id;
-            const stats = statsCache[app.id];
 
             return (
               <Card key={app.id} className="overflow-hidden">
@@ -317,7 +250,7 @@ export function DashboardPlaceholder(): JSX.Element {
                     <p className="mb-2 text-xs text-slate-500 dark:text-gh-muted">Running for {runningTime}</p>
                   )}
 
-                  <HealthSummary health={healthById[app.id]} onOpen={() => setHealthAppId(app.id)} />
+                  <HealthSummary health={healthById[app.id]} />
 
                   <div className="mt-3 flex items-center gap-2">
                     {isPending ? (
@@ -335,33 +268,12 @@ export function DashboardPlaceholder(): JSX.Element {
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => toggleDetails(app.id)}
-                    className="mt-2 w-full text-center text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-gh-muted dark:hover:text-gh-fg"
+                  <Link
+                    to={`/apps/${app.id}`}
+                    className="mt-2 block w-full text-center text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-gh-muted dark:hover:text-gh-fg"
                   >
-                    {isExpanded ? 'Hide details ▲' : 'Details ▼'}
-                  </button>
-
-                  {isExpanded && (
-                    <div className="mt-2 space-y-1 rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-600 dark:border-gh-border dark:bg-gh-subtle dark:text-gh-fgSoft">
-                      {statsLoading === app.id && !stats ? (
-                        <LoadingBlock label="Loading stats…" className="justify-start py-1" />
-                      ) : stats ? (
-                        <>
-                          <p>Added: {new Date(stats.createdAt).toLocaleDateString()} (since added to BPL admin)</p>
-                          <p>Total uptime: {formatDuration(stats.totalUptimeSeconds)}</p>
-                          <p>Total downtime: {formatDuration(stats.totalDowntimeSeconds)}</p>
-                          <p>Last ran: {stats.lastRanAt ? new Date(stats.lastRanAt).toLocaleString() : 'Never'}</p>
-                          <p>{stats.currentlyOnline ? 'Online since' : 'Offline since'}: {formatWhen(stats.currentStreakStartedAt)}</p>
-                          <p>Last went online: {formatWhen(stats.lastWentOnlineAt)}</p>
-                          <p>Last went offline: {formatWhen(stats.lastWentOfflineAt)}</p>
-                        </>
-                      ) : (
-                        <p>Couldn't load stats.</p>
-                      )}
-                    </div>
-                  )}
+                    Details →
+                  </Link>
                 </div>
               </Card>
             );
