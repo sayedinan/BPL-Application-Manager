@@ -8,6 +8,7 @@ import { Alert } from '@/components/ui/Alert';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LoadingBlock } from '@/components/ui/Spinner';
+import { HealthSettingsModal } from '@/health/HealthSettingsModal';
 
 interface ApplicationSummary {
   id: number;
@@ -60,6 +61,7 @@ export function ApplicationsPage(): JSX.Element {
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ApplicationSummary | null>(null);
+  const [healthApp, setHealthApp] = useState<ApplicationSummary | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [testStatus, setTestStatus] = useState<'untested' | 'testing' | 'verified' | 'failed'>('untested');
@@ -239,6 +241,14 @@ export function ApplicationsPage(): JSX.Element {
 
       {listError && <Alert className="mb-4">{listError}</Alert>}
 
+      {healthApp && (
+        <HealthSettingsModal
+          applicationId={healthApp.id}
+          applicationName={healthApp.name}
+          onClose={() => setHealthApp(null)}
+        />
+      )}
+
       {pendingDelete && (
         <ConfirmDialog
           title="Delete application?"
@@ -417,6 +427,9 @@ export function ApplicationsPage(): JSX.Element {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">
+                        <Button size="sm" variant="secondary" onClick={() => setHealthApp(app)}>
+                          Health
+                        </Button>
                         <Button
                           size="sm"
                           variant="secondary"

@@ -8,6 +8,9 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { LoadingBlock } from '@/components/ui/Spinner';
 import { Alert } from '@/components/ui/Alert';
+import { HealthSummary } from '@/health/HealthBadge';
+import { HealthDetailsModal } from '@/health/HealthDetailsModal';
+import type { HealthLatest } from '@/health/types';
 
 interface ApplicationSummary {
   id: number;
@@ -70,6 +73,43 @@ export function DashboardPlaceholder(): JSX.Element {
   const [statsCache, setStatsCache] = useState<Record<number, AppStats>>({});
   const [statsLoading, setStatsLoading] = useState<number | null>(null);
   const [, setTick] = useState(0);
+  // Health readings for every card (HEALTH-MONITORING.md). The key only
+  // changes when the set of applications does, so the 10s timer is not
+  // restarted by every 5s list refresh.
+  const [healthById, setHealthById] = useState<Record<number, HealthLatest>>({});
+  const [healthAppId, setHealthAppId] = useState<number | null>(null);
+  const appIdsKey = apps.map((a) => a.id).join(',');
+
+  useEffect(() => {
+    if (!appIdsKey) return;
+    let cancelled = false;
+    async function loadHealth() {
+      const ids = appIdsKey.split(',').map(Number);
+      const results = await Promise.all(
+        ids.map((id) =>
+          api
+            .get<HealthLatest>(API.APPLICATIONS.HEALTH(id))
+            .then((h) => [id, h] as const)
+            .catch(() => null),
+        ),
+      );
+      if (cancelled) return;
+      setHealthById((prev) => {
+        const next = { ...prev };
+        for (const r of results) {
+          if (r) next[r[0]] = r[1];
+        }
+        return next;
+      });
+    }
+    void loadHealth();
+    const timer = setInterval(() => void loadHealth(), 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [appIdsKey]);
+
   const clientRef = useRef<Client | null>(null);
 
   async function loadApplications() {
@@ -232,6 +272,13 @@ export function DashboardPlaceholder(): JSX.Element {
       />
 
       {error && <Alert className="mb-4">{error}</Alert>}
+      {healthAppId !== null && (
+        <HealthDetailsModal
+          applicationId={healthAppId}
+          applicationName={apps.find((a) => a.id === healthAppId)?.name ?? ''}
+          onClose={() => setHealthAppId(null)}
+        />
+      )}
       {actionError && <Alert className="mb-4">{actionError}</Alert>}
       {wsDisconnected && (
         <Alert className="mb-4">Live status updates disconnected — retrying. Falling back to periodic refresh.</Alert>
@@ -269,6 +316,8 @@ export function DashboardPlaceholder(): JSX.Element {
                   {runningTime && (
                     <p className="mb-2 text-xs text-slate-500 dark:text-gh-muted">Running for {runningTime}</p>
                   )}
+
+                  <HealthSummary health={healthById[app.id]} onOpen={() => setHealthAppId(app.id)} />
 
                   <div className="mt-3 flex items-center gap-2">
                     {isPending ? (

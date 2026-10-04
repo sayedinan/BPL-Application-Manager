@@ -260,7 +260,7 @@ public class UserController {
         //    §12.2 "deliver out-of-band" step would fail because
         //    the user can't log in.
         List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT id, username FROM users WHERE id = ? AND deleted_at IS NULL",
+            "SELECT id, username, role FROM users WHERE id = ? AND deleted_at IS NULL",
             id
         );
         if (rows.isEmpty()) {
@@ -269,6 +269,14 @@ public class UserController {
         }
 
         String username = (String) rows.get(0).get("username");
+
+        // Admin ceiling (SPEC §1): an ADMIN must not be able to reset a
+        // SYS_ADMIN's password, since they would receive the temporary
+        // password and could sign in as that account. Same rule as the
+        // delete and update endpoints.
+        if ("SYS_ADMIN".equals(rows.get(0).get("role")) && !"SYS_ADMIN".equals(resetActorRole)) {
+            throw new com.bpl.orderapp.admin.common.AdminCeilingException();
+        }
 
         // 2. Generate a temporary password. Same recipe as the
         //    SysAdmin seeder: 24 bytes from SecureRandom → 32

@@ -25,6 +25,10 @@ export const API = {
     STOP: (id: number | string) => `/applications/${id}/stop`,
     LOGS: (id: number | string) => `/applications/${id}/logs`,
     STATS: (id: number | string) => `/applications/${id}/stats`,
+    HEALTH: (id: number | string) => `/applications/${id}/health`,
+    HEALTH_HISTORY: (id: number | string, hours: number) => `/applications/${id}/health/history?hours=${hours}`,
+    HEALTH_CONFIG: (id: number | string) => `/applications/${id}/health/config`,
+    HEALTH_TEST: (id: number | string) => `/applications/${id}/health/test`,
   },
   USERS: {
     LIST: '/users',

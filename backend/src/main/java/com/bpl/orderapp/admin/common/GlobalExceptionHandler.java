@@ -130,6 +130,22 @@ public class GlobalExceptionHandler {
             .body(pd);
     }
 
+    // The "Admin ceiling" (SPEC §1): an ADMIN tried to create or promote an
+    // Admin, or to edit, delete or reset the password of a SYS_ADMIN. It is
+    // used for all of those, so the message stays generic. Without this
+    // handler the catch-all below turned it into a 500.
+    @ExceptionHandler(AdminCeilingException.class)
+    public ResponseEntity<ProblemDetail> handleAdminCeiling(AdminCeilingException ex) {
+        ProblemDetail pd = baseProblem(
+            ErrorCode.ACCESS_DENIED,
+            HttpStatus.FORBIDDEN,
+            "Your role does not allow this action on that account"
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(pd);
+    }
+
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ProblemDetail> handleNotFound(NotFoundException ex) {
         // 404 with a generic message. Used for "user not found"
