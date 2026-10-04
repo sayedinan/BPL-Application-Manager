@@ -12,7 +12,11 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    // The backend dev origin must be allowed for `credentials: true`
-    // requests — see SPEC §8.4.
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
+    },
   },
 });
