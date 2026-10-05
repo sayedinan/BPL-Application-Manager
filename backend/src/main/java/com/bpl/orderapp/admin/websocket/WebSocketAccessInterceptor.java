@@ -95,10 +95,6 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             jdbc.update("INSERT INTO websocket_subscriptions (session_id, subscription_id, topic_key) VALUES (?, ?, ?)", sessionId, subscriptionId, "audit-log");
             return;
         }
-        if ("/topic/application-status".equals(destination)) {
-            jdbc.update("INSERT INTO websocket_subscriptions (session_id, subscription_id, topic_key) VALUES (?, ?, ?)", sessionId, subscriptionId, "application-status");
-            return;
-        }
         if (destination.startsWith("/topic/application-logs/")) {
             String idPart = destination.substring("/topic/application-logs/".length());
             Long applicationId; try { applicationId = Long.valueOf(idPart); } catch (NumberFormatException e) { throw new MessageDeliveryException("Invalid application id"); }
@@ -113,15 +109,12 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             return;
         }
         if (destination.startsWith("/topic/application-health/")) {
-            String idPart = destination.substring("/topic/application-health/".length());
-            Long applicationId; try { applicationId = Long.valueOf(idPart); } catch (NumberFormatException e) { throw new MessageDeliveryException("Invalid application id"); }
-            // Same rule as the REST health endpoints: Rbac decides, a USER needs the assignment.
-            if (!com.bpl.orderapp.admin.security.Rbac.canAccess(role, com.bpl.orderapp.admin.security.Action.LIST_APPLICATIONS)) throw new MessageDeliveryException("Not authorized for application health");
-            List<Long> assigned = role == Role.USER
-                ? jdbc.queryForList("SELECT application_id FROM user_application_assignments WHERE user_id = ?", Long.class, lookupUserId(username))
-                : List.of();
-            if (!com.bpl.orderapp.admin.security.Rbac.canAccessApplication(role, assigned, applicationId)) throw new MessageDeliveryException("Not authorized for this application's health");
+            requireApplicationTopicAccess(destination.substring("/topic/application-health/".length()), role, username);
             // Not tracked in websocket_subscriptions: nothing depends on whether anyone is listening.
+            return;
+        }
+        if (destination.startsWith("/topic/application-status/")) {
+            requireApplicationTopicAccess(destination.substring("/topic/application-status/".length()), role, username);
             return;
         }
         throw new MessageDeliveryException("Unknown topic: " + destination);
@@ -186,6 +179,27 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
     private String requireUsername(StompHeaderAccessor accessor) {
         if (accessor.getUser() == null || accessor.getUser().getName() == null) throw new MessageDeliveryException("No authenticated principal");
         return accessor.getUser().getName();
+    }
+
+    // Shared by the per-application topics (health, status). Same rule as the
+    // REST endpoints, decided by Rbac: a USER needs the assignment, ADMIN and
+    // SYS_ADMIN may follow every application.
+    private void requireApplicationTopicAccess(String idPart, Role role, String username) {
+        Long applicationId;
+        try {
+            applicationId = Long.valueOf(idPart);
+        } catch (NumberFormatException e) {
+            throw new MessageDeliveryException("Invalid application id");
+        }
+        if (!com.bpl.orderapp.admin.security.Rbac.canAccess(role, com.bpl.orderapp.admin.security.Action.LIST_APPLICATIONS)) {
+            throw new MessageDeliveryException("Not authorized for application updates");
+        }
+        List<Long> assigned = role == Role.USER
+            ? jdbc.queryForList("SELECT application_id FROM user_application_assignments WHERE user_id = ?", Long.class, lookupUserId(username))
+            : List.of();
+        if (!com.bpl.orderapp.admin.security.Rbac.canAccessApplication(role, assigned, applicationId)) {
+            throw new MessageDeliveryException("Not authorized for this application");
+        }
     }
 
     private Role lookupRole(String username) {

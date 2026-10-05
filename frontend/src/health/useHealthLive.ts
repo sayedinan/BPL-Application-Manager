@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
-import { onHealthStreamState, subscribeHealth } from './healthStream';
+import { onLiveStreamState, subscribeHealth } from '@/lib/liveStream';
 import type { HealthLatest } from './types';
 
 /** One reading, reduced to the numbers the live graphs draw. null = no value for that check. */
@@ -68,7 +68,7 @@ export function useHealthLive(applicationId: number): {
     liveRef.current = live;
   }, [live]);
 
-  useEffect(() => onHealthStreamState(setLive), []);
+  useEffect(() => onLiveStreamState(setLive), []);
 
   useEffect(() => {
     setLatest(null);

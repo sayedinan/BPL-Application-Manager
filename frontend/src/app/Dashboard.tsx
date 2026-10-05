@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Client } from '@stomp/stompjs';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
@@ -10,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { LoadingBlock } from '@/components/ui/Spinner';
 import { Alert } from '@/components/ui/Alert';
 import { HealthSummary } from '@/health/HealthBadge';
-import { onHealthStreamState, subscribeHealth } from '@/health/healthStream';
+import { onLiveStreamState, subscribeHealth, subscribeStatus } from '@/lib/liveStream';
 import type { HealthLatest } from '@/health/types';
 
 interface ApplicationSummary {
@@ -20,11 +19,6 @@ interface ApplicationSummary {
   startedAt: string | null;
 }
 
-interface StatusEvent {
-  applicationId: number;
-  online: boolean;
-  transitionedAt: string;
-}
 
 function formatRunningTime(startedAt: string | null): string | null {
   if (!startedAt) return null;
@@ -46,7 +40,6 @@ export function DashboardPlaceholder(): JSX.Element {
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [pendingAction, setPendingAction] = useState<'start' | 'stop' | null>(null);
   const [, setTick] = useState(0);
-  const clientRef = useRef<Client | null>(null);
 
   async function loadApplications() {
     try {
@@ -80,10 +73,13 @@ export function DashboardPlaceholder(): JSX.Element {
   const appIdsKey = apps.map((a) => a.id).join(',');
   const healthLiveRef = useRef(false);
 
+  const [streamUp, setStreamUp] = useState(false);
+
   useEffect(
     () =>
-      onHealthStreamState((connected) => {
+      onLiveStreamState((connected) => {
         healthLiveRef.current = connected;
+        setStreamUp(connected);
       }),
     [],
   );
@@ -130,69 +126,39 @@ export function DashboardPlaceholder(): JSX.Element {
     };
   }, [appIdsKey]);
 
-  // STATUS-REDESIGN.md §2 — global topic, same reconnect-backoff-then-banner
-  // pattern as LogsBox.tsx. This is additive to the 5s poll above, not a
-  // replacement: WS gives instant updates, the poll is the safety net.
-  const reconnectDelays = [1000, 2000, 4000, 8000, 16000, 30000];
-  const [reconnectAttempt, setReconnectAttempt] = useState(0);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  // STATUS-REDESIGN.md §2: Online/Offline changes arrive instantly over the
+  // tab's shared live connection (lib/liveStream.ts), one topic per application:
+  // the server only lets a viewer join the topics of applications they may see.
+  // This is additive to the 5 s list refresh above, which stays as the safety net.
   useEffect(() => {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const brokerURL = `${wsProtocol}//${window.location.host}/ws`;
-    const client = new Client({ brokerURL, debug: () => {} });
-
-    client.onConnect = () => {
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-      setReconnectAttempt(0);
-      client.subscribe('/topic/application-status', (msg) => {
-        try {
-          const d = JSON.parse(msg.body) as StatusEvent;
+    if (!appIdsKey) return;
+    const stops = appIdsKey
+      .split(',')
+      .map(Number)
+      .map((id) =>
+        subscribeStatus(id, (event) =>
           setApps((prev) =>
             prev.map((a) =>
-              a.id === d.applicationId
-                ? { ...a, online: d.online, startedAt: d.online ? d.transitionedAt : null }
-                : a
-            )
-          );
-        } catch {
-          // malformed frame — ignore, next poll tick will reconcile
-        }
-      });
-    };
+              a.id === event.applicationId
+                ? { ...a, online: event.online, startedAt: event.online ? event.transitionedAt : null }
+                : a,
+            ),
+          ),
+        ),
+      );
+    return () => stops.forEach((stop) => stop());
+  }, [appIdsKey]);
 
-    client.activate();
-    clientRef.current = client;
-    return () => {
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-      client.deactivate();
-    };
-  }, []);
-
+  // Short drops are normal, so only warn once the connection has been down a while.
+  const [wsDisconnected, setWsDisconnected] = useState(false);
   useEffect(() => {
-    if (!clientRef.current || !clientRef.current.connected) {
-      const delay = reconnectDelays[Math.min(reconnectAttempt, reconnectDelays.length - 1)];
-      reconnectTimerRef.current = setTimeout(() => {
-        reconnectTimerRef.current = null;
-        setReconnectAttempt((a) => a + 1);
-        clientRef.current?.activate();
-      }, delay);
-      return () => {
-        if (reconnectTimerRef.current) {
-          clearTimeout(reconnectTimerRef.current);
-          reconnectTimerRef.current = null;
-        }
-      };
+    if (streamUp) {
+      setWsDisconnected(false);
+      return;
     }
-  }, [reconnectAttempt]);
-
-  const wsDisconnected = reconnectAttempt >= 10;
+    const timer = setTimeout(() => setWsDisconnected(true), 30000);
+    return () => clearTimeout(timer);
+  }, [streamUp]);
 
   async function handleStartStop(app: ApplicationSummary, action: 'start' | 'stop') {
     if (!user) return;
