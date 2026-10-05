@@ -9,6 +9,7 @@ import { LoginPage } from '@/auth/LoginPage';
 import { RealChangePasswordPage } from '@/auth/ChangePasswordPage';
 import { DashboardPlaceholder } from '@/app/Dashboard';
 import { ApplicationsPage } from '@/app/ApplicationsPage';
+import { ApplicationDetailsPage } from '@/app/ApplicationDetailsPage';
 import { UsersPage } from '@/app/UsersPage';
 import { LogsPage } from '@/app/LogsPage';
 import { PresenceConnection } from '@/app/PresenceConnection';
@@ -58,7 +59,9 @@ function AdminPlus({ children }: { children: React.ReactNode }) {
 
 
 function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
-  const active = window.location.pathname === href;
+  // The application details pages (/apps/:id) belong to the Dashboard tab.
+  const path = window.location.pathname;
+  const active = path === href || (href === '/' && path.startsWith('/apps/'));
   return (
     <a
       href={href}
@@ -122,6 +125,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<RequireAuth><DashboardPlaceholder /></RequireAuth>} />
+      <Route path="/apps/:id" element={<RequireAuth><ApplicationDetailsPage /></RequireAuth>} />
       <Route path="/applications" element={<RequireAuth><SysAdminOnly><ApplicationsPage /></SysAdminOnly></RequireAuth>} />
       <Route path="/users" element={<RequireAuth><AdminPlus><UsersPage /></AdminPlus></RequireAuth>} />
       <Route path="/logs" element={<RequireAuth><AdminPlus><LogsPage /></AdminPlus></RequireAuth>} />
