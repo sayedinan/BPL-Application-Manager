@@ -2,11 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
+import { useAuth } from '@/auth/AuthContext';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { Card, PageHeader } from '@/components/ui/Card';
 import { LoadingBlock } from '@/components/ui/Spinner';
 import { HealthPanel, Row, Section } from '@/health/HealthPanel';
+import { HealthSettingsModal } from '@/health/HealthSettingsModal';
 
 interface ApplicationSummary {
   id: number;
@@ -73,6 +76,7 @@ function BackLink(): JSX.Element {
  */
 export function ApplicationDetailsPage(): JSX.Element {
   const { id } = useParams();
+  const { user } = useAuth();
   const appId = Number(id);
   const validId = Number.isInteger(appId) && appId > 0;
 
@@ -80,6 +84,7 @@ export function ApplicationDetailsPage(): JSX.Element {
   const [app, setApp] = useState<ApplicationSummary | null | undefined>(undefined);
   const [stats, setStats] = useState<AppStats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [, setTick] = useState(0);
 
   const loadApp = useCallback(async () => {
@@ -160,8 +165,25 @@ export function ApplicationDetailsPage(): JSX.Element {
       <PageHeader
         title={app.name}
         description={runningTime ? `Running for ${runningTime}` : undefined}
-        actions={<Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>}
+        actions={
+          <div className="flex items-center gap-3">
+            {user?.role === 'SYS_ADMIN' && (
+              <Button size="sm" variant="secondary" onClick={() => setSettingsOpen(true)}>
+                Health settings
+              </Button>
+            )}
+            <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>
+          </div>
+        }
       />
+
+      {settingsOpen && (
+        <HealthSettingsModal
+          applicationId={app.id}
+          applicationName={app.name}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
 
       {error && <Alert className="mb-4">{error}</Alert>}
 

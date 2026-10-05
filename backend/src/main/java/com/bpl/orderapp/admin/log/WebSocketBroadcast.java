@@ -22,4 +22,11 @@ public class WebSocketBroadcast {
             new StatusMessage(appId, online, transitionedAt));
     }
     public static record StatusMessage(Long applicationId, boolean online, String transitionedAt) {}
+
+    // HEALTH-MONITORING.md: per-application topic, because a viewer may only
+    // see the applications they are assigned to (WebSocketAccessInterceptor
+    // checks that on subscribe). Sent after every health check.
+    public void broadcastHealth(Long appId, Object payload) {
+        template.convertAndSend("/topic/application-health/" + appId, payload);
+    }
 }

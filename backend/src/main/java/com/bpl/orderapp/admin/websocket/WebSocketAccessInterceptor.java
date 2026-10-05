@@ -112,6 +112,18 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             jdbc.update("INSERT INTO websocket_subscriptions (session_id, subscription_id, topic_key) VALUES (?, ?, ?)", sessionId, subscriptionId, idPart);
             return;
         }
+        if (destination.startsWith("/topic/application-health/")) {
+            String idPart = destination.substring("/topic/application-health/".length());
+            Long applicationId; try { applicationId = Long.valueOf(idPart); } catch (NumberFormatException e) { throw new MessageDeliveryException("Invalid application id"); }
+            // Same rule as the REST health endpoints: Rbac decides, a USER needs the assignment.
+            if (!com.bpl.orderapp.admin.security.Rbac.canAccess(role, com.bpl.orderapp.admin.security.Action.LIST_APPLICATIONS)) throw new MessageDeliveryException("Not authorized for application health");
+            List<Long> assigned = role == Role.USER
+                ? jdbc.queryForList("SELECT application_id FROM user_application_assignments WHERE user_id = ?", Long.class, lookupUserId(username))
+                : List.of();
+            if (!com.bpl.orderapp.admin.security.Rbac.canAccessApplication(role, assigned, applicationId)) throw new MessageDeliveryException("Not authorized for this application's health");
+            // Not tracked in websocket_subscriptions: nothing depends on whether anyone is listening.
+            return;
+        }
         throw new MessageDeliveryException("Unknown topic: " + destination);
     }
 

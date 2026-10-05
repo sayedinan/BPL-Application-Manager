@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { LoadingBlock } from '@/components/ui/Spinner';
 import { Alert } from '@/components/ui/Alert';
 import { HealthSummary } from '@/health/HealthBadge';
+import { onHealthStreamState, subscribeHealth } from '@/health/healthStream';
 import type { HealthLatest } from '@/health/types';
 
 interface ApplicationSummary {
@@ -70,17 +71,31 @@ export function DashboardPlaceholder(): JSX.Element {
     return () => clearInterval(clock);
   }, []);
 
-  // Health readings for every card (HEALTH-MONITORING.md). The key only
-  // changes when the set of applications does, so the 10s timer is not
-  // restarted by every 5s list refresh.
+  // Live health for every card (HEALTH-MONITORING.md). Readings are pushed over
+  // the WebSocket the moment each check finishes; the fetch gives the starting
+  // values and covers gaps (every 10 s while the live connection is down,
+  // every 30 s while it is up). The key only changes when the set of
+  // applications does, so the 5 s list refresh doesn't restart any of this.
   const [healthById, setHealthById] = useState<Record<number, HealthLatest>>({});
   const appIdsKey = apps.map((a) => a.id).join(',');
+  const healthLiveRef = useRef(false);
+
+  useEffect(
+    () =>
+      onHealthStreamState((connected) => {
+        healthLiveRef.current = connected;
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (!appIdsKey) return;
+    const ids = appIdsKey.split(',').map(Number);
     let cancelled = false;
+    let lastFetch = 0;
+
     async function loadHealth() {
-      const ids = appIdsKey.split(',').map(Number);
+      lastFetch = Date.now();
       const results = await Promise.all(
         ids.map((id) =>
           api
@@ -98,11 +113,20 @@ export function DashboardPlaceholder(): JSX.Element {
         return next;
       });
     }
+
     void loadHealth();
-    const timer = setInterval(() => void loadHealth(), 10000);
+    const stops = ids.map((id) =>
+      subscribeHealth(id, (health) => setHealthById((prev) => ({ ...prev, [id]: health }))),
+    );
+    const timer = setInterval(() => {
+      const due = healthLiveRef.current ? 30000 : 10000;
+      if (Date.now() - lastFetch >= due - 500) void loadHealth();
+    }, 5000);
+
     return () => {
       cancelled = true;
       clearInterval(timer);
+      stops.forEach((stop) => stop());
     };
   }, [appIdsKey]);
 
