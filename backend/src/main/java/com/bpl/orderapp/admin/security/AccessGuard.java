@@ -9,6 +9,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Enforces {@link Rbac} inside controllers: works out who the caller is
@@ -36,7 +38,7 @@ import java.util.List;
 public class AccessGuard {
 
     /** The authenticated caller, as the database knows them. */
-    public record Caller(String username, Role role) {}
+    public record Caller(UUID userId, String username, Role role) {}
 
     private final JdbcTemplate jdbc;
 
@@ -50,12 +52,12 @@ public class AccessGuard {
             throw new InvalidCredentialsException();
         }
         String username = auth.getName();
-        List<String> roles = jdbc.queryForList(
-            "SELECT role FROM users WHERE username = ? AND deleted_at IS NULL", String.class, username);
-        if (roles.isEmpty()) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT id, role FROM users WHERE username = ? AND deleted_at IS NULL", username);
+        if (rows.isEmpty()) {
             throw new InvalidCredentialsException();
         }
-        return new Caller(username, Role.valueOf(roles.get(0)));
+        return new Caller((UUID) rows.get(0).get("id"), username, Role.valueOf((String) rows.get(0).get("role")));
     }
 
     /** Coarse gate: may this caller's role perform the action at all? */

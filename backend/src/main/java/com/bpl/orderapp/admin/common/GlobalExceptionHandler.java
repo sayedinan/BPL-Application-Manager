@@ -163,6 +163,16 @@ public class GlobalExceptionHandler {
             .body(pd);
     }
 
+    @ExceptionHandler(org.springframework.dao.EmptyResultDataAccessException.class)
+    public ResponseEntity<ProblemDetail> handleEmptyResult(
+            org.springframework.dao.EmptyResultDataAccessException ex,
+            jakarta.servlet.http.HttpServletRequest request) {
+        // Logged so a real "row missing" bug somewhere internal can't hide behind a 404.
+        log.warn("A lookup found no row, answering 404: {} {}", request.getMethod(), request.getRequestURI());
+        log.debug("Details of the missing-row lookup", ex);
+        return handleNotFound(new NotFoundException());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ProblemDetail> handleValidation(MethodArgumentNotValidException ex) {
         // Map Bean Validation failures to a 400 with the field-level

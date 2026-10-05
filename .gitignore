@@ -24,3 +24,6 @@ Thumbs.db
 
 
 temp
+
+# TLS certificate and private key for Caddy (generated per machine, never committed)
+caddy_certs/

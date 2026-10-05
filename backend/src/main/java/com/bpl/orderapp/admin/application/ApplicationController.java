@@ -322,8 +322,8 @@ public class ApplicationController {
     @PostMapping("/{id}/start")
     public ResponseEntity<Map<String, Object>> startApplication(@PathVariable Long id,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestParam java.util.UUID userId, HttpServletRequest httpRequest) {
-        accessGuard.requireApplication(Action.CONTROL_APPLICATION, id);
+            HttpServletRequest httpRequest) {
+        java.util.UUID userId = accessGuard.requireApplication(Action.CONTROL_APPLICATION, id).userId();
         try {
             idempotencyService.checkAndStore(idempotencyKey != null ? idempotencyKey : "", userId, id);
         } catch (RuntimeException e) {
@@ -401,8 +401,8 @@ public class ApplicationController {
     @PostMapping("/{id}/stop")
     public ResponseEntity<Map<String, Object>> stopApplication(@PathVariable Long id,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestParam java.util.UUID userId, HttpServletRequest httpRequest) {
-        accessGuard.requireApplication(Action.CONTROL_APPLICATION, id);
+            HttpServletRequest httpRequest) {
+        java.util.UUID userId = accessGuard.requireApplication(Action.CONTROL_APPLICATION, id).userId();
         idempotencyService.checkAndStore(idempotencyKey, userId, id);
 
         Map<String, Object> app = jdbc.queryForMap(

@@ -179,7 +179,7 @@ export function DashboardPlaceholder(): JSX.Element {
       const path = action === 'start' ? API.APPLICATIONS.START(app.id) : API.APPLICATIONS.STOP(app.id);
       const idempotencyKey =
         typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-      const res = await fetch(`/api/v1${path}?userId=${user.id}`, {
+      const res = await fetch(`/api/v1${path}`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Idempotency-Key': idempotencyKey },
