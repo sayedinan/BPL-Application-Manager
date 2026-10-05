@@ -9,7 +9,6 @@ import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.security.Action;
 import com.bpl.orderapp.admin.security.Rbac;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -76,16 +75,17 @@ public class HealthController {
     private final SshCredentialCipher cipher;
     private final AuditWriter auditWriter;
     private final HealthCheckService healthCheckService;
-    private final ObjectMapper mapper;
+    private final HealthReadService healthReadService;
     private final ObjectMapper compactMapper;
 
     public HealthController(JdbcTemplate jdbc, SshCredentialCipher cipher, AuditWriter auditWriter,
-            HealthCheckService healthCheckService, ObjectMapper mapper) {
+            HealthCheckService healthCheckService, HealthReadService healthReadService,
+            ObjectMapper mapper) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.auditWriter = auditWriter;
         this.healthCheckService = healthCheckService;
-        this.mapper = mapper;
+        this.healthReadService = healthReadService;
         this.compactMapper = mapper.copy().setSerializationInclusion(JsonInclude.Include.NON_NULL);
     }
 
@@ -107,40 +107,7 @@ public class HealthController {
     @GetMapping
     public ResponseEntity<Map<String, Object>> latest(@PathVariable Long id) {
         requireApplicationAccess(currentCaller(), id);
-
-        Map<String, Object> body = new LinkedHashMap<>();
-        List<Map<String, Object>> configRows = jdbc.queryForList(
-            "SELECT enabled, poll_interval_seconds FROM application_health_config WHERE application_id = ?", id);
-        if (configRows.isEmpty()) {
-            body.put("monitored", false);
-            return ResponseEntity.ok(body);
-        }
-        body.put("monitored", Boolean.TRUE.equals(configRows.get(0).get("enabled")));
-        body.put("pollIntervalSeconds", configRows.get(0).get("poll_interval_seconds"));
-
-        List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT checked_at, reachable, http_status, response_ms, status, payload, error, "
-                + "ssl_not_after, consecutive_failures "
-                + "FROM application_health_latest WHERE application_id = ?", id);
-        if (rows.isEmpty()) {
-            body.put("checkedAt", null); // configured, first check hasn't landed yet
-            return ResponseEntity.ok(body);
-        }
-        Map<String, Object> row = rows.get(0);
-        body.put("checkedAt", iso(row.get("checked_at")));
-        body.put("reachable", row.get("reachable"));
-        body.put("httpStatus", row.get("http_status"));
-        body.put("responseMs", row.get("response_ms"));
-        body.put("status", row.get("status"));
-        body.put("error", row.get("error"));
-        body.put("consecutiveFailures", row.get("consecutive_failures"));
-        Instant sslNotAfter = row.get("ssl_not_after") == null
-            ? null : ((Timestamp) row.get("ssl_not_after")).toInstant();
-        body.put("sslNotAfter", sslNotAfter == null ? null : sslNotAfter.toString());
-        body.put("sslDaysRemaining",
-            sslNotAfter == null ? null : ChronoUnit.DAYS.between(Instant.now(), sslNotAfter));
-        body.put("snapshot", parseJson(row.get("payload")));
-        return ResponseEntity.ok(body);
+        return ResponseEntity.ok(healthReadService.latest(id));
     }
 
     @GetMapping("/history")
@@ -269,6 +236,7 @@ public class HealthController {
         detail.put("apiKey", keyAction);
         detail.put("pollIntervalSeconds", interval);
         audit(caller, id, appName, detail, httpRequest);
+        healthReadService.publish(id);
         return ResponseEntity.ok().build();
     }
 
@@ -287,6 +255,7 @@ public class HealthController {
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("change", "health_config_removed");
         audit(caller, id, appName, detail, httpRequest);
+        healthReadService.publish(id);
         return ResponseEntity.noContent().build();
     }
 
@@ -473,23 +442,6 @@ public class HealthController {
                 applicationId, appName, null, detail, "SUCCESS", httpRequest);
         } catch (Exception e) {
             log.warn("Audit write failed for health config change (application id={})", applicationId, e);
-        }
-    }
-
-    private static String iso(Object timestamp) {
-        return timestamp == null ? null : ((Timestamp) timestamp).toInstant().toString();
-    }
-
-    // The payload column is JSONB, which the driver hands back as a
-    // PGobject; its string form is the JSON text.
-    private JsonNode parseJson(Object jsonb) {
-        if (jsonb == null) {
-            return null;
-        }
-        try {
-            return mapper.readTree(jsonb.toString());
-        } catch (Exception e) {
-            return null;
         }
     }
 }

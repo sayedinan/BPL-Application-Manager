@@ -21,3 +21,6 @@ Thumbs.db
 # Ignore local Claude configuration containing secrets
 .claude/settings.local.json
 .claude/*.local.json
+
+
+temp

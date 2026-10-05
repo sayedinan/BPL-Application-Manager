@@ -50,34 +50,19 @@ export function HealthBadge({ health }: { health: HealthLatest }): JSX.Element {
   return <Badge tone={tone}>{label}</Badge>;
 }
 
-/** Compact health row for a Dashboard card, with a link to the full details. */
-export function HealthSummary({
-  health,
-  onOpen,
-}: {
-  health: HealthLatest | undefined;
-  onOpen: () => void;
-}): JSX.Element | null {
+/** Compact health row for a Dashboard card. The full picture is on the application's page. */
+export function HealthSummary({ health }: { health: HealthLatest | undefined }): JSX.Element | null {
   if (!health) return null;
   if (!health.monitored) {
     return <p className="mt-3 text-xs text-slate-500 dark:text-gh-muted">Health: not monitored</p>;
   }
   return (
-    <div className="mt-3 flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-gh-border dark:bg-gh-subtle">
-      <div className="min-w-0">
-        <HealthBadge health={health} />
-        <p className="mt-1 truncate text-xs text-slate-500 dark:text-gh-muted">
-          {health.responseMs != null ? `${health.responseMs} ms · ` : ''}
-          {health.checkedAt ? `checked ${timeAgo(health.checkedAt)}` : 'waiting for the first check'}
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={onOpen}
-        className="shrink-0 text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
-      >
-        View health
-      </button>
+    <div className="mt-3 rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-gh-border dark:bg-gh-subtle">
+      <HealthBadge health={health} />
+      <p className="mt-1 truncate text-xs text-slate-500 dark:text-gh-muted">
+        {health.responseMs != null ? `${health.responseMs} ms · ` : ''}
+        {health.checkedAt ? `checked ${timeAgo(health.checkedAt)}` : 'waiting for the first check'}
+      </p>
     </div>
   );
 }
