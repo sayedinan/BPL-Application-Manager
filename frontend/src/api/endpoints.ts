@@ -29,6 +29,7 @@ export const API = {
     HEALTH_HISTORY: (id: number | string, hours: number) => `/applications/${id}/health/history?hours=${hours}`,
     HEALTH_CONFIG: (id: number | string) => `/applications/${id}/health/config`,
     HEALTH_TEST: (id: number | string) => `/applications/${id}/health/test`,
+    MAINTENANCE: (id: number | string) => `/applications/${id}/maintenance`,
   },
   USERS: {
     LIST: '/users',

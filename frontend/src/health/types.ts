@@ -60,6 +60,10 @@ export interface HealthLatest {
   sslNotAfter?: string | null;
   sslDaysRemaining?: number | null;
   snapshot?: HealthSnapshot | null;
+  /** Present while a maintenance window set in the dashboard is open (alerts held back). */
+  maintenanceUntil?: string | null;
+  maintenanceNote?: string | null;
+  maintenanceBy?: string | null;
 }
 
 /** GET /applications/{id}/health/history */

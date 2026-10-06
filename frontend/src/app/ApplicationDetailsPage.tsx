@@ -9,7 +9,10 @@ import { Button } from '@/components/ui/Button';
 import { Card, PageHeader } from '@/components/ui/Card';
 import { LoadingBlock } from '@/components/ui/Spinner';
 import { HealthPanel, Row, Section } from '@/health/HealthPanel';
+import { maintenanceActive } from '@/health/HealthBadge';
 import { HealthSettingsModal } from '@/health/HealthSettingsModal';
+import { MaintenanceModal } from '@/health/MaintenanceModal';
+import { useHealthLive } from '@/health/useHealthLive';
 
 interface ApplicationSummary {
   id: number;
@@ -85,6 +88,7 @@ export function ApplicationDetailsPage(): JSX.Element {
   const [stats, setStats] = useState<AppStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [maintenanceOpen, setMaintenanceOpen] = useState(false);
   const [, setTick] = useState(0);
 
   const loadApp = useCallback(async () => {
@@ -106,7 +110,10 @@ export function ApplicationDetailsPage(): JSX.Element {
 
   // Uptime history. Only asked for while the application is in the list: the
   // stats endpoint fails for an application that no longer exists.
+  // Live health, owned here because the header needs the maintenance state too.
+  const healthLive = useHealthLive(appId, validId && !!app);
   const online = app ? app.online : null;
+  const inMaintenance = maintenanceActive(healthLive.latest);
   useEffect(() => {
     if (!validId || online === null) return;
     let cancelled = false;
@@ -167,6 +174,9 @@ export function ApplicationDetailsPage(): JSX.Element {
         description={runningTime ? `Running for ${runningTime}` : undefined}
         actions={
           <div className="flex items-center gap-3">
+            <Button size="sm" variant="secondary" onClick={() => setMaintenanceOpen(true)}>
+              {inMaintenance ? 'Maintenance on' : 'Maintenance'}
+            </Button>
             {user?.role === 'SYS_ADMIN' && (
               <Button size="sm" variant="secondary" onClick={() => setSettingsOpen(true)}>
                 Health settings
@@ -176,6 +186,24 @@ export function ApplicationDetailsPage(): JSX.Element {
           </div>
         }
       />
+
+      {maintenanceOpen && (
+        <MaintenanceModal
+          applicationId={app.id}
+          applicationName={app.name}
+          activeUntil={inMaintenance ? (healthLive.latest?.maintenanceUntil ?? null) : null}
+          onClose={() => setMaintenanceOpen(false)}
+        />
+      )}
+
+      {inMaintenance && healthLive.latest?.maintenanceUntil && (
+        <Alert tone="warning" className="mb-4">
+          In maintenance until {new Date(healthLive.latest.maintenanceUntil).toLocaleString()}
+          {healthLive.latest.maintenanceBy ? ` (started by ${healthLive.latest.maintenanceBy})` : ''}. Offline and
+          online alerts are held back.
+          {healthLive.latest.maintenanceNote ? ` Note: ${healthLive.latest.maintenanceNote}` : ''}
+        </Alert>
+      )}
 
       {settingsOpen && (
         <HealthSettingsModal
@@ -234,7 +262,7 @@ export function ApplicationDetailsPage(): JSX.Element {
         </div>
 
         <div className="lg:col-span-2">
-          <HealthPanel applicationId={app.id} />
+          <HealthPanel applicationId={app.id} data={healthLive} />
         </div>
       </div>
     </div>

@@ -40,7 +40,10 @@ function toSample(health: HealthLatest): HealthSample {
  * while the live connection is down, every 30 s while it is up. The graphs
  * start filling when the page is opened.
  */
-export function useHealthLive(applicationId: number): {
+export function useHealthLive(
+  applicationId: number,
+  enabled = true,
+): {
   latest: HealthLatest | null;
   samples: HealthSample[];
   live: boolean;
@@ -76,6 +79,7 @@ export function useHealthLive(applicationId: number): {
     setError(null);
     setLoading(true);
     lastCheckedRef.current = null;
+    if (!enabled) return; // e.g. the page is still working out whether the application exists
 
     let cancelled = false;
     async function fetchLatest() {
@@ -109,7 +113,10 @@ export function useHealthLive(applicationId: number): {
       clearInterval(timer);
       stopStream();
     };
-  }, [applicationId, apply]);
+  }, [applicationId, apply, enabled]);
 
   return { latest, samples, live, loading, error };
 }
+
+/** What useHealthLive returns, for components that are handed it. */
+export type HealthLiveData = ReturnType<typeof useHealthLive>;

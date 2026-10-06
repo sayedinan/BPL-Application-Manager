@@ -212,6 +212,10 @@ public class StatusPollingOrchestrator {
             java.util.Map<String, Object> detail = new java.util.HashMap<>();
             detail.put("source", "EXTERNAL");
             detail.put("detectedBy", detectedBy);
+            boolean inMaintenance = isInMaintenance(applicationId);
+            if (inMaintenance) {
+                detail.put("maintenance", true);
+            }
             auditWriter.write(observedOnline ? "APPLICATION_ONLINE" : "APPLICATION_OFFLINE",
                 "system", "SYSTEM", applicationId, name, null, detail, "SUCCESS");
 
@@ -220,8 +224,13 @@ public class StatusPollingOrchestrator {
             // above already filtered out dashboard-triggered ones —
             // those are handled separately in ApplicationController,
             // right after their own START_/STOP_APPLICATION audit
-            // write). Both directions email here now, since either
-            // one happening outside the dashboard is worth flagging.
+            // write). During a maintenance window the flip is recorded
+            // above but the alert is held back; MaintenanceService sends it
+            // if the application is still offline when the window closes.
+            if (inMaintenance) {
+                log.info("Application id={} is in a maintenance window, alert held back", applicationId);
+                return;
+            }
             notifyExternalTransition(applicationId, name, observedOnline);
         } catch (Exception e) {
             log.warn("Audit write failed for status transition (application id={})", applicationId, e);
@@ -235,6 +244,29 @@ public class StatusPollingOrchestrator {
     // a real first reading instead of defaulting to offline forever.
     public boolean checkNow(Long applicationId) {
         return runCheck(applicationId, true);
+    }
+
+    private boolean isInMaintenance(Long applicationId) {
+        List<Integer> rows = jdbc.queryForList(
+            "SELECT 1 FROM application_maintenance WHERE application_id = ? AND ends_at > NOW()",
+            Integer.class, applicationId);
+        return !rows.isEmpty();
+    }
+
+    /**
+     * Called when a maintenance window closes. If the application is still
+     * offline, its alert was held back while the window was open and no
+     * later transition will ever trigger it, so it is sent now.
+     */
+    public void notifyIfStillOffline(Long applicationId) {
+        if (isOnline(applicationId)) {
+            return;
+        }
+        List<String> names = jdbc.queryForList(
+            "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
+        if (!names.isEmpty()) {
+            notifyExternalTransition(applicationId, names.get(0), false);
+        }
     }
 
     // Cheap lookup — no SSH, just the streak pointer's last-known value.

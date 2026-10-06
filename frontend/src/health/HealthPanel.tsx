@@ -4,7 +4,8 @@ import { API } from '@/api/endpoints';
 import { Alert } from '@/components/ui/Alert';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { LoadingBlock } from '@/components/ui/Spinner';
-import { HealthBadge, timeAgo } from './HealthBadge';
+import { HealthBadge, timeAgo, maintenanceActive } from './HealthBadge';
+import type { HealthLiveData } from './useHealthLive';
 import { Sparkline } from './Sparkline';
 import type { HealthHistory, HealthStatus } from './types';
 import { useHealthLive } from './useHealthLive';
@@ -230,13 +231,20 @@ function HistoryChart({
 
 /**
  * All the health information for one application, as a stack of cards.
- * It loads and refreshes its own data, so any page can drop it in.
+ * The live readings are handed in (the page owns them, because its header
+ * needs them too); the long-range history chart is loaded here.
  */
-export function HealthPanel({ applicationId }: { applicationId: number }): JSX.Element {
+export function HealthPanel({
+  applicationId,
+  data,
+}: {
+  applicationId: number;
+  data: HealthLiveData;
+}): JSX.Element {
   const [hours, setHours] = useState(24);
   const [history, setHistory] = useState<HealthHistory | null>(null);
   const [, setTick] = useState(0);
-  const { latest, samples, live, loading, error } = useHealthLive(applicationId);
+  const { latest, samples, live, loading, error } = data;
 
   // The long-range chart is not pushed: its points cover minutes to hours,
   // so a refresh every 30 s is plenty.
@@ -260,6 +268,7 @@ export function HealthPanel({ applicationId }: { applicationId: number }): JSX.E
     return () => clearInterval(clock);
   }, []);
 
+  const inMaintenance = maintenanceActive(latest);
   const snap = latest?.snapshot ?? null;
   const resources = snap?.resources;
   const traffic = snap?.traffic;

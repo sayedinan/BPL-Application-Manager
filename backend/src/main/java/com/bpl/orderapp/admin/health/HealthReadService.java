@@ -45,6 +45,16 @@ public class HealthReadService {
     /** The latest health of an application; {@code monitored} is false when it has no health config. */
     public Map<String, Object> latest(Long applicationId) {
         Map<String, Object> body = new LinkedHashMap<>();
+        // An open maintenance window (alerts held back) is shown for every
+        // application, whether or not it is monitored through a health endpoint.
+        List<Map<String, Object>> maintenance = jdbc.queryForList(
+            "SELECT ends_at, note, started_by FROM application_maintenance "
+                + "WHERE application_id = ? AND ends_at > NOW()", applicationId);
+        if (!maintenance.isEmpty()) {
+            body.put("maintenanceUntil", iso(maintenance.get(0).get("ends_at")));
+            body.put("maintenanceNote", maintenance.get(0).get("note"));
+            body.put("maintenanceBy", maintenance.get(0).get("started_by"));
+        }
         List<Map<String, Object>> configRows = jdbc.queryForList(
             "SELECT enabled, poll_interval_seconds FROM application_health_config WHERE application_id = ?",
             applicationId);

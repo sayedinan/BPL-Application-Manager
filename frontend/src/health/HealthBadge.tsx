@@ -13,6 +13,11 @@ export function timeAgo(iso: string | null | undefined): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+/** True while a maintenance window set in the dashboard is open (alerts are held back). */
+export function maintenanceActive(health: HealthLatest | null | undefined): boolean {
+  return !!health?.maintenanceUntil && new Date(health.maintenanceUntil).getTime() > Date.now();
+}
+
 export interface HealthPresentation {
   tone: BadgeTone;
   label: string;
@@ -23,6 +28,8 @@ export interface HealthPresentation {
  * Business viewers see "Healthy / Degraded / Down", not raw statuses.
  */
 export function describeHealth(health: HealthLatest): HealthPresentation {
+  // During planned maintenance "Unreachable" would be misleading.
+  if (maintenanceActive(health)) return { tone: 'pending', label: 'Maintenance' };
   if (!health.checkedAt) return { tone: 'pending', label: 'Checking…' };
 
   // If readings stop arriving, say so instead of showing an old "Healthy".
@@ -53,8 +60,19 @@ export function HealthBadge({ health }: { health: HealthLatest }): JSX.Element {
 /** Compact health row for a Dashboard card. The full picture is on the application's page. */
 export function HealthSummary({ health }: { health: HealthLatest | undefined }): JSX.Element | null {
   if (!health) return null;
+  const maintenanceNote = maintenanceActive(health) ? (
+    <p className="mt-2 text-xs text-status-pending">
+      Maintenance until {new Date(health.maintenanceUntil as string).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      {' '}· alerts held back
+    </p>
+  ) : null;
   if (!health.monitored) {
-    return <p className="mt-3 text-xs text-slate-500 dark:text-gh-muted">Health: not monitored</p>;
+    return (
+      <>
+        <p className="mt-3 text-xs text-slate-500 dark:text-gh-muted">Health: not monitored</p>
+        {maintenanceNote}
+      </>
+    );
   }
   return (
     <div className="mt-3 rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-gh-border dark:bg-gh-subtle">
@@ -63,6 +81,7 @@ export function HealthSummary({ health }: { health: HealthLatest | undefined }):
         {health.responseMs != null ? `${health.responseMs} ms · ` : ''}
         {health.checkedAt ? `checked ${timeAgo(health.checkedAt)}` : 'waiting for the first check'}
       </p>
+      {maintenanceNote}
     </div>
   );
 }
