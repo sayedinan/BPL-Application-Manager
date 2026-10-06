@@ -61,12 +61,18 @@ public class StatusPollingOrchestrator {
     private static final int STATUS_POLL_INTERVAL_SECONDS = 3;
     private static final int STATUS_SCRIPT_TIMEOUT_MS = 8000;
 
+    // Health checks wait on the network (up to ~11 s each when an application
+    // is down or slow), so they get their own threads: a few dead applications
+    // must not make the SSH checks of every other application late.
+    private static final int HEALTH_POLL_THREADS = 8;
+
     private final JdbcTemplate jdbc;
     private final SshCredentialCipher cipher;
     private final SshConnection sshConnection;
     private final WebSocketBroadcast broadcast;
     private final LogPollingOrchestrator logPollingOrchestrator;
     private final ThreadPoolTaskScheduler scheduler;
+    private final ThreadPoolTaskScheduler healthScheduler;
     private final AuditWriter auditWriter;
     // Spring auto-injects every bean implementing Notifier — empty
     // list if neither email nor SMS is configured, one entry if only
@@ -113,6 +119,10 @@ public class StatusPollingOrchestrator {
         this.scheduler.setPoolSize(4);
         this.scheduler.setThreadNamePrefix("status-poller-");
         this.scheduler.initialize();
+        this.healthScheduler = new ThreadPoolTaskScheduler();
+        this.healthScheduler.setPoolSize(HEALTH_POLL_THREADS);
+        this.healthScheduler.setThreadNamePrefix("health-poller-");
+        this.healthScheduler.initialize();
     }
 
     // Every application gets a poller, always — the "always-on" half of
@@ -129,13 +139,26 @@ public class StatusPollingOrchestrator {
 
     public void startPolling(Long applicationId) {
         stopPolling(applicationId);
-        ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(
+        // Applications monitored through their health endpoint poll on the
+        // health threads, the rest (SSH status_script) on the SSH threads.
+        // Call this again after an application's health setup changes, so it
+        // moves to the right pool.
+        boolean viaHealth = isHealthMonitored(applicationId);
+        ThreadPoolTaskScheduler chosen = viaHealth ? healthScheduler : scheduler;
+        ScheduledFuture<?> future = chosen.scheduleAtFixedRate(
             () -> pollOnce(applicationId),
             Instant.now(),
             Duration.ofSeconds(STATUS_POLL_INTERVAL_SECONDS));
         activePollers.put(applicationId, future);
-        log.info("Started status poller for application id={} (interval={}s)",
-            applicationId, STATUS_POLL_INTERVAL_SECONDS);
+        log.info("Started status poller for application id={} (interval={}s, via {})",
+            applicationId, STATUS_POLL_INTERVAL_SECONDS, viaHealth ? "health endpoint" : "ssh script");
+    }
+
+    private boolean isHealthMonitored(Long applicationId) {
+        List<Integer> rows = jdbc.queryForList(
+            "SELECT 1 FROM application_health_config WHERE application_id = ? AND enabled = TRUE",
+            Integer.class, applicationId);
+        return !rows.isEmpty();
     }
 
     public void stopPolling(Long applicationId) {

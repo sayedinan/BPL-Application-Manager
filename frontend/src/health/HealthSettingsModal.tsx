@@ -51,6 +51,10 @@ export function HealthSettingsModal({
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<HealthTestResult | null>(null);
+  // What the last passing test was run with. A test only counts for Save while
+  // the form still holds exactly those values.
+  const [testedSignature, setTestedSignature] = useState<string | null>(null);
+  const [saveAnyway, setSaveAnyway] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,6 +91,16 @@ export function HealthSettingsModal({
     return apiKey.trim() ? apiKey : undefined;
   }
 
+  // The values a test depends on. null for the key means "keep the saved one".
+  function currentSignature(): string {
+    return JSON.stringify([url.trim(), format, keyField() ?? null, isHttps ? pin.trim() : '']);
+  }
+
+  const testPassed = testResult?.ok === true && testedSignature === currentSignature();
+  // A wrong URL makes the application look offline and sends alerts, so while
+  // monitoring is on, Save needs a passing test (or an explicit override).
+  const needsTest = enabled && !testPassed && !saveAnyway;
+
   function describeError(err: unknown, fallback: string): string {
     return err instanceof ApiError ? err.message : fallback;
   }
@@ -94,6 +108,7 @@ export function HealthSettingsModal({
   async function handleTest() {
     setFormError(null);
     setTestResult(null);
+    setTestedSignature(null);
     if (!url.trim()) {
       setFormError('Enter the health URL first.');
       return;
@@ -107,6 +122,7 @@ export function HealthSettingsModal({
         tlsPinSha256: isHttps ? pin.trim() : '',
       });
       setTestResult(result);
+      setTestedSignature(result.ok ? currentSignature() : null);
     } catch (err) {
       setFormError(describeError(err, 'The test could not be run.'));
     } finally {
@@ -116,6 +132,10 @@ export function HealthSettingsModal({
 
   async function handleSave() {
     setFormError(null);
+    if (needsTest) {
+      setFormError('Run "Test connection" first, or tick "Save without a successful test".');
+      return;
+    }
     const seconds = Number(interval);
     if (!Number.isInteger(seconds) || seconds < MIN_INTERVAL || seconds > MAX_INTERVAL) {
       setFormError(`Check interval must be a whole number between ${MIN_INTERVAL} and ${MAX_INTERVAL} seconds.`);
@@ -290,6 +310,21 @@ export function HealthSettingsModal({
               </Alert>
             )}
 
+            {enabled && !testPassed && (
+              <label className="flex items-start gap-2 text-xs text-slate-600 dark:text-gh-fgSoft">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={saveAnyway}
+                  onChange={(e) => setSaveAnyway(e.target.checked)}
+                />
+                <span>
+                  Save without a successful test. A wrong address makes the application look offline and sends
+                  alerts, so only use this if the application is stopped on purpose.
+                </span>
+              </label>
+            )}
+
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-4 dark:border-gh-border">
               <div className="flex items-center gap-2">
                 {configured &&
@@ -312,7 +347,7 @@ export function HealthSettingsModal({
                 <Button variant="secondary" loading={testing} disabled={busy && !testing} onClick={() => void handleTest()}>
                   Test connection
                 </Button>
-                <Button loading={saving} disabled={busy && !saving} onClick={() => void handleSave()}>
+                <Button loading={saving} disabled={needsTest || (busy && !saving)} onClick={() => void handleSave()}>
                   Save
                 </Button>
               </div>

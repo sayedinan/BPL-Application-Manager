@@ -8,6 +8,7 @@ import com.bpl.orderapp.admin.common.Role;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.security.Action;
 import com.bpl.orderapp.admin.security.Rbac;
+import com.bpl.orderapp.admin.status.StatusPollingOrchestrator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
@@ -76,16 +77,18 @@ public class HealthController {
     private final AuditWriter auditWriter;
     private final HealthCheckService healthCheckService;
     private final HealthReadService healthReadService;
+    private final StatusPollingOrchestrator statusPolling;
     private final ObjectMapper compactMapper;
 
     public HealthController(JdbcTemplate jdbc, SshCredentialCipher cipher, AuditWriter auditWriter,
             HealthCheckService healthCheckService, HealthReadService healthReadService,
-            ObjectMapper mapper) {
+            StatusPollingOrchestrator statusPolling, ObjectMapper mapper) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.auditWriter = auditWriter;
         this.healthCheckService = healthCheckService;
         this.healthReadService = healthReadService;
+        this.statusPolling = statusPolling;
         this.compactMapper = mapper.copy().setSerializationInclusion(JsonInclude.Include.NON_NULL);
     }
 
@@ -236,6 +239,9 @@ public class HealthController {
         detail.put("apiKey", keyAction);
         detail.put("pollIntervalSeconds", interval);
         audit(caller, id, appName, detail, httpRequest);
+        // The application may have to move between the SSH and the health threads.
+        healthCheckService.resetSchedule(id);
+        statusPolling.startPolling(id);
         healthReadService.publish(id);
         return ResponseEntity.ok().build();
     }
@@ -255,6 +261,8 @@ public class HealthController {
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("change", "health_config_removed");
         audit(caller, id, appName, detail, httpRequest);
+        healthCheckService.resetSchedule(id);
+        statusPolling.startPolling(id);
         healthReadService.publish(id);
         return ResponseEntity.noContent().build();
     }

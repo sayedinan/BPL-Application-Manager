@@ -192,6 +192,14 @@ public class HealthCheckService {
         return decision;
     }
 
+    /**
+     * Called when an application's health setup was saved, so the next tick
+     * checks it right away instead of waiting out the old interval.
+     */
+    public void resetSchedule(Long applicationId) {
+        lastPolled.remove(applicationId);
+    }
+
     /** Outcome of a one-off {@link #test} run. */
     public record TestResult(boolean ok, Integer httpStatus, Long responseMs, HealthStatus status,
                              String error, Instant certNotAfter, HealthSnapshot snapshot) {}
