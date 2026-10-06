@@ -75,6 +75,10 @@ export interface HealthHistory {
     checks: number;
     failedChecks: number;
     avgResponseMs: number | null;
+    /** Averages of the readings in this bucket; null when none were reported. */
+    avgCpuPercent?: number | null;
+    avgMemoryPercent?: number | null;
+    avgDiskPercent?: number | null;
   }[];
 }
 

@@ -15,7 +15,13 @@ const RANGES = [
   { hours: 168, label: 'Last 7 days' },
   { hours: 720, label: 'Last 30 days' },
 ];
-const HISTORY_REFRESH_MS = 30000;
+// Long ranges change slowly and cost the server more to compute, so they
+// refresh less often.
+function historyRefreshMs(hours: number): number {
+  if (hours <= 1) return 30000;
+  if (hours <= 24) return 60000;
+  return 300000;
+}
 
 const selectClass =
   'rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 ' +
@@ -131,30 +137,68 @@ function Gauge({
   );
 }
 
-function ResponseChart({ points }: { points: HealthHistory['points'] }): JSX.Element {
-  if (points.length < 2) {
-    return <p className="text-xs text-slate-500 dark:text-gh-muted">Not enough data yet.</p>;
-  }
-  const times = points
-    .map((p) => p.avgResponseMs)
-    .filter((ms): ms is number => ms !== null);
-  const peak = Math.max(1, ...times);
+/**
+ * One line chart of a metric over the selected range, drawn from the history
+ * buckets. Red marks show buckets that had failed checks. Returns nothing when
+ * the application reported no value for the metric in this range, so an
+ * application without (say) a disk figure shows no empty chart for it.
+ */
+function HistoryChart({
+  label,
+  points,
+  pick,
+  unit,
+  fixedMax,
+  decimals = 0,
+}: {
+  label: string;
+  points: HealthHistory['points'];
+  pick: (point: HealthHistory['points'][number]) => number | null | undefined;
+  unit: string;
+  /** Top of the scale; leave out to scale to the largest value (use 100 for percentages). */
+  fixedMax?: number;
+  decimals?: number;
+}): JSX.Element | null {
+  const values = points.map((p) => pick(p) ?? null);
+  const present = values.filter((v): v is number => v !== null);
+  if (points.length < 2 || present.length === 0) return null;
+
+  const peak = Math.max(...present);
+  const max = fixedMax ?? Math.max(1, peak);
   const width = 300;
   const height = 60;
   const x = (i: number) => (i / (points.length - 1)) * width;
-  const y = (ms: number) => height - 4 - (ms / peak) * (height - 8);
-  const line = points
-    .map((p, i) => (p.avgResponseMs === null ? null : `${x(i).toFixed(1)},${y(p.avgResponseMs).toFixed(1)}`))
-    .filter((pair): pair is string => pair !== null)
-    .join(' ');
+  const y = (v: number) => height - 4 - (Math.min(v, max) / max) * (height - 8);
+
+  // A bucket without a value leaves a gap in the line instead of a drop to zero.
+  let path = '';
+  let penDown = false;
+  values.forEach((v, i) => {
+    if (v === null) {
+      penDown = false;
+      return;
+    }
+    path += `${penDown ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)} `;
+    penDown = true;
+  });
+  const latest = [...present].pop() as number;
+
   return (
     <div>
+      <div className="mb-1 flex justify-between gap-2 text-xs">
+        <span className="font-medium text-slate-700 dark:text-gh-fgSoft">{label}</span>
+        <span className="text-slate-500 dark:text-gh-muted">
+          latest {latest.toFixed(decimals)}
+          {unit} · peak {peak.toFixed(decimals)}
+          {unit}
+        </span>
+      </div>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         preserveAspectRatio="none"
-        className="h-16 w-full"
+        className="h-16 w-full rounded bg-slate-200/60 dark:bg-gh-hover/40"
         role="img"
-        aria-label="Response time over the selected period"
+        aria-label={`${label} over the selected period`}
       >
         {points.map((p, i) =>
           p.failedChecks > 0 ? (
@@ -171,18 +215,15 @@ function ResponseChart({ points }: { points: HealthHistory['points'] }): JSX.Ele
             />
           ) : null,
         )}
-        <polyline
-          points={line}
+        <path
+          d={path}
           fill="none"
           className="stroke-brand-500"
           strokeWidth={1.5}
+          strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
         />
       </svg>
-      <div className="mt-1 flex justify-between text-xs text-slate-500 dark:text-gh-muted">
-        <span>{formatWhen(points[0].t)}</span>
-        <span>peak {peak} ms · red = failed checks</span>
-      </div>
     </div>
   );
 }
@@ -209,9 +250,9 @@ export function HealthPanel({ applicationId }: { applicationId: number }): JSX.E
 
   useEffect(() => {
     void loadHistory();
-    const timer = setInterval(() => void loadHistory(), HISTORY_REFRESH_MS);
+    const timer = setInterval(() => void loadHistory(), historyRefreshMs(hours));
     return () => clearInterval(timer);
-  }, [loadHistory]);
+  }, [loadHistory, hours]);
 
   // Keeps "checked 8s ago" and the uptime counter moving between readings.
   useEffect(() => {
@@ -290,24 +331,39 @@ export function HealthPanel({ applicationId }: { applicationId: number }): JSX.E
                 </Row>
               )}
             </dl>
-            <div className="mt-4">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-slate-700 dark:text-gh-fgSoft">Response time</span>
-                <select
-                  className={selectClass}
-                  value={hours}
-                  onChange={(e) => setHours(Number(e.target.value))}
-                  aria-label="Time range"
-                >
-                  {RANGES.map((r) => (
-                    <option key={r.hours} value={r.hours}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
+          </Section>
+
+          <Section
+            title="History"
+            aside={
+              <select
+                className={selectClass}
+                value={hours}
+                onChange={(e) => setHours(Number(e.target.value))}
+                aria-label="Time range"
+              >
+                {RANGES.map((r) => (
+                  <option key={r.hours} value={r.hours}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            }
+          >
+            {history && history.points.length >= 2 ? (
+              <div className="space-y-4">
+                <HistoryChart label="Response time" points={history.points} pick={(p) => p.avgResponseMs} unit=" ms" />
+                <HistoryChart label="CPU" points={history.points} pick={(p) => p.avgCpuPercent} unit="%" fixedMax={100} decimals={1} />
+                <HistoryChart label="Memory" points={history.points} pick={(p) => p.avgMemoryPercent} unit="%" fixedMax={100} decimals={1} />
+                <HistoryChart label="Disk" points={history.points} pick={(p) => p.avgDiskPercent} unit="%" fixedMax={100} decimals={1} />
+                <p className="text-xs text-slate-500 dark:text-gh-muted">
+                  {formatWhen(history.points[0].t)} to now · red marks show failed checks · CPU, memory and disk
+                  fill in from the day this was switched on
+                </p>
               </div>
-              <ResponseChart points={history?.points ?? []} />
-            </div>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-gh-muted">Not enough data yet.</p>
+            )}
           </Section>
 
           {(resources?.cpu || resources?.memory || resources?.disk) && (

@@ -279,10 +279,23 @@ public class HealthCheckService {
             jdbc.update(UPSERT_LATEST,
                 applicationId, checkedTs, reachable, httpStatus, responseMsValue, statusText,
                 payload, error, certNotAfter == null ? null : Timestamp.from(certNotAfter), failures);
+            // The resource readings of this check, kept for the history charts
+            // (same choice as the frontend: system CPU, else the process's).
+            HealthSnapshot.Resources resources = snapshot == null ? null : snapshot.resources();
+            Double cpu = null;
+            if (resources != null && resources.cpu() != null) {
+                cpu = resources.cpu().systemPercent() != null
+                    ? resources.cpu().systemPercent() : resources.cpu().processPercent();
+            }
+            Double memory = resources == null || resources.memory() == null
+                ? null : resources.memory().usedPercent();
+            Double disk = resources == null || resources.disk() == null
+                ? null : resources.disk().usedPercent();
             jdbc.update(
                 "INSERT INTO application_health_history "
-                    + "(application_id, checked_at, reachable, response_ms, status) VALUES (?, ?, ?, ?, ?)",
-                applicationId, checkedTs, reachable, responseMsValue, statusText);
+                    + "(application_id, checked_at, reachable, response_ms, status, "
+                    + "cpu_percent, memory_percent, disk_percent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                applicationId, checkedTs, reachable, responseMsValue, statusText, cpu, memory, disk);
         } catch (RuntimeException e) {
             log.warn("Could not store health check result for application id={}", applicationId, e);
         }

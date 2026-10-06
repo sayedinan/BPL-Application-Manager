@@ -129,7 +129,8 @@ public class HealthController {
             "SELECT floor(extract(epoch FROM checked_at) / ?) * ? AS bucket, "
                 + "COUNT(*) AS checks, "
                 + "COUNT(*) FILTER (WHERE NOT reachable OR status IS NULL OR status = 'DOWN') AS failed, "
-                + "AVG(response_ms) AS avg_ms "
+                + "AVG(response_ms) AS avg_ms, "
+                + "AVG(cpu_percent) AS avg_cpu, AVG(memory_percent) AS avg_memory, AVG(disk_percent) AS avg_disk "
                 + "FROM application_health_history "
                 + "WHERE application_id = ? AND checked_at >= ? "
                 + "GROUP BY bucket ORDER BY bucket",
@@ -149,6 +150,9 @@ public class HealthController {
             point.put("failedChecks", failed);
             point.put("avgResponseMs", row.get("avg_ms") == null
                 ? null : Math.round(((Number) row.get("avg_ms")).doubleValue()));
+            point.put("avgCpuPercent", oneDecimal(row.get("avg_cpu")));
+            point.put("avgMemoryPercent", oneDecimal(row.get("avg_memory")));
+            point.put("avgDiskPercent", oneDecimal(row.get("avg_disk")));
             points.add(point);
         }
 
@@ -381,6 +385,11 @@ public class HealthController {
             }
         }
         return key;
+    }
+
+    // Null stays null, so a bucket without a reading draws as a gap in the chart.
+    private static Double oneDecimal(Object value) {
+        return value == null ? null : Math.round(((Number) value).doubleValue() * 10.0) / 10.0;
     }
 
     private static ResponseStatusException badRequest(String reason) {
