@@ -17,6 +17,13 @@ const hintClass = 'mt-1 text-xs text-slate-500 dark:text-gh-muted';
 const MIN_INTERVAL = 3;
 const MAX_INTERVAL = 300;
 
+/** A new random API key: 32 random bytes from the browser's secure generator, 43 URL-safe characters. */
+function randomApiKey(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 /**
  * Sys.Admin form for an application's health endpoint. Everything here
  * goes through /applications/{id}/health/config and /health/test, which
@@ -42,6 +49,9 @@ export function HealthSettingsModal({
   const [format, setFormat] = useState<'CONTRACT' | 'ACTUATOR'>('CONTRACT');
   const [apiKey, setApiKey] = useState('');
   const [removeKey, setRemoveKey] = useState(false);
+  // A key made with the Generate button, shown once so it can be copied. Cleared when the field is edited.
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [pin, setPin] = useState('');
   const [interval, setIntervalValue] = useState('10');
 
@@ -100,6 +110,24 @@ export function HealthSettingsModal({
   // A wrong URL makes the application look offline and sends alerts, so while
   // monitoring is on, Save needs a passing test (or an explicit override).
   const needsTest = enabled && !testPassed && !saveAnyway;
+
+  function handleGenerate() {
+    const key = randomApiKey();
+    setApiKey(key);
+    setRemoveKey(false);
+    setGeneratedKey(key);
+    setCopied(false);
+  }
+
+  async function handleCopy() {
+    if (!generatedKey) return;
+    try {
+      await navigator.clipboard.writeText(generatedKey);
+      setCopied(true);
+    } catch {
+      setFormError('Copying failed. Select the key and copy it by hand.');
+    }
+  }
 
   function describeError(err: unknown, fallback: string): string {
     return err instanceof ApiError ? err.message : fallback;
@@ -226,7 +254,18 @@ export function HealthSettingsModal({
             </div>
 
             <div>
-              <label className={labelClass} htmlFor="health-key">API key</label>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <label className="text-sm font-medium text-slate-700 dark:text-gh-fgSoft" htmlFor="health-key">
+                  API key
+                </label>
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
+                >
+                  Generate a random key
+                </button>
+              </div>
               <input
                 id="health-key"
                 type="password"
@@ -235,6 +274,7 @@ export function HealthSettingsModal({
                 onChange={(e) => {
                   setApiKey(e.target.value);
                   setRemoveKey(false);
+                  setGeneratedKey(null);
                 }}
                 placeholder={hasApiKey ? 'A key is saved — leave blank to keep it' : 'Optional'}
                 autoComplete="new-password"
@@ -251,6 +291,19 @@ export function HealthSettingsModal({
                   />
                   Remove the saved key
                 </label>
+              )}
+              {generatedKey && apiKey === generatedKey && (
+                <div className="mt-2 rounded-lg border border-slate-200 bg-slate-100 p-3 dark:border-gh-border dark:bg-gh-inset">
+                  <code className="block break-all text-xs text-slate-900 dark:text-gh-fg">{generatedKey}</code>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <p className="text-xs text-slate-500 dark:text-gh-muted">
+                      Copy it now and give it to the application's team: after you save, it can't be shown again.
+                    </p>
+                    <Button size="sm" variant="secondary" onClick={() => void handleCopy()}>
+                      {copied ? 'Copied' : 'Copy'}
+                    </Button>
+                  </div>
+                </div>
               )}
               <p className={hintClass}>Sent as the X-API-Key header. It is stored encrypted and never shown again.</p>
             </div>
