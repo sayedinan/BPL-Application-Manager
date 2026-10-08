@@ -30,6 +30,7 @@ export const API = {
     HEALTH_CONFIG: (id: number | string) => `/applications/${id}/health/config`,
     HEALTH_TEST: (id: number | string) => `/applications/${id}/health/test`,
     MAINTENANCE: (id: number | string) => `/applications/${id}/maintenance`,
+    GROUP: (id: number | string) => `/applications/${id}/group`,
   },
   USERS: {
     LIST: '/users',

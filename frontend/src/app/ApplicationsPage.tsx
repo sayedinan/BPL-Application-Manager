@@ -9,12 +9,14 @@ import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LoadingBlock } from '@/components/ui/Spinner';
 import { HealthSettingsModal } from '@/health/HealthSettingsModal';
+import { ApplicationGroupModal } from './ApplicationGroupModal';
 
 interface ApplicationSummary {
   id: number;
   name: string;
   online: boolean;
   startedAt: string | null;
+  groupName: string | null;
 }
 
 interface FormState {
@@ -62,6 +64,7 @@ export function ApplicationsPage(): JSX.Element {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ApplicationSummary | null>(null);
   const [healthApp, setHealthApp] = useState<ApplicationSummary | null>(null);
+  const [groupApp, setGroupApp] = useState<ApplicationSummary | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [testStatus, setTestStatus] = useState<'untested' | 'testing' | 'verified' | 'failed'>('untested');
@@ -240,6 +243,17 @@ export function ApplicationsPage(): JSX.Element {
       />
 
       {listError && <Alert className="mb-4">{listError}</Alert>}
+
+      {groupApp && (
+        <ApplicationGroupModal
+          applicationId={groupApp.id}
+          applicationName={groupApp.name}
+          currentGroup={groupApp.groupName}
+          existingGroups={[...new Set(apps.map((a) => a.groupName).filter((g): g is string => !!g))].sort()}
+          onClose={() => setGroupApp(null)}
+          onSaved={() => void loadApplications()}
+        />
+      )}
 
       {healthApp && (
         <HealthSettingsModal
@@ -429,6 +443,9 @@ export function ApplicationsPage(): JSX.Element {
                       <div className="flex justify-end gap-2">
                         <Button size="sm" variant="secondary" onClick={() => setHealthApp(app)}>
                           Health
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => setGroupApp(app)} title={app.groupName ?? 'No group'}>
+                          Group
                         </Button>
                         <Button
                           size="sm"

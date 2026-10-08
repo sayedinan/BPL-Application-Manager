@@ -18,6 +18,13 @@ export function maintenanceActive(health: HealthLatest | null | undefined): bool
   return !!health?.maintenanceUntil && new Date(health.maintenanceUntil).getTime() > Date.now();
 }
 
+/** True when the latest reading is older than a few check intervals, so showing "Healthy" would be stale. */
+export function healthIsStale(health: HealthLatest): boolean {
+  if (!health.checkedAt) return false;
+  const ageSeconds = (Date.now() - new Date(health.checkedAt).getTime()) / 1000;
+  return ageSeconds > Math.max(60, 4 * (health.pollIntervalSeconds ?? 10));
+}
+
 export interface HealthPresentation {
   tone: BadgeTone;
   label: string;
@@ -33,9 +40,7 @@ export function describeHealth(health: HealthLatest): HealthPresentation {
   if (!health.checkedAt) return { tone: 'pending', label: 'Checking…' };
 
   // If readings stop arriving, say so instead of showing an old "Healthy".
-  const ageSeconds = (Date.now() - new Date(health.checkedAt).getTime()) / 1000;
-  const staleAfterSeconds = Math.max(60, 4 * (health.pollIntervalSeconds ?? 10));
-  if (ageSeconds > staleAfterSeconds) return { tone: 'offline', label: 'No recent data' };
+  if (healthIsStale(health)) return { tone: 'offline', label: 'No recent data' };
 
   if (health.reachable === false) return { tone: 'error', label: 'Unreachable' };
   switch (health.status) {

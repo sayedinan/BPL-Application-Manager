@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { LoadingBlock } from '@/components/ui/Spinner';
 import { Alert } from '@/components/ui/Alert';
 import { HealthSummary } from '@/health/HealthBadge';
+import { classifyApp, STATE_ORDER, type AppState } from '@/lib/appState';
 import { onLiveStreamState, subscribeHealth, subscribeStatus } from '@/lib/liveStream';
 import type { HealthLatest } from '@/health/types';
 
@@ -17,6 +18,7 @@ interface ApplicationSummary {
   name: string;
   online: boolean;
   startedAt: string | null;
+  groupName: string | null;
 }
 
 
@@ -40,6 +42,8 @@ export function DashboardPlaceholder(): JSX.Element {
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [pendingAction, setPendingAction] = useState<'start' | 'stop' | null>(null);
   const [, setTick] = useState(0);
+  const [filter, setFilter] = useState<'all' | 'attention' | 'healthy' | 'maintenance'>('all');
+  const [search, setSearch] = useState('');
 
   async function loadApplications() {
     try {
@@ -196,6 +200,103 @@ export function DashboardPlaceholder(): JSX.Element {
     );
   }
 
+  // What the summary tiles, the filters and the group headings are built from.
+  const rows = apps.map((app) => ({ app, state: classifyApp(app, healthById[app.id]) }));
+  const needsAttention = (state: AppState) => state === 'offline' || state === 'degraded';
+  const counts = {
+    all: rows.length,
+    attention: rows.filter((r) => needsAttention(r.state)).length,
+    healthy: rows.filter((r) => r.state === 'healthy').length,
+    maintenance: rows.filter((r) => r.state === 'maintenance').length,
+  };
+  const needle = search.trim().toLowerCase();
+  const visible = rows
+    .filter((r) => {
+      if (needle && !r.app.name.toLowerCase().includes(needle)) return false;
+      if (filter === 'attention') return needsAttention(r.state);
+      if (filter === 'healthy') return r.state === 'healthy';
+      if (filter === 'maintenance') return r.state === 'maintenance';
+      return true;
+    })
+    .sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state] || a.app.name.localeCompare(b.app.name));
+
+  const hasGroups = apps.some((a) => a.groupName);
+  const sections = new Map<string, typeof visible>();
+  for (const row of visible) {
+    const key = hasGroups ? (row.app.groupName ?? '') : '';
+    sections.set(key, [...(sections.get(key) ?? []), row]);
+  }
+  const sectionKeys = [...sections.keys()].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)));
+
+  function groupSummary(key: string) {
+    const members = rows.filter((r) => (r.app.groupName ?? '') === key);
+    const hasOffline = members.some((r) => r.state === 'offline');
+    const hasDegraded = members.some((r) => r.state === 'degraded');
+    return {
+      total: members.length,
+      healthy: members.filter((r) => r.state === 'healthy').length,
+      inMaintenance: members.filter((r) => r.state === 'maintenance').length,
+      tone: hasOffline ? 'text-status-error' : hasDegraded ? 'text-status-pending' : 'text-status-online',
+    };
+  }
+
+  const tiles: { key: 'all' | 'attention' | 'healthy' | 'maintenance'; label: string; value: number; tone: string }[] = [
+    { key: 'all', label: 'Applications', value: counts.all, tone: 'text-slate-900 dark:text-white' },
+    {
+      key: 'attention',
+      label: 'Need attention',
+      value: counts.attention,
+      tone: counts.attention > 0 ? 'text-status-error' : 'text-slate-900 dark:text-white',
+    },
+    { key: 'healthy', label: 'Healthy', value: counts.healthy, tone: 'text-status-online' },
+    { key: 'maintenance', label: 'In maintenance', value: counts.maintenance, tone: 'text-status-pending' },
+  ];
+
+  function renderCard(app: ApplicationSummary): JSX.Element {
+    const runningTime = app.online ? formatRunningTime(app.startedAt) : null;
+    const isPending = pendingId === app.id;
+    return (
+      <Card key={app.id} className="overflow-hidden">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-gh-border dark:bg-gh-subtle/60">
+          <span className="truncate font-semibold text-slate-900 dark:text-white">{app.name}</span>
+          <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>
+        </div>
+        <div className="bg-slate-100 p-4 transition-theme dark:bg-gh-inset">
+          {app.startedAt && (
+            <p className="text-xs text-slate-500 dark:text-gh-muted">
+              Started: {new Date(app.startedAt).toLocaleString()}
+            </p>
+          )}
+          {runningTime && (
+            <p className="mb-2 text-xs text-slate-500 dark:text-gh-muted">Running for {runningTime}</p>
+          )}
+          <HealthSummary health={healthById[app.id]} />
+          <div className="mt-3 flex items-center gap-2">
+            {isPending ? (
+              <Button size="sm" variant="secondary" loading className="w-full">
+                {pendingAction === 'start' ? 'Starting…' : 'Stopping…'}
+              </Button>
+            ) : app.online ? (
+              <Button size="sm" variant="danger" onClick={() => handleStartStop(app, 'stop')} className="w-full">
+                Stop
+              </Button>
+            ) : (
+              <Button size="sm" variant="primary" onClick={() => handleStartStop(app, 'start')} className="w-full">
+                Start
+              </Button>
+            )}
+          </div>
+          <Link
+            to={`/apps/${app.id}`}
+            className="mt-2 block w-full text-center text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-gh-muted dark:hover:text-gh-fg"
+          >
+            Details →
+          </Link>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-6xl p-6 sm:p-8">
       <PageHeader
@@ -216,59 +317,67 @@ export function DashboardPlaceholder(): JSX.Element {
             : 'No applications assigned. Contact your admin.'}
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {apps.map((app) => {
-            const runningTime = app.online ? formatRunningTime(app.startedAt) : null;
-            const isPending = pendingId === app.id;
+        <>
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {tiles.map((tile) => (
+              <button
+                key={tile.key}
+                type="button"
+                aria-pressed={filter === tile.key}
+                onClick={() => setFilter(filter === tile.key ? 'all' : tile.key)}
+                className={`rounded-xl border bg-slate-50 px-4 py-3 text-left transition-colors dark:bg-gh-subtle/60 ${
+                  filter === tile.key
+                    ? 'border-brand-500 ring-1 ring-brand-500'
+                    : 'border-slate-200 hover:border-slate-300 dark:border-gh-border dark:hover:border-gh-muted'
+                }`}
+              >
+                <span className={`block text-2xl font-semibold ${tile.tone}`}>{tile.value}</span>
+                <span className="text-xs text-slate-500 dark:text-gh-muted">{tile.label}</span>
+              </button>
+            ))}
+          </div>
 
-            return (
-              <Card key={app.id} className="overflow-hidden">
-                {/* Header strip: same look as the Logs dropdown bar */}
-                <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-gh-border dark:bg-gh-subtle/60">
-                  <span className="truncate font-semibold text-slate-900 dark:text-white">{app.name}</span>
-                  <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>
-                </div>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search applications"
+            aria-label="Search applications"
+            className="mb-6 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gh-border dark:bg-surface-dark dark:text-gh-fg sm:max-w-sm"
+          />
 
-                {/* Inset body: same fill as the log text area */}
-                <div className="bg-slate-100 p-4 transition-theme dark:bg-gh-inset">
-                  {app.startedAt && (
-                    <p className="text-xs text-slate-500 dark:text-gh-muted">
-                      Started: {new Date(app.startedAt).toLocaleString()}
-                    </p>
-                  )}
-                  {runningTime && (
-                    <p className="mb-2 text-xs text-slate-500 dark:text-gh-muted">Running for {runningTime}</p>
-                  )}
-
-                  <HealthSummary health={healthById[app.id]} />
-
-                  <div className="mt-3 flex items-center gap-2">
-                    {isPending ? (
-                      <Button size="sm" variant="secondary" loading className="w-full">
-                        {pendingAction === 'start' ? 'Starting…' : 'Stopping…'}
-                      </Button>
-                    ) : app.online ? (
-                      <Button size="sm" variant="danger" onClick={() => handleStartStop(app, 'stop')} className="w-full">
-                        Stop
-                      </Button>
-                    ) : (
-                      <Button size="sm" variant="primary" onClick={() => handleStartStop(app, 'start')} className="w-full">
-                        Start
-                      </Button>
+          {visible.length === 0 ? (
+            <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">
+              No applications match.
+            </Card>
+          ) : (
+            <div className="space-y-8">
+              {sectionKeys.map((key) => {
+                const summary = groupSummary(key);
+                return (
+                  <section key={key || 'other'}>
+                    {hasGroups && (
+                      <div className="mb-3 flex flex-wrap items-baseline gap-x-3">
+                        <h2 className="text-base font-semibold text-slate-900 dark:text-white">{key || 'Other'}</h2>
+                        <span className={`text-sm font-medium ${summary.tone}`}>
+                          {summary.healthy}/{summary.total} healthy
+                        </span>
+                        {summary.inMaintenance > 0 && (
+                          <span className="text-xs text-slate-500 dark:text-gh-muted">
+                            · {summary.inMaintenance} in maintenance
+                          </span>
+                        )}
+                      </div>
                     )}
-                  </div>
-
-                  <Link
-                    to={`/apps/${app.id}`}
-                    className="mt-2 block w-full text-center text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-gh-muted dark:hover:text-gh-fg"
-                  >
-                    Details →
-                  </Link>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {(sections.get(key) ?? []).map((row) => renderCard(row.app))}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

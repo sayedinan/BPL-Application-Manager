@@ -90,13 +90,13 @@ public class ApplicationController {
         List<Map<String, Object>> rows;
         if ("SYS_ADMIN".equals(role) || "ADMIN".equals(role)) {
             rows = jdbc.queryForList(
-                "SELECT a.id, a.name, s.online, s.streak_started_at " +
+                "SELECT a.id, a.name, a.group_name, s.online, s.streak_started_at " +
                     "FROM applications a " +
                     "LEFT JOIN application_status_streak s ON s.application_id = a.id " +
                     "ORDER BY a.name");
         } else {
             rows = jdbc.queryForList(
-                "SELECT a.id, a.name, s.online, s.streak_started_at FROM applications a " +
+                "SELECT a.id, a.name, a.group_name, s.online, s.streak_started_at FROM applications a " +
                     "JOIN user_application_assignments uaa ON uaa.application_id = a.id " +
                     "LEFT JOIN application_status_streak s ON s.application_id = a.id " +
                     "WHERE uaa.user_id = ? ORDER BY a.name",
@@ -108,6 +108,7 @@ public class ApplicationController {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("id", ((Number) row.get("id")).longValue());
             item.put("name", row.get("name"));
+            item.put("groupName", row.get("group_name"));
             boolean online = Boolean.TRUE.equals(row.get("online"));
             item.put("online", online);
             Object streakStartedAt = row.get("streak_started_at");
