@@ -4,11 +4,10 @@ import { API } from '@/api/endpoints';
 import { Alert } from '@/components/ui/Alert';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { LoadingBlock } from '@/components/ui/Spinner';
-import { HealthBadge, timeAgo, maintenanceActive } from './HealthBadge';
-import type { HealthLiveData } from './useHealthLive';
+import { HealthBadge, timeAgo } from './HealthBadge';
 import { Sparkline } from './Sparkline';
 import type { HealthHistory, HealthStatus } from './types';
-import { useHealthLive } from './useHealthLive';
+import type { HealthLiveData } from './useHealthLive';
 
 const RANGES = [
   { hours: 1, label: 'Last hour' },
@@ -268,7 +267,6 @@ export function HealthPanel({
     return () => clearInterval(clock);
   }, []);
 
-  const inMaintenance = maintenanceActive(latest);
   const snap = latest?.snapshot ?? null;
   const resources = snap?.resources;
   const traffic = snap?.traffic;
