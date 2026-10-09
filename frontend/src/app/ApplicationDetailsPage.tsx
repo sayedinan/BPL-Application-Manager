@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, PageHeader } from '@/components/ui/Card';
 import { LoadingBlock } from '@/components/ui/Spinner';
 import { HealthPanel, Row, Section } from '@/health/HealthPanel';
+import { UptimeBar } from '@/health/UptimeBar';
 import { maintenanceActive } from '@/health/HealthBadge';
 import { HealthSettingsModal } from '@/health/HealthSettingsModal';
 import { MaintenanceModal } from '@/health/MaintenanceModal';
@@ -229,7 +230,8 @@ export function ApplicationDetailsPage(): JSX.Element {
           <Section title="Uptime history">
             {stats ? (
               <>
-                <dl>
+                <UptimeBar applicationId={app.id} />
+                <dl className="mt-4 border-t border-slate-200 pt-3 dark:border-gh-border">
                   <Row label="Total uptime">{formatDuration(stats.totalUptimeSeconds)}</Row>
                   <Row label="Total downtime">{formatDuration(stats.totalDowntimeSeconds)}</Row>
                   <Row label="Last ran">{stats.lastRanAt ? formatWhen(stats.lastRanAt) : 'Never'}</Row>

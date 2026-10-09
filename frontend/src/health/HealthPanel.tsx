@@ -6,14 +6,16 @@ import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { LoadingBlock } from '@/components/ui/Spinner';
 import { HealthBadge, timeAgo } from './HealthBadge';
 import { Sparkline } from './Sparkline';
+import { RangeButtons } from './RangeButtons';
 import type { HealthHistory, HealthStatus } from './types';
 import type { HealthLiveData } from './useHealthLive';
 
-const RANGES = [
-  { hours: 1, label: 'Last hour' },
-  { hours: 24, label: 'Last 24 hours' },
-  { hours: 168, label: 'Last 7 days' },
-  { hours: 720, label: 'Last 30 days' },
+type RangeKey = 'live' | 'day' | 'week' | 'month';
+const RANGES: { key: RangeKey; label: string; hours: number }[] = [
+  { key: 'live', label: 'Live', hours: 0 },
+  { key: 'day', label: '1 day', hours: 24 },
+  { key: 'week', label: '7 days', hours: 168 },
+  { key: 'month', label: '1 month', hours: 720 },
 ];
 // Long ranges change slowly and cost the server more to compute, so they
 // refresh less often.
@@ -22,11 +24,6 @@ function historyRefreshMs(hours: number): number {
   if (hours <= 24) return 60000;
   return 300000;
 }
-
-const selectClass =
-  'rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 ' +
-  'focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
-  'dark:border-gh-border dark:bg-surface-dark dark:text-gh-fg';
 
 function formatDuration(totalSeconds: number): string {
   const d = Math.floor(totalSeconds / 86400);
@@ -240,7 +237,10 @@ export function HealthPanel({
   applicationId: number;
   data: HealthLiveData;
 }): JSX.Element {
-  const [hours, setHours] = useState(24);
+  const [range, setRange] = useState<RangeKey>('live');
+  const rangeInfo = RANGES.find((r) => r.key === range) ?? RANGES[0];
+  // Live has no stored history, but the Availability row still needs some, so use 24 h then.
+  const hours = rangeInfo.hours || 24;
   const [history, setHistory] = useState<HealthHistory | null>(null);
   const [, setTick] = useState(0);
   const { latest, samples, live, loading, error } = data;
@@ -312,19 +312,40 @@ export function HealthPanel({
           )}
           {latest.error && <Alert tone="warning">Last check problem: {latest.error}</Alert>}
 
-          {samples.length >= 2 && (
-            <Section
-              title="Live readings"
-              aside={`last ${samples.length} checks, since you opened this page`}
-            >
+          <Section
+            title="Readings"
+            aside={<RangeButtons options={RANGES} value={range} onChange={setRange} />}
+          >
+            {range === 'live' ? (
+              samples.length >= 2 ? (
+                <div className="space-y-4">
+                  <Sparkline label="Response time" values={samples.map((x) => x.responseMs)} unit=" ms" />
+                  <Sparkline label="CPU" values={samples.map((x) => x.cpu)} unit="%" fixedMax={100} decimals={1} />
+                  <Sparkline label="Memory" values={samples.map((x) => x.memory)} unit="%" fixedMax={100} decimals={1} />
+                  <Sparkline label="Disk" values={samples.map((x) => x.disk)} unit="%" fixedMax={100} decimals={1} />
+                  <p className="text-xs text-slate-500 dark:text-gh-muted">
+                    Last {samples.length} checks, since you opened this page
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 dark:text-gh-muted">Collecting readings… graphs appear after two checks.</p>
+              )
+            ) : history && history.hours === hours && history.points.length >= 2 ? (
               <div className="space-y-4">
-                <Sparkline label="Response time" values={samples.map((x) => x.responseMs)} unit=" ms" />
-                <Sparkline label="CPU" values={samples.map((x) => x.cpu)} unit="%" fixedMax={100} decimals={1} />
-                <Sparkline label="Memory" values={samples.map((x) => x.memory)} unit="%" fixedMax={100} decimals={1} />
-                <Sparkline label="Disk" values={samples.map((x) => x.disk)} unit="%" fixedMax={100} decimals={1} />
+                <HistoryChart label="Response time" points={history.points} pick={(p) => p.avgResponseMs} unit=" ms" />
+                <HistoryChart label="CPU" points={history.points} pick={(p) => p.avgCpuPercent} unit="%" fixedMax={100} decimals={1} />
+                <HistoryChart label="Memory" points={history.points} pick={(p) => p.avgMemoryPercent} unit="%" fixedMax={100} decimals={1} />
+                <HistoryChart label="Disk" points={history.points} pick={(p) => p.avgDiskPercent} unit="%" fixedMax={100} decimals={1} />
+                <p className="text-xs text-slate-500 dark:text-gh-muted">
+                  {formatWhen(history.points[0].t)} to now · red marks show failed checks
+                </p>
               </div>
-            </Section>
-          )}
+            ) : history && history.hours === hours ? (
+              <p className="text-xs text-slate-500 dark:text-gh-muted">Not enough data yet.</p>
+            ) : (
+              <LoadingBlock label="Loading history…" className="py-4" />
+            )}
+          </Section>
 
           <Section title="Vital signs">
             <dl>
@@ -332,45 +353,12 @@ export function HealthPanel({
               {latest.responseMs != null && <Row label="Response time">{latest.responseMs} ms</Row>}
               {uptimeSeconds !== null && <Row label="Running for">{formatDuration(uptimeSeconds)}</Row>}
               {history?.availabilityPercent != null && (
-                <Row label="Availability">
+                <Row label={`Availability (${range === 'live' ? '1 day' : rangeInfo.label})`}>
                   {history.availabilityPercent.toFixed(1)}% of checks passed ({history.failedChecks} of{' '}
                   {history.checks} failed)
                 </Row>
               )}
             </dl>
-          </Section>
-
-          <Section
-            title="History"
-            aside={
-              <select
-                className={selectClass}
-                value={hours}
-                onChange={(e) => setHours(Number(e.target.value))}
-                aria-label="Time range"
-              >
-                {RANGES.map((r) => (
-                  <option key={r.hours} value={r.hours}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-            }
-          >
-            {history && history.points.length >= 2 ? (
-              <div className="space-y-4">
-                <HistoryChart label="Response time" points={history.points} pick={(p) => p.avgResponseMs} unit=" ms" />
-                <HistoryChart label="CPU" points={history.points} pick={(p) => p.avgCpuPercent} unit="%" fixedMax={100} decimals={1} />
-                <HistoryChart label="Memory" points={history.points} pick={(p) => p.avgMemoryPercent} unit="%" fixedMax={100} decimals={1} />
-                <HistoryChart label="Disk" points={history.points} pick={(p) => p.avgDiskPercent} unit="%" fixedMax={100} decimals={1} />
-                <p className="text-xs text-slate-500 dark:text-gh-muted">
-                  {formatWhen(history.points[0].t)} to now · red marks show failed checks · CPU, memory and disk
-                  fill in from the day this was switched on
-                </p>
-              </div>
-            ) : (
-              <p className="text-xs text-slate-500 dark:text-gh-muted">Not enough data yet.</p>
-            )}
           </Section>
 
           {(resources?.cpu || resources?.memory || resources?.disk) && (
