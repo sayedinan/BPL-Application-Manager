@@ -131,7 +131,7 @@ public class ApplicationController {
     public ResponseEntity<Map<String, Object>> getApplication(@PathVariable Long id) {
         accessGuard.require(Action.ACCESS_APPLICATION);
         Map<String, Object> app = jdbc.queryForMap(
-            "SELECT id, name, server_ip, ssh_username, ssh_host_key_fingerprint, start_script, stop_script, log_script, status_script, poll_interval_seconds, " +
+            "SELECT id, name, server_ip, ssh_username, ssh_host_key_fingerprint, start_script, stop_script, log_script, poll_interval_seconds, " +
             "email_start_message, email_stop_message, email_external_online_message, email_external_offline_message, " +
             "sms_start_message, sms_stop_message, sms_external_online_message, sms_external_offline_message FROM applications WHERE id = ?",            id
         );
@@ -152,7 +152,6 @@ public class ApplicationController {
         body.put("smsExternalOfflineMessage", app.get("sms_external_offline_message"));
         body.put("stopScript", app.get("stop_script"));
         body.put("logScript", app.get("log_script"));
-        body.put("statusScript", app.get("status_script"));
         body.put("pollIntervalSeconds", app.get("poll_interval_seconds"));
         body.put("online", statusPollingOrchestrator.isOnline(id));
         return ResponseEntity.ok(body);
@@ -272,7 +271,6 @@ public class ApplicationController {
         String startScript = (String) req.get("startScript");
         String stopScript = (String) req.get("stopScript");
         String logScript = (String) req.get("logScript");
-        String statusScript = (String) req.getOrDefault("statusScript", "");
         Object rawPoll = req.getOrDefault("pollIntervalSeconds", 5);
         int pollInterval = ((Number) rawPoll).intValue();
         String emailStartMessage = (String) req.get("emailStartMessage");
@@ -290,17 +288,16 @@ public class ApplicationController {
             validator.validate(startScript);
             validator.validate(stopScript);
             validator.validate(logScript);
-            validator.validate(statusScript);
         } catch (Exception e) { /* fail-open per §12.3, unchanged */ }
 
         Long newId = jdbc.queryForObject(
-            "INSERT INTO applications (name, server_ip, ssh_username, ssh_password_enc, ssh_host_key_fingerprint, start_script, stop_script, log_script, status_script, poll_interval_seconds, " +
+            "INSERT INTO applications (name, server_ip, ssh_username, ssh_password_enc, ssh_host_key_fingerprint, start_script, stop_script, log_script, poll_interval_seconds, " +
             "email_start_message, email_stop_message, email_external_online_message, email_external_offline_message, " +
             "sms_start_message, sms_stop_message, sms_external_online_message, sms_external_offline_message) " +
                 "VALUES (?, ?::inet, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
             Long.class,
             name, serverIp, sshUsername, encPassword, (String) req.get("sshHostKeyFingerprint"),
-            startScript, stopScript, logScript, statusScript, pollInterval,
+            startScript, stopScript, logScript, pollInterval,
             emailStartMessage, emailStopMessage, emailExternalOnlineMessage, emailExternalOfflineMessage,
             smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage);
 

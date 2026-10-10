@@ -299,10 +299,7 @@ export function DashboardPlaceholder(): JSX.Element {
 
   return (
     <div className="mx-auto max-w-6xl p-6 sm:p-8">
-      <PageHeader
-        title="Dashboard"
-        description={`Signed in as ${user?.username} (${user?.role})`}
-      />
+      <PageHeader title="Dashboard" />
 
       {error && <Alert className="mb-4">{error}</Alert>}
       {actionError && <Alert className="mb-4">{actionError}</Alert>}
