@@ -7,7 +7,7 @@ package com.bpl.orderapp.admin.health;
  */
 public enum HealthDecision {
 
-    /** No enabled health endpoint for this application: use the SSH status_script instead. */
+    /** No enabled health endpoint for this application: status stays at its last known value. */
     NOT_CONFIGURED,
 
     /** The application is online. */

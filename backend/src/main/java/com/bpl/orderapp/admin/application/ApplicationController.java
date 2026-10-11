@@ -24,7 +24,7 @@ import java.util.Map;
 /**
  * Per STATUS-REDESIGN.md: applications.status no longer exists.
  * Online/offline is derived live by {@link StatusPollingOrchestrator},
- * fed by each application's status_script. This controller never
+ * fed by each application's health endpoint. This controller never
  * writes a status value — it only triggers start/stop scripts and
  * waits for the poller to confirm the resulting state.
  */
@@ -131,7 +131,7 @@ public class ApplicationController {
     public ResponseEntity<Map<String, Object>> getApplication(@PathVariable Long id) {
         accessGuard.require(Action.ACCESS_APPLICATION);
         Map<String, Object> app = jdbc.queryForMap(
-            "SELECT id, name, server_ip, ssh_username, ssh_host_key_fingerprint, start_script, stop_script, log_script, poll_interval_seconds, " +
+            "SELECT id, name, server_ip, ssh_username, ssh_host_key_fingerprint, start_script, stop_script, log_script, " +
             "email_start_message, email_stop_message, email_external_online_message, email_external_offline_message, " +
             "sms_start_message, sms_stop_message, sms_external_online_message, sms_external_offline_message FROM applications WHERE id = ?",            id
         );
@@ -152,7 +152,6 @@ public class ApplicationController {
         body.put("smsExternalOfflineMessage", app.get("sms_external_offline_message"));
         body.put("stopScript", app.get("stop_script"));
         body.put("logScript", app.get("log_script"));
-        body.put("pollIntervalSeconds", app.get("poll_interval_seconds"));
         body.put("online", statusPollingOrchestrator.isOnline(id));
         return ResponseEntity.ok(body);
     }
@@ -271,8 +270,6 @@ public class ApplicationController {
         String startScript = (String) req.get("startScript");
         String stopScript = (String) req.get("stopScript");
         String logScript = (String) req.get("logScript");
-        Object rawPoll = req.getOrDefault("pollIntervalSeconds", 5);
-        int pollInterval = ((Number) rawPoll).intValue();
         String emailStartMessage = (String) req.get("emailStartMessage");
         String emailStopMessage = (String) req.get("emailStopMessage");
         String emailExternalOnlineMessage = (String) req.get("emailExternalOnlineMessage");
@@ -291,13 +288,13 @@ public class ApplicationController {
         } catch (Exception e) { /* fail-open per §12.3, unchanged */ }
 
         Long newId = jdbc.queryForObject(
-            "INSERT INTO applications (name, server_ip, ssh_username, ssh_password_enc, ssh_host_key_fingerprint, start_script, stop_script, log_script, poll_interval_seconds, " +
+            "INSERT INTO applications (name, server_ip, ssh_username, ssh_password_enc, ssh_host_key_fingerprint, start_script, stop_script, log_script, " +
             "email_start_message, email_stop_message, email_external_online_message, email_external_offline_message, " +
             "sms_start_message, sms_stop_message, sms_external_online_message, sms_external_offline_message) " +
-                "VALUES (?, ?::inet, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                "VALUES (?, ?::inet, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
             Long.class,
             name, serverIp, sshUsername, encPassword, (String) req.get("sshHostKeyFingerprint"),
-            startScript, stopScript, logScript, pollInterval,
+            startScript, stopScript, logScript,
             emailStartMessage, emailStopMessage, emailExternalOnlineMessage, emailExternalOfflineMessage,
             smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage);
 
@@ -525,7 +522,6 @@ public class ApplicationController {
         String startScript = (String) req.get("startScript");
         String stopScript = (String) req.get("stopScript");
         String logScript = (String) req.get("logScript");
-        String statusScript = (String) req.get("statusScript");
         String emailStartMessage = (String) req.get("emailStartMessage");
         String emailStopMessage = (String) req.get("emailStopMessage");
         String emailExternalOnlineMessage = (String) req.get("emailExternalOnlineMessage");
@@ -535,25 +531,23 @@ public class ApplicationController {
         String smsExternalOnlineMessage = (String) req.get("smsExternalOnlineMessage");
         String smsExternalOfflineMessage = (String) req.get("smsExternalOfflineMessage");
         rejectIfAnySmsTooLong(smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage);
-        Object rawPoll = req.getOrDefault("pollIntervalSeconds", 5);
-        int pollInterval = ((Number) rawPoll).intValue();
 
         String sshPassword = (String) req.get("sshPassword");
         if (sshPassword != null && !sshPassword.isBlank()) {
             String encPassword = cipher.encrypt(sshPassword);
             jdbc.update(
-                "UPDATE applications SET name=?, server_ip=?::inet, ssh_username=?, ssh_password_enc=?, start_script=?, stop_script=?, log_script=?, status_script=?, poll_interval_seconds=?, " +
+                "UPDATE applications SET name=?, server_ip=?::inet, ssh_username=?, ssh_password_enc=?, start_script=?, stop_script=?, log_script=?, " +
                 "email_start_message=?, email_stop_message=?, email_external_online_message=?, email_external_offline_message=?, " +
                 "sms_start_message=?, sms_stop_message=?, sms_external_online_message=?, sms_external_offline_message=?, updated_at=NOW() WHERE id=?",
-                name, serverIp, sshUsername, encPassword, startScript, stopScript, logScript, statusScript, pollInterval,
+                name, serverIp, sshUsername, encPassword, startScript, stopScript, logScript,
                 emailStartMessage, emailStopMessage, emailExternalOnlineMessage, emailExternalOfflineMessage,
                 smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage, id);
         } else {
             jdbc.update(
-                "UPDATE applications SET name=?, server_ip=?::inet, ssh_username=?, start_script=?, stop_script=?, log_script=?, status_script=?, poll_interval_seconds=?, " +
+                "UPDATE applications SET name=?, server_ip=?::inet, ssh_username=?, start_script=?, stop_script=?, log_script=?, " +
                 "email_start_message=?, email_stop_message=?, email_external_online_message=?, email_external_offline_message=?, " +
                 "sms_start_message=?, sms_stop_message=?, sms_external_online_message=?, sms_external_offline_message=?, updated_at=NOW() WHERE id=?",
-                name, serverIp, sshUsername, startScript, stopScript, logScript, statusScript, pollInterval,
+                name, serverIp, sshUsername, startScript, stopScript, logScript,
                 emailStartMessage, emailStopMessage, emailExternalOnlineMessage, emailExternalOfflineMessage,
                 smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage, id);
         }

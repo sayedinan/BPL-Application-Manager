@@ -34,6 +34,7 @@ public class LogPollingOrchestrator {
 
     private static final Logger log = LoggerFactory.getLogger(LogPollingOrchestrator.class);
     private static final int MAX_RETAINED_LINES = 500;
+    private static final int LOG_POLL_INTERVAL_SECONDS = 5;
     private static final int LOG_SCRIPT_TIMEOUT_MS = 15000;
 
     private final JdbcTemplate jdbc;
@@ -61,16 +62,12 @@ public class LogPollingOrchestrator {
             return; // already running — avoid restarting on every redundant call
         }
 
-        Integer intervalSeconds = jdbc.queryForObject(
-            "SELECT poll_interval_seconds FROM applications WHERE id = ?", Integer.class, applicationId);
-        int interval = intervalSeconds != null ? intervalSeconds : 5;
-
         ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(
             () -> pollOnce(applicationId),
             Instant.now(),
-            Duration.ofSeconds(interval));
+            Duration.ofSeconds(LOG_POLL_INTERVAL_SECONDS));
         activePollers.put(applicationId, future);
-        log.info("Started log poller for application id={} (interval={}s)", applicationId, interval);
+        log.info("Started log poller for application id={} (interval={}s)", applicationId, LOG_POLL_INTERVAL_SECONDS);
     }
 
     public void stopPolling(Long applicationId) {

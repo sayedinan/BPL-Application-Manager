@@ -1,18 +1,15 @@
 package com.bpl.orderapp.admin.status;
 
 import com.bpl.orderapp.admin.audit.AuditWriter;
-import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.health.HealthCheckService;
 import com.bpl.orderapp.admin.health.HealthDecision;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
 import com.bpl.orderapp.admin.log.WebSocketBroadcast;
 import com.bpl.orderapp.admin.notification.LifecycleEventType;
 import com.bpl.orderapp.admin.notification.Notifier;
-import com.bpl.orderapp.admin.ssh.SshConnection;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Component;
@@ -31,35 +28,23 @@ import java.util.concurrent.ScheduledFuture;
 /**
  * Always-on, two-way status reconciliation poller.
  *
- * <p>Per STATUS-REDESIGN.md: online/offline is no longer a column
- * applications write on start/stop — it is derived live by running
- * each application's Sys.Admin-authored {@code status_script} over
- * SSH, on its own cached connection (purpose {@code "status"},
- * independent of the log poller's connection — see SshConnection),
- * on a hardcoded interval.
+ * <p>Per STATUS-REDESIGN.md: online/offline is derived live from each
+ * application's health endpoint (HEALTH-MONITORING.md), polled on a
+ * hardcoded interval. No SSH status_script or user-configurable interval.
  *
  * <p>Unlike the log poller, this runs continuously for every
  * application regardless of last-known state — two-way reconciliation
  * requires it, since it must catch both "thought online, actually
  * dead" and "thought offline, actually running" (started manually
  * outside the app).
- *
- * <p>Convention: {@code status_script} exit code 0 = online; any
- * non-zero exit, or an SSH/connection failure, = offline. Mirrors the
- * exit codes a Sys.Admin would already get from
- * {@code systemctl is-active}, {@code pgrep -f ...}, or
- * {@code curl -sf <health-url>}.
  */
 @Component
 public class StatusPollingOrchestrator {
 
     private static final Logger log = LoggerFactory.getLogger(StatusPollingOrchestrator.class);
 
-    // Hardcoded per STATUS-REDESIGN.md §2 — not user-configurable,
-    // independent of the log poller's per-application
-    // poll_interval_seconds.
+    // Hardcoded per STATUS-REDESIGN.md §2 — health endpoint polling interval.
     private static final int STATUS_POLL_INTERVAL_SECONDS = 3;
-    private static final int STATUS_SCRIPT_TIMEOUT_MS = 8000;
 
     // Health checks wait on the network (up to ~11 s each when an application
     // is down or slow), so they get their own threads: a few dead applications
@@ -67,11 +52,8 @@ public class StatusPollingOrchestrator {
     private static final int HEALTH_POLL_THREADS = 8;
 
     private final JdbcTemplate jdbc;
-    private final SshCredentialCipher cipher;
-    private final SshConnection sshConnection;
     private final WebSocketBroadcast broadcast;
     private final LogPollingOrchestrator logPollingOrchestrator;
-    private final ThreadPoolTaskScheduler scheduler;
     private final ThreadPoolTaskScheduler healthScheduler;
     private final AuditWriter auditWriter;
     // Spring auto-injects every bean implementing Notifier — empty
@@ -103,22 +85,16 @@ public class StatusPollingOrchestrator {
     // after one.
     private final Set<Long> actionInProgress = ConcurrentHashMap.newKeySet();
 
-    public StatusPollingOrchestrator(JdbcTemplate jdbc, SshCredentialCipher cipher,
-            SshConnection sshConnection, WebSocketBroadcast broadcast,
+    public StatusPollingOrchestrator(JdbcTemplate jdbc,
+            WebSocketBroadcast broadcast,
             LogPollingOrchestrator logPollingOrchestrator, AuditWriter auditWriter,
             List<Notifier> notifiers, HealthCheckService healthCheckService) {
         this.auditWriter = auditWriter;
         this.jdbc = jdbc;
-        this.cipher = cipher;
-        this.sshConnection = sshConnection;
         this.broadcast = broadcast;
         this.logPollingOrchestrator = logPollingOrchestrator;
         this.notifiers = notifiers;
         this.healthCheckService = healthCheckService;
-        this.scheduler = new ThreadPoolTaskScheduler();
-        this.scheduler.setPoolSize(4);
-        this.scheduler.setThreadNamePrefix("status-poller-");
-        this.scheduler.initialize();
         this.healthScheduler = new ThreadPoolTaskScheduler();
         this.healthScheduler.setPoolSize(HEALTH_POLL_THREADS);
         this.healthScheduler.setThreadNamePrefix("health-poller-");
@@ -139,26 +115,12 @@ public class StatusPollingOrchestrator {
 
     public void startPolling(Long applicationId) {
         stopPolling(applicationId);
-        // Applications monitored through their health endpoint poll on the
-        // health threads, the rest (SSH status_script) on the SSH threads.
-        // Call this again after an application's health setup changes, so it
-        // moves to the right pool.
-        boolean viaHealth = isHealthMonitored(applicationId);
-        ThreadPoolTaskScheduler chosen = viaHealth ? healthScheduler : scheduler;
-        ScheduledFuture<?> future = chosen.scheduleAtFixedRate(
+        ScheduledFuture<?> future = healthScheduler.scheduleAtFixedRate(
             () -> pollOnce(applicationId),
             Instant.now(),
             Duration.ofSeconds(STATUS_POLL_INTERVAL_SECONDS));
         activePollers.put(applicationId, future);
-        log.info("Started status poller for application id={} (interval={}s, via {})",
-            applicationId, STATUS_POLL_INTERVAL_SECONDS, viaHealth ? "health endpoint" : "ssh script");
-    }
-
-    private boolean isHealthMonitored(Long applicationId) {
-        List<Integer> rows = jdbc.queryForList(
-            "SELECT 1 FROM application_health_config WHERE application_id = ? AND enabled = TRUE",
-            Integer.class, applicationId);
-        return !rows.isEmpty();
+        log.info("Started status poller for application id={} (interval={}s)", applicationId, STATUS_POLL_INTERVAL_SECONDS);
     }
 
     public void stopPolling(Long applicationId) {
@@ -290,58 +252,13 @@ public class StatusPollingOrchestrator {
     // only when the value actually changed. Returns the freshly-observed
     // value either way.
     private boolean runCheck(Long applicationId, boolean force) {
-        // Applications with an enabled health endpoint are checked over
-        // HTTP (HEALTH-MONITORING.md D3); only those without one fall
-        // through to the SSH status_script below.
         HealthDecision decision = healthCheckService.check(applicationId, force);
-        if (decision != HealthDecision.NOT_CONFIGURED) {
-            if (decision == HealthDecision.UNCHANGED) {
-                return isOnline(applicationId);
-            }
-            boolean healthOnline = decision == HealthDecision.ONLINE;
-            reconcile(applicationId, healthOnline, "HEALTH_API");
-            return healthOnline;
+        if (decision == HealthDecision.NOT_CONFIGURED || decision == HealthDecision.UNCHANGED) {
+            return isOnline(applicationId); // no health endpoint yet, or nothing new: keep last known state
         }
-
-        Map<String, Object> app;
-        try {
-            app = jdbc.queryForMap(
-                "SELECT server_ip, ssh_username, ssh_password_enc, ssh_host_key_fingerprint, status_script FROM applications WHERE id = ?",
-                applicationId);
-        } catch (EmptyResultDataAccessException e) {
-            stopPolling(applicationId);
-            return false;
-        }
-
-        String host = app.get("server_ip").toString();
-        String user = (String) app.get("ssh_username");
-        String encPass = (String) app.get("ssh_password_enc");
-        String fingerprint = (String) app.get("ssh_host_key_fingerprint");
-        String statusScript = (String) app.get("status_script");
-
-        boolean online;
-        if (statusScript == null || statusScript.isBlank()) {
-            // No status script configured yet — treat as offline rather
-            // than throwing, so an application mid-setup doesn't crash
-            // the poller loop.
-            online = false;
-        } else {
-            try {
-                String plainPass = cipher.decrypt(encPass);
-                com.jcraft.jsch.Session session =
-                    sshConnection.connect(host, user, plainPass, fingerprint, "status");
-                SshConnection.SshResult result =
-                    sshConnection.runScriptWithTimeout(session, statusScript, STATUS_SCRIPT_TIMEOUT_MS);
-                online = result.exitCode == 0;
-            } catch (Exception e) {
-                log.warn("Status check failed for application id={}: {}", applicationId, e.getMessage());
-                sshConnection.invalidateCache(host, user, fingerprint, "status");
-                online = false;
-            }
-        }
-
-        reconcile(applicationId, online, "STATUS_SCRIPT");
-        return online;
+        boolean healthOnline = decision == HealthDecision.ONLINE;
+        reconcile(applicationId, healthOnline, "HEALTH_API");
+        return healthOnline;
     }
 
     private void ensureStreakRow(Long applicationId) {
