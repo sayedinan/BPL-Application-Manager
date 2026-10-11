@@ -15,7 +15,15 @@ export function timeAgo(iso: string | null | undefined): string {
 
 /** True while a maintenance window set in the dashboard is open (alerts are held back). */
 export function maintenanceActive(health: HealthLatest | null | undefined): boolean {
-  return !!health?.maintenanceUntil && new Date(health.maintenanceUntil).getTime() > Date.now();
+  if (!health?.maintenanceUntil) return false;
+  const now = Date.now();
+  const start = health.maintenanceStartsAt ? new Date(health.maintenanceStartsAt).getTime() : 0;
+  return start <= now && new Date(health.maintenanceUntil).getTime() > now;
+}
+
+/** True when a window is set but has not started yet. */
+export function maintenanceScheduled(health: HealthLatest | null | undefined): boolean {
+  return !!health?.maintenanceStartsAt && new Date(health.maintenanceStartsAt).getTime() > Date.now();
 }
 
 /** True when the latest reading is older than a few check intervals, so showing "Healthy" would be stale. */

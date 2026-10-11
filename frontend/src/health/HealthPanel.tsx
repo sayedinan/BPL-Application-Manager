@@ -7,7 +7,7 @@ import { LoadingBlock } from '@/components/ui/Spinner';
 import { HealthBadge, timeAgo } from './HealthBadge';
 import { Sparkline } from './Sparkline';
 import { RangeButtons } from './RangeButtons';
-import type { HealthHistory, HealthStatus } from './types';
+import type { HealthHistory } from './types';
 import type { HealthLiveData } from './useHealthLive';
 
 type RangeKey = 'live' | 'day' | 'week' | 'month';

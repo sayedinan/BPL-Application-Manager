@@ -50,6 +50,7 @@ export interface HealthLatest {
   sslDaysRemaining?: number | null;
   snapshot?: HealthSnapshot | null;
   /** Present while a maintenance window set in the dashboard is open (alerts held back). */
+  maintenanceStartsAt?: string | null;
   maintenanceUntil?: string | null;
   maintenanceNote?: string | null;
   maintenanceBy?: string | null;

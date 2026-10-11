@@ -48,9 +48,10 @@ public class HealthReadService {
         // An open maintenance window (alerts held back) is shown for every
         // application, whether or not it is monitored through a health endpoint.
         List<Map<String, Object>> maintenance = jdbc.queryForList(
-            "SELECT ends_at, note, started_by FROM application_maintenance "
+            "SELECT starts_at, ends_at, note, started_by FROM application_maintenance "
                 + "WHERE application_id = ? AND ends_at > NOW()", applicationId);
         if (!maintenance.isEmpty()) {
+            body.put("maintenanceStartsAt", iso(maintenance.get(0).get("starts_at")));
             body.put("maintenanceUntil", iso(maintenance.get(0).get("ends_at")));
             body.put("maintenanceNote", maintenance.get(0).get("note"));
             body.put("maintenanceBy", maintenance.get(0).get("started_by"));

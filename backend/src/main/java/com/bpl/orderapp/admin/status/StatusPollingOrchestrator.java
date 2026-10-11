@@ -210,7 +210,7 @@ public class StatusPollingOrchestrator {
 
     private boolean isInMaintenance(Long applicationId) {
         List<Integer> rows = jdbc.queryForList(
-            "SELECT 1 FROM application_maintenance WHERE application_id = ? AND ends_at > NOW()",
+            "SELECT 1 FROM application_maintenance WHERE application_id = ? AND starts_at <= NOW() AND ends_at > NOW()",
             Integer.class, applicationId);
         return !rows.isEmpty();
     }

@@ -10,7 +10,7 @@ import { Card, PageHeader } from '@/components/ui/Card';
 import { LoadingBlock } from '@/components/ui/Spinner';
 import { HealthPanel, Row, Section } from '@/health/HealthPanel';
 import { UptimeBar } from '@/health/UptimeBar';
-import { maintenanceActive } from '@/health/HealthBadge';
+import { maintenanceActive, maintenanceScheduled } from '@/health/HealthBadge';
 import { HealthSettingsModal } from '@/health/HealthSettingsModal';
 import { MaintenanceModal } from '@/health/MaintenanceModal';
 import { useHealthLive } from '@/health/useHealthLive';
@@ -115,6 +115,7 @@ export function ApplicationDetailsPage(): JSX.Element {
   const healthLive = useHealthLive(appId, validId && !!app);
   const online = app ? app.online : null;
   const inMaintenance = maintenanceActive(healthLive.latest);
+  const maintenanceIsScheduled = maintenanceScheduled(healthLive.latest);
   useEffect(() => {
     if (!validId || online === null) return;
     let cancelled = false;
@@ -176,7 +177,7 @@ export function ApplicationDetailsPage(): JSX.Element {
         actions={
           <div className="flex items-center gap-3">
             <Button size="sm" variant="secondary" onClick={() => setMaintenanceOpen(true)}>
-              {inMaintenance ? 'Maintenance on' : 'Maintenance'}
+              {inMaintenance ? 'Maintenance on' : maintenanceIsScheduled ? 'Maintenance scheduled' : 'Maintenance'}
             </Button>
             {user?.role === 'SYS_ADMIN' && (
               <Button size="sm" variant="secondary" onClick={() => setSettingsOpen(true)}>
@@ -192,7 +193,15 @@ export function ApplicationDetailsPage(): JSX.Element {
         <MaintenanceModal
           applicationId={app.id}
           applicationName={app.name}
-          activeUntil={inMaintenance ? (healthLive.latest?.maintenanceUntil ?? null) : null}
+          current={
+            healthLive.latest?.maintenanceUntil && (inMaintenance || maintenanceIsScheduled)
+              ? {
+                  startsAt: healthLive.latest.maintenanceStartsAt ?? null,
+                  endsAt: healthLive.latest.maintenanceUntil,
+                  active: inMaintenance,
+                }
+              : null
+          }
           onClose={() => setMaintenanceOpen(false)}
         />
       )}
@@ -203,6 +212,13 @@ export function ApplicationDetailsPage(): JSX.Element {
           {healthLive.latest.maintenanceBy ? ` (started by ${healthLive.latest.maintenanceBy})` : ''}. Offline and
           online alerts are held back.
           {healthLive.latest.maintenanceNote ? ` Note: ${healthLive.latest.maintenanceNote}` : ''}
+        </Alert>
+      )}
+
+      {maintenanceIsScheduled && healthLive.latest?.maintenanceStartsAt && healthLive.latest.maintenanceUntil && (
+        <Alert tone="warning" className="mb-4">
+          Maintenance scheduled from {new Date(healthLive.latest.maintenanceStartsAt).toLocaleString()} to{' '}
+          {new Date(healthLive.latest.maintenanceUntil).toLocaleString()}. Alerts are held back only during that time.
         </Alert>
       )}
 

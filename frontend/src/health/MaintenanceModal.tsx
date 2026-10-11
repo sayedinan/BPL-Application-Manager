@@ -5,43 +5,61 @@ import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 
-const DURATIONS = [
-  { minutes: 30, label: '30 minutes' },
-  { minutes: 60, label: '1 hour' },
-  { minutes: 120, label: '2 hours' },
-  { minutes: 240, label: '4 hours' },
-  { minutes: 480, label: '8 hours' },
-  { minutes: 1440, label: '24 hours' },
-];
-
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white shadow-sm px-3 py-2 text-sm text-slate-900 ' +
   'placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
   'dark:border-gh-border dark:bg-surface-dark dark:text-gh-fg';
 
+function pad(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+/** Value for <input type="datetime-local">: the browser's local time, no timezone. */
+function toLocalInput(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function MaintenanceModal({
   applicationId,
   applicationName,
-  activeUntil,
+  current,
   onClose,
 }: {
   applicationId: number;
   applicationName: string;
-  /** When the current window ends, or null when none is open. */
-  activeUntil: string | null;
+  /** The open or scheduled window, or null when there is none. */
+  current: { startsAt: string | null; endsAt: string; active: boolean } | null;
   onClose: () => void;
 }): JSX.Element {
-  const [minutes, setMinutes] = useState(60);
+  const [from, setFrom] = useState(() => toLocalInput(current?.startsAt ? new Date(current.startsAt) : new Date()));
+  const [to, setTo] = useState(() => toLocalInput(current ? new Date(current.endsAt) : new Date(Date.now() + 3600_000)));
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState<'start' | 'end' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function run(action: 'start' | 'end') {
     setError(null);
+    if (action === 'start') {
+      const end = new Date(to);
+      const start = current?.active ? new Date() : new Date(from);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        setError('Choose both a start and an end time.');
+        return;
+      }
+      if (end.getTime() <= start.getTime()) {
+        setError('The end must be after the start.');
+        return;
+      }
+    }
     setBusy(action);
     try {
       if (action === 'start') {
-        await api.put(API.APPLICATIONS.MAINTENANCE(applicationId), { minutes, note: note.trim() || undefined });
+        await api.put(API.APPLICATIONS.MAINTENANCE(applicationId), {
+          // An open window keeps running; only its end (and note) change.
+          startsAt: current?.active ? undefined : new Date(from).toISOString(),
+          endsAt: new Date(to).toISOString(),
+          note: note.trim() || undefined,
+        });
       } else {
         await api.delete(API.APPLICATIONS.MAINTENANCE(applicationId));
       }
@@ -64,30 +82,45 @@ export function MaintenanceModal({
         {error && <Alert>{error}</Alert>}
 
         <p className="text-sm text-slate-600 dark:text-gh-fgSoft">
-          While maintenance is on, this application's offline and online alerts (email and SMS) are held back.
-          Changes are still recorded in the audit log, and if it is still offline when maintenance ends, the alert is sent then.
+          Choose when maintenance starts and ends. Between those times this application's offline and online alerts
+          (email and SMS) are held back. Changes are still recorded in the audit log, and if it is still offline when
+          maintenance ends, the alert is sent then.
         </p>
 
-        {activeUntil && (
-          <Alert tone="warning">Maintenance is on until {new Date(activeUntil).toLocaleString()}.</Alert>
+        {current && (
+          <Alert tone="warning">
+            {current.active
+              ? `Maintenance is on until ${new Date(current.endsAt).toLocaleString()}.`
+              : `Maintenance is scheduled from ${current.startsAt ? new Date(current.startsAt).toLocaleString() : '?'} to ${new Date(current.endsAt).toLocaleString()}.`}
+          </Alert>
+        )}
+
+        {!current?.active && (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-gh-fgSoft" htmlFor="maintenance-from">
+              From
+            </label>
+            <input
+              id="maintenance-from"
+              type="datetime-local"
+              className={inputClass}
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+          </div>
         )}
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-gh-fgSoft" htmlFor="maintenance-minutes">
-            {activeUntil ? 'Change to end in' : 'Hold alerts for'}
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-gh-fgSoft" htmlFor="maintenance-to">
+            To
           </label>
-          <select
-            id="maintenance-minutes"
+          <input
+            id="maintenance-to"
+            type="datetime-local"
             className={inputClass}
-            value={minutes}
-            onChange={(e) => setMinutes(Number(e.target.value))}
-          >
-            {DURATIONS.map((d) => (
-              <option key={d.minutes} value={d.minutes}>
-                {d.label}
-              </option>
-            ))}
-          </select>
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
         </div>
 
         <div>
@@ -107,14 +140,14 @@ export function MaintenanceModal({
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-4 dark:border-gh-border">
           <div>
-            {activeUntil && (
+            {current && (
               <Button
                 variant="secondary"
                 loading={busy === 'end'}
                 disabled={busy !== null && busy !== 'end'}
                 onClick={() => void run('end')}
               >
-                End maintenance now
+                {current.active ? 'End maintenance now' : 'Cancel scheduled maintenance'}
               </Button>
             )}
           </div>
@@ -123,7 +156,7 @@ export function MaintenanceModal({
               Cancel
             </Button>
             <Button loading={busy === 'start'} disabled={busy !== null && busy !== 'start'} onClick={() => void run('start')}>
-              {activeUntil ? 'Update' : 'Start maintenance'}
+              {current ? 'Update' : 'Save maintenance'}
             </Button>
           </div>
         </div>
