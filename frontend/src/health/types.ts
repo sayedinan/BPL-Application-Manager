@@ -5,14 +5,6 @@
 
 export type HealthStatus = 'UP' | 'DEGRADED' | 'DOWN' | 'UNKNOWN';
 
-export interface HealthCheckItem {
-  name: string;
-  type?: string;
-  status: HealthStatus;
-  latencyMs?: number;
-  message?: string;
-}
-
 export interface HealthSnapshot {
   schemaVersion: string;
   status: HealthStatus;
@@ -33,15 +25,12 @@ export interface HealthSnapshot {
     memory?: { usedMb?: number; limitMb?: number; usedPercent?: number };
     disk?: { totalGb?: number; freeGb?: number; usedPercent?: number };
   };
-  checks?: HealthCheckItem[];
   traffic?: {
     windowMinutes?: number;
     requestCount?: number;
     errorCount?: number;
     avgLatencyMs?: number;
   };
-  maintenance?: { enabled?: boolean; message?: string; until?: string };
-  jobs?: { name: string; lastRunAt?: string; lastResult?: string; nextRunAt?: string }[];
 }
 
 /** GET /applications/{id}/health */

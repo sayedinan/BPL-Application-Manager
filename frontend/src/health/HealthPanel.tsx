@@ -38,13 +38,6 @@ function formatWhen(iso: string | null | undefined): string {
   return iso ? new Date(iso).toLocaleString() : '—';
 }
 
-function statusTone(status: HealthStatus): BadgeTone {
-  if (status === 'UP') return 'online';
-  if (status === 'DEGRADED') return 'pending';
-  if (status === 'DOWN') return 'error';
-  return 'offline';
-}
-
 // Links come from the monitored application, so only plain web links are
 // made clickable.
 function safeHref(url: string | undefined): string | null {
@@ -304,12 +297,6 @@ export function HealthPanel({
         </Section>
       ) : (
         <>
-          {snap?.maintenance?.enabled && (
-            <Alert tone="warning">
-              Maintenance mode{snap.maintenance.message ? `: ${snap.maintenance.message}` : '.'}
-              {snap.maintenance.until ? ` Until ${formatWhen(snap.maintenance.until)}.` : ''}
-            </Alert>
-          )}
           {latest.error && <Alert tone="warning">Last check problem: {latest.error}</Alert>}
 
           <Section
@@ -387,27 +374,6 @@ export function HealthPanel({
             </Section>
           )}
 
-          {snap?.checks && snap.checks.length > 0 && (
-            <Section title="Connected systems">
-              <ul className="divide-y divide-slate-200 dark:divide-gh-border">
-                {snap.checks.map((c) => (
-                  <li key={c.name} className="flex items-center justify-between gap-3 py-2 text-sm first:pt-0 last:pb-0">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-900 dark:text-gh-fg">{c.name}</p>
-                      {c.message && <p className="text-xs text-slate-500 dark:text-gh-muted">{c.message}</p>}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {c.latencyMs !== undefined && (
-                        <span className="text-xs text-slate-500 dark:text-gh-muted">{Math.round(c.latencyMs)} ms</span>
-                      )}
-                      <Badge tone={statusTone(c.status)}>{c.status}</Badge>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </Section>
-          )}
-
           {traffic && (
             <Section title="Traffic">
               <dl>
@@ -436,24 +402,6 @@ export function HealthPanel({
                   </Row>
                 )}
               </dl>
-            </Section>
-          )}
-
-          {snap?.jobs && snap.jobs.length > 0 && (
-            <Section title="Scheduled jobs">
-              <ul className="divide-y divide-slate-200 dark:divide-gh-border">
-                {snap.jobs.map((j) => (
-                  <li key={j.name} className="py-2 text-sm first:pt-0 last:pb-0">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium text-slate-900 dark:text-gh-fg">{j.name}</span>
-                      {j.lastResult && <span className="text-xs text-slate-500 dark:text-gh-muted">{j.lastResult}</span>}
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-gh-muted">
-                      Last run {formatWhen(j.lastRunAt)} · next {formatWhen(j.nextRunAt)}
-                    </p>
-                  </li>
-                ))}
-              </ul>
             </Section>
           )}
 

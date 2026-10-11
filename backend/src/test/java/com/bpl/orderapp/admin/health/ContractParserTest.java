@@ -52,12 +52,7 @@ class ContractParserTest {
             { "name": "payment-gateway", "type": "external_api", "status": "UP", "latencyMs": 180 },
             { "name": "email", "type": "notification", "status": "DOWN", "message": "SMTP connection refused" }
           ],
-          "traffic": { "windowMinutes": 5, "requestCount": 1200, "errorCount": 3, "avgLatencyMs": 85 },
-          "maintenance": { "enabled": false },
-          "jobs": [
-            { "name": "nightly-settlement", "lastRunAt": "2026-10-01T01:00:00Z", "lastResult": "SUCCESS",
-              "nextRunAt": "2026-10-02T01:00:00Z" }
-          ]
+          "traffic": { "windowMinutes": 5, "requestCount": 1200, "errorCount": 3, "avgLatencyMs": 85 }
         }""";
 
     private static String withTail(String tail) {
@@ -80,7 +75,6 @@ class ContractParserTest {
         assertThat(snapshot.app().name()).isEqualTo("Order Engine");
         assertThat(snapshot.startedAt()).isNull();
         assertThat(snapshot.resources()).isNull();
-        assertThat(snapshot.checks()).isNull();
         assertThat(snapshot.traffic()).isNull();
     }
 
@@ -101,15 +95,8 @@ class ContractParserTest {
         assertThat(snapshot.resources().memory().usedMb()).isEqualTo(108.0);
         assertThat(snapshot.resources().memory().usedPercent()).isEqualTo(5.3);
         assertThat(snapshot.resources().disk().freeGb()).isEqualTo(356.0);
-        assertThat(snapshot.checks()).hasSize(5);
-        assertThat(snapshot.checks().get(4).name()).isEqualTo("email");
-        assertThat(snapshot.checks().get(4).status()).isEqualTo(HealthStatus.DOWN);
-        assertThat(snapshot.checks().get(4).message()).isEqualTo("SMTP connection refused");
         assertThat(snapshot.traffic().requestCount()).isEqualTo(1200L);
         assertThat(snapshot.traffic().errorCount()).isEqualTo(3L);
-        assertThat(snapshot.maintenance().enabled()).isFalse();
-        assertThat(snapshot.jobs()).hasSize(1);
-        assertThat(snapshot.jobs().get(0).lastResult()).isEqualTo("SUCCESS");
     }
 
     @Test
@@ -187,33 +174,13 @@ class ContractParserTest {
     @Test
     void wrongTypedOptionalParts_becomeNotProvided() {
         HealthSnapshot snapshot = parser.parse(withTail(
-            ",\"resources\":{\"memory\":\"lots\"},\"checks\":\"none\",\"build\":{\"commit\":42}"));
+            ",\"resources\":{\"memory\":\"lots\"},\"build\":{\"commit\":42}"));
         assertThat(snapshot.resources().memory()).isNull();
-        assertThat(snapshot.checks()).isNull();
         assertThat(snapshot.build().commit()).isNull();
     }
 
     @Test
-    void checksWithoutAName_areSkipped_andUnknownStatusesBecomeUnknown() {
-        HealthSnapshot snapshot = parser.parse(withTail(
-            ",\"checks\":[{\"status\":\"UP\"},{\"name\":\"db\",\"status\":\"MAYBE\"},\"junk\"]"));
-        assertThat(snapshot.checks()).hasSize(1);
-        assertThat(snapshot.checks().get(0).name()).isEqualTo("db");
-        assertThat(snapshot.checks().get(0).status()).isEqualTo(HealthStatus.UNKNOWN);
-    }
-
-    @Test
-    void longLists_andLongText_areCapped() {
-        StringBuilder checks = new StringBuilder();
-        for (int i = 0; i < 60; i++) {
-            if (i > 0) {
-                checks.append(',');
-            }
-            checks.append("{\"name\":\"c").append(i).append("\",\"status\":\"UP\"}");
-        }
-        HealthSnapshot many = parser.parse(withTail(",\"checks\":[" + checks + "]"));
-        assertThat(many.checks()).hasSize(50);
-
+    void longText_isCapped() {
         String longText = "d".repeat(600);
         HealthSnapshot wordy = parser.parse(MINIMAL.replace("\"app\":{", "\"app\":{\"description\":\"" + longText + "\",").replace("\"name\":\"Order Engine\"", "\"name\":\"X\""));
         assertThat(wordy.app().description()).hasSize(500);

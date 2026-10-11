@@ -8,8 +8,6 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Turns the JSON body of a standard-contract health response
@@ -31,7 +29,6 @@ import java.util.List;
 @Component
 public class ContractParser {
 
-    private static final int MAX_LIST_ITEMS = 50;
     private static final int MAX_TEXT_LENGTH = 500;
 
     private final ObjectMapper mapper;
@@ -98,10 +95,7 @@ public class ContractParser {
             app,
             build(object(root, "build")),
             resources(object(root, "resources")),
-            checks(root),
-            traffic(object(root, "traffic")),
-            maintenance(object(root, "maintenance")),
-            jobs(root));
+            traffic(object(root, "traffic")));
     }
 
     // ------------------------------------------------------------------
@@ -140,30 +134,6 @@ public class ContractParser {
                 percent(disk, "usedPercent")));
     }
 
-    private List<HealthSnapshot.Check> checks(JsonNode root) {
-        JsonNode array = root.get("checks");
-        if (array == null || !array.isArray()) {
-            return null;
-        }
-        List<HealthSnapshot.Check> out = new ArrayList<>();
-        for (JsonNode c : array) {
-            if (out.size() >= MAX_LIST_ITEMS) {
-                break;
-            }
-            String name = c.isObject() ? text(c, "name") : null;
-            if (name == null) {
-                continue; // a check without a name is unusable, skip just this one
-            }
-            out.add(new HealthSnapshot.Check(
-                name,
-                text(c, "type"),
-                HealthStatus.fromString(text(c, "status")),
-                nonNegative(c, "latencyMs"),
-                text(c, "message")));
-        }
-        return out;
-    }
-
     private HealthSnapshot.Traffic traffic(JsonNode n) {
         if (n == null) {
             return null;
@@ -173,35 +143,6 @@ public class ContractParser {
             count(n, "requestCount"),
             count(n, "errorCount"),
             nonNegative(n, "avgLatencyMs"));
-    }
-
-    private HealthSnapshot.Maintenance maintenance(JsonNode n) {
-        if (n == null) {
-            return null;
-        }
-        JsonNode enabled = n.get("enabled");
-        Boolean enabledValue = (enabled != null && enabled.isBoolean()) ? enabled.asBoolean() : null;
-        return new HealthSnapshot.Maintenance(enabledValue, text(n, "message"), instant(n, "until"));
-    }
-
-    private List<HealthSnapshot.Job> jobs(JsonNode root) {
-        JsonNode array = root.get("jobs");
-        if (array == null || !array.isArray()) {
-            return null;
-        }
-        List<HealthSnapshot.Job> out = new ArrayList<>();
-        for (JsonNode j : array) {
-            if (out.size() >= MAX_LIST_ITEMS) {
-                break;
-            }
-            String name = j.isObject() ? text(j, "name") : null;
-            if (name == null) {
-                continue;
-            }
-            out.add(new HealthSnapshot.Job(
-                name, instant(j, "lastRunAt"), text(j, "lastResult"), instant(j, "nextRunAt")));
-        }
-        return out;
     }
 
     // ------------------------------------------------------------------

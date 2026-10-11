@@ -1,12 +1,11 @@
 package com.bpl.orderapp.admin.health;
 
 import java.time.Instant;
-import java.util.List;
 
 /**
  * One application's health at one moment, in the normalized shape of
  * HEALTH_CONTRACT.md. Whatever format an application actually returns
- * (contract or Actuator), the adapters produce this, and this is what
+ * (standard contract), the parser produces this, and this is what
  * gets stored in {@code application_health_latest.payload} and sent to
  * the frontend.
  *
@@ -24,10 +23,7 @@ public record HealthSnapshot(
         App app,
         Build build,
         Resources resources,
-        List<Check> checks,
-        Traffic traffic,
-        Maintenance maintenance,
-        List<Job> jobs) {
+        Traffic traffic) {
 
     public record App(String name, String description, String environment, String version,
                       String owner, String contact, Links links) {}
@@ -44,15 +40,8 @@ public record HealthSnapshot(
 
     public record Disk(Double totalGb, Double freeGb, Double usedPercent) {}
 
-    /** One subsystem or dependency (database, cache, queue, external API...). */
-    public record Check(String name, String type, HealthStatus status,
-                        Double latencyMs, String message) {}
-
     /** Request statistics over a recent window. */
     public record Traffic(Double windowMinutes, Long requestCount, Long errorCount,
                           Double avgLatencyMs) {}
 
-    public record Maintenance(Boolean enabled, String message, Instant until) {}
-
-    public record Job(String name, Instant lastRunAt, String lastResult, Instant nextRunAt) {}
 }
