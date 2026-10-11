@@ -28,8 +28,6 @@ interface FormState {
   startScript: string;
   stopScript: string;
   logScript: string;
-  statusScript: string;
-  pollIntervalSeconds: string;
   emailStartMessage: string;
   emailStopMessage: string;
   emailExternalOnlineMessage: string;
@@ -42,7 +40,7 @@ interface FormState {
 
 const EMPTY_FORM: FormState = {
   name: '', serverIp: '', sshUsername: '', sshPassword: '', sshHostKeyFingerprint: '',
-  startScript: '', stopScript: '', logScript: '', statusScript: '', pollIntervalSeconds: '5',
+  startScript: '', stopScript: '', logScript: '',
   emailStartMessage: '', emailStopMessage: '', emailExternalOnlineMessage: '', emailExternalOfflineMessage: '',
   smsStartMessage: '', smsStopMessage: '', smsExternalOnlineMessage: '', smsExternalOfflineMessage: '',
 };
@@ -94,20 +92,17 @@ export function ApplicationsPage(): JSX.Element {
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     setFormError(null);
-    const pollInterval = Number(form.pollIntervalSeconds);
-    if (!Number.isFinite(pollInterval) || pollInterval <= 0) { setFormError('Poll interval must be a positive number of seconds.'); return; }
     if (!form.name.trim()) { setFormError('Name is required.'); return; }
     setSubmitting(true);
     try {
       await api.post(API.APPLICATIONS.CREATE, {
         name: form.name, serverIp: form.serverIp, sshUsername: form.sshUsername,
         sshPassword: form.sshPassword, sshHostKeyFingerprint: form.sshHostKeyFingerprint,
-        startScript: form.startScript, stopScript: form.stopScript, logScript: form.logScript, statusScript: form.statusScript,
+        startScript: form.startScript, stopScript: form.stopScript, logScript: form.logScript,
         emailStartMessage: form.emailStartMessage, emailStopMessage: form.emailStopMessage,
         emailExternalOnlineMessage: form.emailExternalOnlineMessage, emailExternalOfflineMessage: form.emailExternalOfflineMessage,
         smsStartMessage: form.smsStartMessage, smsStopMessage: form.smsStopMessage,
         smsExternalOnlineMessage: form.smsExternalOnlineMessage, smsExternalOfflineMessage: form.smsExternalOfflineMessage,
-        pollIntervalSeconds: pollInterval,
       });
       setForm(EMPTY_FORM);
       setShowForm(false);
@@ -162,8 +157,6 @@ export function ApplicationsPage(): JSX.Element {
         smsExternalOfflineMessage: String(detail.smsExternalOfflineMessage ?? ''),
         stopScript: String(detail.stopScript ?? ''),
         logScript: String(detail.logScript ?? ''),
-        statusScript: String(detail.statusScript ?? ''),
-        pollIntervalSeconds: String(detail.pollIntervalSeconds ?? '5'),
       });
     } catch (err) {
       setListError(err instanceof ApiError ? err.message : `Failed to load ${app.name} for editing.`);
@@ -184,20 +177,17 @@ export function ApplicationsPage(): JSX.Element {
     e.preventDefault();
     if (editingId === null) return;
     setFormError(null);
-    const pollInterval = Number(form.pollIntervalSeconds);
-    if (!Number.isFinite(pollInterval) || pollInterval <= 0) { setFormError('Poll interval must be a positive number of seconds.'); return; }
     if (!form.name.trim()) { setFormError('Name is required.'); return; }
     setSubmitting(true);
     try {
       await api.put(API.APPLICATIONS.UPDATE(editingId), {
         name: form.name, serverIp: form.serverIp, sshUsername: form.sshUsername,
         sshPassword: form.sshPassword || undefined,
-        startScript: form.startScript, stopScript: form.stopScript, logScript: form.logScript, statusScript: form.statusScript,
+        startScript: form.startScript, stopScript: form.stopScript, logScript: form.logScript,
         emailStartMessage: form.emailStartMessage, emailStopMessage: form.emailStopMessage,
         emailExternalOnlineMessage: form.emailExternalOnlineMessage, emailExternalOfflineMessage: form.emailExternalOfflineMessage,
         smsStartMessage: form.smsStartMessage, smsStopMessage: form.smsStopMessage,
         smsExternalOnlineMessage: form.smsExternalOnlineMessage, smsExternalOfflineMessage: form.smsExternalOfflineMessage,
-        pollIntervalSeconds: pollInterval,
       });
       cancelEdit();
       await loadApplications();
@@ -348,13 +338,7 @@ export function ApplicationsPage(): JSX.Element {
               <span className={labelClass}>Log Script</span>
               <textarea value={form.logScript} onChange={(e) => updateField('logScript', e.target.value)} className={`${inputClass} font-mono`} rows={3} required />
             </label>
-            <label className="mb-3 block">
-              <span className={labelClass}>Status Script</span>
-              <textarea value={form.statusScript} onChange={(e) => updateField('statusScript', e.target.value)} className={`${inputClass} font-mono`} rows={3} required />
-              <span className="mt-1 block text-xs text-slate-500 dark:text-gh-muted">Exit 0 = online, non-zero = offline.</span>
-            </label>
-
-            <div className="mt-6 border-t border-slate-200 pt-4 dark:border-gh-border">
+            <div className="mt-6 mb-5 border-t border-slate-200 pt-4 dark:border-gh-border">
               <h3 className="mb-1 text-sm font-semibold text-slate-900 dark:text-white">Custom notification messages</h3>
               <p className="mb-4 text-xs text-slate-500 dark:text-gh-muted">
                 Optional. Leave blank to use the default wording. Placeholders: <code>{'{appName}'}</code>, <code>{'{actor}'}</code>, <code>{'{role}'}</code>, <code>{'{timestamp}'}</code> ({'{actor}'}/{'{role}'} only apply to Start/Stop — external events have no logged-in actor).
@@ -394,11 +378,6 @@ export function ApplicationsPage(): JSX.Element {
                 <textarea value={form.smsExternalOfflineMessage} onChange={(e) => updateField('smsExternalOfflineMessage', e.target.value)} className={inputClass} rows={2} maxLength={160} />
               </label>
             </div>
-
-            <label className="mb-5 block">
-              <span className={labelClass}>Poll Interval (seconds)</span>
-              <input type="number" min={1} value={form.pollIntervalSeconds} onChange={(e) => updateField('pollIntervalSeconds', e.target.value)} className={`${inputClass} w-32`} />
-            </label>
 
             {formError && <Alert className="mb-4">{formError}</Alert>}
 

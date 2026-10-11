@@ -391,7 +391,7 @@ export function HealthSettingsModal({
             </div>
             {configured && confirmRemove && (
               <p className={hintClass}>
-                After removing, this application goes back to being checked by its SSH status script.
+                After removing, this application has no status checks and stays at its last known state until health monitoring is set up again.
               </p>
             )}
           </>
