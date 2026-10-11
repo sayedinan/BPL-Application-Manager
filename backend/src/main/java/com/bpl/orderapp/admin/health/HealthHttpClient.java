@@ -43,9 +43,7 @@ import java.util.concurrent.TimeoutException;
  * (HEALTH-MONITORING.md).
  *
  * <p>It only fetches: it returns the status code and body as received
- * and leaves the meaning to the caller. A 503 is therefore returned,
- * not thrown, because Spring Boot Actuator answers 503 with a full
- * JSON body when the application is DOWN. Anything that stops the
+ * and leaves the meaning to the caller. Anything that stops the
  * response from arriving at all is thrown as {@link HealthFetchException}.
  *
  * <p>Safety limits: 3 s to connect, 5 s for the response headers, 3 s

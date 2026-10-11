@@ -30,12 +30,11 @@ class HealthCheckServiceTest {
     private final SshCredentialCipher cipher = mock(SshCredentialCipher.class);
 
     private boolean configured = true;
-    private String format = "CONTRACT";
     private final AtomicInteger storedFailures = new AtomicInteger(0);
 
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class, this::fakeDatabase);
     private final HealthCheckService service = new HealthCheckService(
-        jdbc, cipher, httpClient, new ContractParser(mapper), new ActuatorAdapter(mapper), mapper, readService);
+        jdbc, cipher, httpClient, new ContractParser(mapper), mapper, readService);
 
     private Object fakeDatabase(InvocationOnMock call) {
         String sql = call.getArgument(0);
@@ -45,7 +44,6 @@ class HealthCheckServiceTest {
             }
             Map<String, Object> row = new HashMap<>();
             row.put("url", "http://app.test/status");
-            row.put("format", format);
             row.put("api_key_enc", null);
             row.put("tls_pin_sha256", null);
             row.put("poll_interval_seconds", 10);
@@ -134,14 +132,6 @@ class HealthCheckServiceTest {
     }
 
     @Test
-    void actuator503WithABody_isReadAsDown_notAsUnreachable() {
-        format = "ACTUATOR";
-        respond(503, "{\"status\":\"DOWN\"}");
-        assertThat(service.check(APP_ID, true)).isEqualTo(HealthDecision.UNCHANGED);
-        assertThat(service.check(APP_ID, true)).isEqualTo(HealthDecision.OFFLINE);
-    }
-
-    @Test
     void contract503_isAFailure_evenWithAValidBody() {
         respond(503, contractBody("UP"));
         assertThat(service.check(APP_ID, true)).isEqualTo(HealthDecision.UNCHANGED);
@@ -201,7 +191,7 @@ class HealthCheckServiceTest {
     void aOneOffTest_changesNothing() {
         respond(200, contractBody("UP"));
         HealthCheckService.TestResult result =
-            service.test("http://app.test/status", "CONTRACT", null, null, "Order Engine");
+            service.test("http://app.test/status", null, null, "Order Engine");
         assertThat(result.ok()).isTrue();
         assertThat(result.status()).isEqualTo(HealthStatus.UP);
         assertThat(storedFailures.get()).isZero();
@@ -212,7 +202,7 @@ class HealthCheckServiceTest {
     void aOneOffTest_reportsWhyItFailed() {
         cannotReach("Connection refused or host unreachable");
         HealthCheckService.TestResult result =
-            service.test("http://app.test/status", "CONTRACT", null, null, "Order Engine");
+            service.test("http://app.test/status", null, null, "Order Engine");
         assertThat(result.ok()).isFalse();
         assertThat(result.error()).isEqualTo("Connection refused or host unreachable");
         assertThat(result.httpStatus()).isNull();

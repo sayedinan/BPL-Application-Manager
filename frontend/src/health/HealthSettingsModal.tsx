@@ -46,7 +46,6 @@ export function HealthSettingsModal({
 
   const [enabled, setEnabled] = useState(true);
   const [url, setUrl] = useState('');
-  const [format, setFormat] = useState<'CONTRACT' | 'ACTUATOR'>('CONTRACT');
   const [apiKey, setApiKey] = useState('');
   const [removeKey, setRemoveKey] = useState(false);
   // A key made with the Generate button, shown once so it can be copied. Cleared when the field is edited.
@@ -76,7 +75,6 @@ export function HealthSettingsModal({
         if (c.configured) {
           setEnabled(c.enabled ?? true);
           setUrl(c.url ?? '');
-          setFormat(c.format ?? 'CONTRACT');
           setHasApiKey(c.hasApiKey ?? false);
           setPin(c.tlsPinSha256 ?? '');
           setIntervalValue(String(c.pollIntervalSeconds ?? 10));
@@ -103,7 +101,7 @@ export function HealthSettingsModal({
 
   // The values a test depends on. null for the key means "keep the saved one".
   function currentSignature(): string {
-    return JSON.stringify([url.trim(), format, keyField() ?? null, isHttps ? pin.trim() : '']);
+    return JSON.stringify([url.trim(), keyField() ?? null, isHttps ? pin.trim() : '']);
   }
 
   const testPassed = testResult?.ok === true && testedSignature === currentSignature();
@@ -145,7 +143,6 @@ export function HealthSettingsModal({
     try {
       const result = await api.post<HealthTestResult>(API.APPLICATIONS.HEALTH_TEST(applicationId), {
         url: url.trim(),
-        format,
         apiKey: keyField(),
         tlsPinSha256: isHttps ? pin.trim() : '',
       });
@@ -178,7 +175,6 @@ export function HealthSettingsModal({
       await api.put(API.APPLICATIONS.HEALTH_CONFIG(applicationId), {
         enabled,
         url: url.trim(),
-        format,
         apiKey: keyField(),
         tlsPinSha256: isHttps ? pin.trim() : '',
         pollIntervalSeconds: seconds,
@@ -235,23 +231,11 @@ export function HealthSettingsModal({
                 className={inputClass}
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="http://10.0.0.5:8080/status/dashboard"
+                placeholder="https://10.0.0.5:8443/health"
                 autoComplete="off"
               />
             </div>
 
-            <div>
-              <label className={labelClass} htmlFor="health-format">Response format</label>
-              <select
-                id="health-format"
-                className={inputClass}
-                value={format}
-                onChange={(e) => setFormat(e.target.value === 'ACTUATOR' ? 'ACTUATOR' : 'CONTRACT')}
-              >
-                <option value="CONTRACT">Standard contract (HEALTH_CONTRACT.md)</option>
-                <option value="ACTUATOR">Spring Boot Actuator (/actuator/health)</option>
-              </select>
-            </div>
 
             <div>
               <div className="mb-1 flex items-center justify-between gap-2">

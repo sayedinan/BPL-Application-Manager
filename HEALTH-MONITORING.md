@@ -13,7 +13,7 @@ and use the application's own health API as the signal for online/offline.
 
 | # | Decision |
 |---|---|
-| D1 | Each app may expose a health URL returning either the standard contract (`HEALTH_CONTRACT.md`, format `CONTRACT`) or Spring Boot Actuator health JSON (format `ACTUATOR`, mapped by an adapter). |
+| D1 | Each app exposes a health URL returning the standard contract (HEALTH_CONTRACT.md). |
 | D2 | API keys are stored per app, encrypted with the existing `SshCredentialCipher`, never returned by any endpoint. Only SYS_ADMIN can set or change them. |
 | D3 | The health poller replaces the SSH `status_script` poller for any app that has an enabled health config. Apps without one keep using `status_script` (fallback). |
 | D4 | Online/offline transitions detected by the health poller write the same audit rows (`APPLICATION_ONLINE` / `APPLICATION_OFFLINE`) and send email/SMS through the existing `List<Notifier>`. |
@@ -46,7 +46,6 @@ One optional row per application. No row = no health monitoring (SSH fallback).
 | `application_id` | BIGINT PK, FK -> applications ON DELETE CASCADE | |
 | `enabled` | BOOLEAN NOT NULL DEFAULT TRUE | |
 | `url` | TEXT NOT NULL | Full health URL. `http://` = plain; `https://` = TLS. |
-| `format` | VARCHAR(16) NOT NULL | `CONTRACT` or `ACTUATOR` |
 | `api_key_enc` | TEXT NULL | Encrypted with `SshCredentialCipher`. NULL = no key sent. |
 | `tls_pin_sha256` | VARCHAR(64) NULL | For HTTPS with a self-signed cert: hex SHA-256 of the certificate. NULL = normal verification. |
 | `poll_interval_seconds` | INT NOT NULL DEFAULT 10 | Check 3 to 300. |
@@ -97,7 +96,7 @@ about 260,000 rows per app for 30 days.
 
 ## 6. Out of scope for step 2
 
-The poller, the Actuator adapter, the pin/SSL logic, the REST endpoints and the
+The poller, the pin/SSL logic, the REST endpoints and the
 frontend. They follow in steps 3, 4 and 5.
 
 ## 7. Open items

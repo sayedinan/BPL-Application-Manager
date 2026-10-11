@@ -100,7 +100,7 @@ public class HealthController {
      * {@code tlsPinSha256}: null or empty means no pin (normal
      * certificate verification).
      */
-    public record ConfigRequest(Boolean enabled, String url, String format, String apiKey,
+    public record ConfigRequest(Boolean enabled, String url, String apiKey,
                                 String tlsPinSha256, Integer pollIntervalSeconds) {}
 
     // ------------------------------------------------------------------
@@ -179,7 +179,7 @@ public class HealthController {
 
         Map<String, Object> body = new LinkedHashMap<>();
         List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT enabled, url, format, api_key_enc IS NOT NULL AS has_api_key, "
+            "SELECT enabled, url, api_key_enc IS NOT NULL AS has_api_key, "
                 + "tls_pin_sha256, poll_interval_seconds "
                 + "FROM application_health_config WHERE application_id = ?", id);
         if (rows.isEmpty()) {
@@ -190,7 +190,6 @@ public class HealthController {
         body.put("configured", true);
         body.put("enabled", row.get("enabled"));
         body.put("url", row.get("url"));
-        body.put("format", row.get("format"));
         body.put("hasApiKey", row.get("has_api_key"));
         body.put("tlsPinSha256", row.get("tls_pin_sha256"));
         body.put("pollIntervalSeconds", row.get("poll_interval_seconds"));
@@ -206,7 +205,6 @@ public class HealthController {
 
         boolean enabled = req.enabled() == null || req.enabled();
         String url = validateUrl(req.url());
-        String format = validateFormat(req.format());
         String pin = validatePin(req.tlsPinSha256(), url);
         int interval = validateInterval(req.pollIntervalSeconds());
 
@@ -222,22 +220,21 @@ public class HealthController {
 
         jdbc.update(
             "INSERT INTO application_health_config "
-                + "(application_id, enabled, url, format, api_key_enc, tls_pin_sha256, poll_interval_seconds) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                + "(application_id, enabled, url, api_key_enc, tls_pin_sha256, poll_interval_seconds) "
+                + "VALUES (?, ?, ?, ?, ?, ?) "
                 + "ON CONFLICT (application_id) DO UPDATE SET "
-                + "enabled = EXCLUDED.enabled, url = EXCLUDED.url, format = EXCLUDED.format, "
+                + "enabled = EXCLUDED.enabled, url = EXCLUDED.url, "
                 + "api_key_enc = CASE WHEN ? THEN EXCLUDED.api_key_enc "
                 + "ELSE application_health_config.api_key_enc END, "
                 + "tls_pin_sha256 = EXCLUDED.tls_pin_sha256, "
                 + "poll_interval_seconds = EXCLUDED.poll_interval_seconds, "
                 + "updated_at = NOW()",
-            id, enabled, url, format, encryptedKey, pin, interval, keyProvided);
+            id, enabled, url, encryptedKey, pin, interval, keyProvided);
 
         // No secrets and no URL in the audit detail.
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("change", "health_config");
         detail.put("enabled", enabled);
-        detail.put("format", format);
         detail.put("tls", !url.toLowerCase(Locale.ROOT).startsWith("https") ? "none"
             : (pin != null ? "pinned" : "verified"));
         detail.put("apiKey", keyAction);
@@ -285,7 +282,6 @@ public class HealthController {
         String appName = applicationName(id);
 
         String url = validateUrl(req.url());
-        String format = validateFormat(req.format());
         String pin = validatePin(req.tlsPinSha256(), url);
 
         String apiKey;
@@ -298,7 +294,7 @@ public class HealthController {
             apiKey = validateApiKey(req.apiKey());
         }
 
-        HealthCheckService.TestResult result = healthCheckService.test(url, format, apiKey, pin, appName);
+        HealthCheckService.TestResult result = healthCheckService.test(url, apiKey, pin, appName);
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("ok", result.ok());
@@ -338,14 +334,6 @@ public class HealthController {
             throw badRequest("url must not contain a user name or password; use the API key field");
         }
         return url;
-    }
-
-    private static String validateFormat(String raw) {
-        String format = raw == null ? "" : raw.trim().toUpperCase(Locale.ROOT);
-        if (!format.equals("CONTRACT") && !format.equals("ACTUATOR")) {
-            throw badRequest("format must be CONTRACT or ACTUATOR");
-        }
-        return format;
     }
 
     // Accepts the usual openssl style (upper case, with colons) and

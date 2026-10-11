@@ -30,7 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>Each call: reads the application's health config, skips the work
  * if the next check is not due yet, fetches the endpoint, normalizes the
- * response into a {@link HealthSnapshot} (contract or Actuator format),
+ * response into a {@link HealthSnapshot} (standard contract),
  * upserts {@code application_health_latest} and appends a row to
  * {@code application_health_history}.
  *
@@ -81,7 +81,6 @@ public class HealthCheckService {
     private final SshCredentialCipher cipher;
     private final HealthHttpClient httpClient;
     private final ContractParser contractParser;
-    private final ActuatorAdapter actuatorAdapter;
     private final ObjectMapper payloadMapper;
     private final HealthReadService readService;
 
@@ -90,12 +89,11 @@ public class HealthCheckService {
 
     public HealthCheckService(JdbcTemplate jdbc, SshCredentialCipher cipher,
             HealthHttpClient httpClient, ContractParser contractParser,
-            ActuatorAdapter actuatorAdapter, ObjectMapper mapper, HealthReadService readService) {
+            ObjectMapper mapper, HealthReadService readService) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.httpClient = httpClient;
         this.contractParser = contractParser;
-        this.actuatorAdapter = actuatorAdapter;
         this.readService = readService;
         // Own copy so omitting null fields doesn't change JSON output elsewhere.
         this.payloadMapper = mapper.copy().setSerializationInclusion(JsonInclude.Include.NON_NULL);
@@ -107,7 +105,7 @@ public class HealthCheckService {
      */
     public HealthDecision check(Long applicationId, boolean force) {
         List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT c.url, c.format, c.api_key_enc, c.tls_pin_sha256, c.poll_interval_seconds, a.name "
+            "SELECT c.url, c.api_key_enc, c.tls_pin_sha256, c.poll_interval_seconds, a.name "
                 + "FROM application_health_config c "
                 + "JOIN applications a ON a.id = c.application_id "
                 + "WHERE c.application_id = ? AND c.enabled = TRUE",
@@ -138,7 +136,6 @@ public class HealthCheckService {
     }
 
     private HealthDecision runCheck(Long applicationId, Map<String, Object> config) {
-        String format = (String) config.get("format");
         Instant checkedAt = Instant.now();
         Integer httpStatus = null;
         Long responseMs = null;
@@ -153,7 +150,7 @@ public class HealthCheckService {
             httpStatus = response.statusCode();
             responseMs = response.responseMs();
             certNotAfter = response.certNotAfter();
-            snapshot = interpret(format, response, (String) config.get("name"));
+            snapshot = interpret(response);
         } catch (HealthFetchException | InvalidHealthResponseException e) {
             error = e.getMessage();
         } catch (RuntimeException e) {
@@ -210,11 +207,11 @@ public class HealthCheckService {
      * affects online/offline state. {@code ok} means the response was
      * usable (parsed into a snapshot), whatever status it reported.
      */
-    public TestResult test(String url, String format, String apiKey, String tlsPinSha256, String appName) {
+    public TestResult test(String url, String apiKey, String tlsPinSha256, String appName) {
         try {
             HealthHttpClient.Response response = httpClient.fetch(url, apiKey, tlsPinSha256);
             try {
-                HealthSnapshot snapshot = interpret(format, response, appName);
+                HealthSnapshot snapshot = interpret(response);
                 return new TestResult(true, response.statusCode(), response.responseMs(),
                     snapshot.status(), null, response.certNotAfter(), snapshot);
             } catch (InvalidHealthResponseException e) {
@@ -226,17 +223,13 @@ public class HealthCheckService {
         }
     }
 
-    // Actuator answers 503 with a full body when DOWN, so for that format
-    // a 503 is still parsed; every other non-200 is a failed check.
-    private HealthSnapshot interpret(String format, HealthHttpClient.Response response, String appName) {
-        int code = response.statusCode();
-        boolean actuator = "ACTUATOR".equals(format);
-        if (!(code == 200 || (actuator && code == 503))) {
-            throw new InvalidHealthResponseException("HTTP " + code);
+    // Only the standard contract is accepted, and only on HTTP 200.
+    // Any other status code is a failed check.
+    private HealthSnapshot interpret(HealthHttpClient.Response response) {
+        if (response.statusCode() != 200) {
+            throw new InvalidHealthResponseException("HTTP " + response.statusCode());
         }
-        return actuator
-            ? actuatorAdapter.parse(response.body(), appName, Instant.now())
-            : contractParser.parse(response.body());
+        return contractParser.parse(response.body());
     }
 
     private String decryptKey(String encrypted) {

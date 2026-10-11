@@ -91,7 +91,6 @@ export interface HealthConfig {
   configured: boolean;
   enabled?: boolean;
   url?: string;
-  format?: 'CONTRACT' | 'ACTUATOR';
   hasApiKey?: boolean;
   tlsPinSha256?: string | null;
   pollIntervalSeconds?: number;
