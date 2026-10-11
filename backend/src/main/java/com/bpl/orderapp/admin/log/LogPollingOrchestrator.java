@@ -4,6 +4,7 @@ import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.ssh.SshConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Component;
@@ -17,8 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 
 /**
- * Runs log_script on an interval, only while an application is
- * currently online.
+ * Runs log_script on an interval, only while the application is
+ * online AND at least one viewer has its log topic open.
  *
  * <p>Per STATUS-REDESIGN.md §5, "online" is no longer a stored column
  * this class can query at boot — start/stop of this poller is now
@@ -78,7 +79,40 @@ public class LogPollingOrchestrator {
         }
     }
 
+    public int viewerCount(Long applicationId) {
+        Integer n = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM websocket_subscriptions WHERE topic_key = ?",
+            Integer.class, String.valueOf(applicationId));
+        return n == null ? 0 : n;
+    }
+
+    private boolean isOnline(Long applicationId) {
+        List<Boolean> rows = jdbc.queryForList(
+            "SELECT online FROM application_status_streak WHERE application_id = ?",
+            Boolean.class, applicationId);
+        return !rows.isEmpty() && rows.get(0);
+    }
+
+    @EventListener
+    public void onViewerEvent(LogViewerEvent event) {
+        Long id = event.applicationId();
+        if (event.joined()) {
+            if (isOnline(id)) startPolling(id);
+        } else if (viewerCount(id) == 0) {
+            stopPolling(id);
+        }
+    }
+
+    /** Called by the status poller when an application flips online: poll only if someone is watching. */
+    public void onAppOnline(Long applicationId) {
+        if (viewerCount(applicationId) > 0) startPolling(applicationId);
+    }
+
     private void pollOnce(Long applicationId) {
+        if (viewerCount(applicationId) == 0) {
+            stopPolling(applicationId);
+            return;
+        }
         Map<String, Object> app;
         try {
             app = jdbc.queryForMap(

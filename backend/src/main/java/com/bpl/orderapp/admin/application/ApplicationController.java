@@ -36,7 +36,7 @@ public class ApplicationController {
 
     // STATUS-REDESIGN.md §3 — different timeouts for start vs stop,
     // since shutdown is generally faster/more deterministic than boot.
-    private static final long START_CONFIRMATION_TIMEOUT_MS = 30_000;
+    private static final long START_CONFIRMATION_TIMEOUT_MS = 60_000;
     private static final long STOP_CONFIRMATION_TIMEOUT_MS = 15_000;
     private static final long CONFIRMATION_POLL_INTERVAL_MS = 1_000;
 
@@ -319,6 +319,7 @@ public class ApplicationController {
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestParam java.util.UUID userId, HttpServletRequest httpRequest) {
         accessGuard.requireApplication(Action.CONTROL_APPLICATION, id);
+        requireHealthMonitoring(id);
         try {
             idempotencyService.checkAndStore(idempotencyKey != null ? idempotencyKey : "", userId, id);
         } catch (RuntimeException e) {
@@ -398,6 +399,7 @@ public class ApplicationController {
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestParam java.util.UUID userId, HttpServletRequest httpRequest) {
         accessGuard.requireApplication(Action.CONTROL_APPLICATION, id);
+        requireHealthMonitoring(id);
         idempotencyService.checkAndStore(idempotencyKey, userId, id);
 
         Map<String, Object> app = jdbc.queryForMap(
@@ -618,6 +620,17 @@ public class ApplicationController {
                 return row;
             },
             id, limit);
+    }
+
+    private void requireHealthMonitoring(Long id) {
+        Integer n = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM application_health_config WHERE application_id = ? AND enabled = TRUE",
+            Integer.class, id);
+        if (n == null || n == 0) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.CONFLICT,
+                "Set up health monitoring for this application before starting or stopping it.");
+        }
     }
 
     private void rejectIfAnySmsTooLong(String... smsMessages) {

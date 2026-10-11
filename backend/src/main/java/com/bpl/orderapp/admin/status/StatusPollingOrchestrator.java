@@ -315,7 +315,7 @@ public class StatusPollingOrchestrator {
         // same "no special-casing needed" pattern already used by the
         // log dedup algorithm.
         if (observedOnline) {
-            logPollingOrchestrator.startPolling(applicationId);
+            logPollingOrchestrator.onAppOnline(applicationId);
         } else {
             logPollingOrchestrator.stopPolling(applicationId);
         }

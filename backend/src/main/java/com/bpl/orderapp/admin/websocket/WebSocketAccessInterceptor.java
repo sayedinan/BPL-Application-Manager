@@ -12,6 +12,7 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
@@ -22,6 +23,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.bpl.orderapp.admin.audit.AuditWriter;
+import com.bpl.orderapp.admin.log.LogViewerEvent;
 
 @Component
 public class WebSocketAccessInterceptor implements ChannelInterceptor {
@@ -36,6 +38,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
 
     private static final long CLOSE_GRACE_SECONDS = 30;
     private final AuditWriter auditWriter;
+    private final ApplicationEventPublisher events;
     private final java.util.concurrent.ScheduledExecutorService closeScheduler =
         java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "ws-close-detector");
@@ -43,9 +46,10 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             return t;
         });
 
-    public WebSocketAccessInterceptor(JdbcTemplate jdbc, AuditWriter auditWriter) {
+    public WebSocketAccessInterceptor(JdbcTemplate jdbc, AuditWriter auditWriter, ApplicationEventPublisher events) {
         this.jdbc = jdbc;
         this.auditWriter = auditWriter;
+        this.events = events;
     }
 
     @jakarta.annotation.PostConstruct
@@ -106,6 +110,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             Integer appCount = jdbc.queryForObject("SELECT COUNT(*) FROM websocket_subscriptions WHERE topic_key = ?", Integer.class, idPart);
             if (appCount != null && appCount >= WebSocketLimits.MAX_PER_APP) throw new MessageDeliveryException("Per-application subscriber limit reached");
             jdbc.update("INSERT INTO websocket_subscriptions (session_id, subscription_id, topic_key) VALUES (?, ?, ?)", sessionId, subscriptionId, idPart);
+            events.publishEvent(new LogViewerEvent(applicationId, true));
             return;
         }
         if (destination.startsWith("/topic/application-health/")) {
@@ -122,13 +127,19 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
 
     @Transactional
     protected void handleUnsubscribe(StompHeaderAccessor accessor) {
+        List<String> keys = jdbc.queryForList(
+            "SELECT topic_key FROM websocket_subscriptions WHERE session_id = ? AND subscription_id = ?",
+            String.class, accessor.getSessionId(), accessor.getSubscriptionId());
         jdbc.update("DELETE FROM websocket_subscriptions WHERE session_id = ? AND subscription_id = ?", accessor.getSessionId(), accessor.getSubscriptionId());
+        publishViewersLeft(keys);
     }
 
     @Transactional
     protected void cleanupSession(String sessionId) {
         if (sessionId == null) return;
+        List<String> keys = jdbc.queryForList("SELECT topic_key FROM websocket_subscriptions WHERE session_id = ?", String.class, sessionId);
         jdbc.update("DELETE FROM websocket_subscriptions WHERE session_id = ?", sessionId);
+        publishViewersLeft(keys);
         int deleted = jdbc.update("DELETE FROM websocket_connections WHERE session_id = ?", sessionId);
         String username = sessionUsers.remove(sessionId);
         if (deleted > 0) {
@@ -174,6 +185,16 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
         auditWriter.writeAt(disconnectedAt, "LOGOUT", username, role, Map.of("reason", "BROWSER_CLOSED"), "SUCCESS");
         jdbc.update("DELETE FROM spring_session WHERE principal_name = ?", username);
         log.info("Browser closed detected for '{}' at {}; LOGOUT audited, orphaned session removed", username, disconnectedAt);
+    }
+
+    private void publishViewersLeft(List<String> topicKeys) {
+        for (String key : topicKeys) {
+            try {
+                events.publishEvent(new LogViewerEvent(Long.valueOf(key), false));
+            } catch (NumberFormatException ignored) {
+                // "audit-log" and other non-application topics
+            }
+        }
     }
 
     private String requireUsername(StompHeaderAccessor accessor) {
