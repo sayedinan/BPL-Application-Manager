@@ -8,6 +8,8 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Turns the JSON body of a standard-contract health response
@@ -30,6 +32,7 @@ import java.time.format.DateTimeParseException;
 public class ContractParser {
 
     private static final int MAX_TEXT_LENGTH = 500;
+    private static final int MAX_LIST_ITEMS = 50;
 
     private final ObjectMapper mapper;
 
@@ -95,6 +98,7 @@ public class ContractParser {
             app,
             build(object(root, "build")),
             resources(object(root, "resources")),
+            checks(root),
             traffic(object(root, "traffic")));
     }
 
@@ -130,8 +134,33 @@ public class ContractParser {
                 nonNegative(memory, "usedMb"), nonNegative(memory, "limitMb"),
                 percent(memory, "usedPercent")),
             disk == null ? null : new HealthSnapshot.Disk(
+                text(disk, "path"),
                 nonNegative(disk, "totalGb"), nonNegative(disk, "freeGb"),
-                percent(disk, "usedPercent")));
+                percent(disk, "usedPercent"), nonNegative(disk, "minFreeGb")));
+    }
+
+    private List<HealthSnapshot.Check> checks(JsonNode root) {
+        JsonNode array = root.get("checks");
+        if (array == null || !array.isArray()) {
+            return null;
+        }
+        List<HealthSnapshot.Check> out = new ArrayList<>();
+        for (JsonNode c : array) {
+            if (out.size() >= MAX_LIST_ITEMS) {
+                break;
+            }
+            String name = c.isObject() ? text(c, "name") : null;
+            if (name == null) {
+                continue; // a check without a name is unusable, skip just this one
+            }
+            out.add(new HealthSnapshot.Check(
+                name,
+                text(c, "type"),
+                HealthStatus.fromString(text(c, "status")),
+                nonNegative(c, "latencyMs"),
+                text(c, "message")));
+        }
+        return out;
     }
 
     private HealthSnapshot.Traffic traffic(JsonNode n) {

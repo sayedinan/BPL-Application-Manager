@@ -43,7 +43,7 @@ class ContractParserTest {
           "resources": {
             "cpu": { "processPercent": 2.1, "systemPercent": 11.4 },
             "memory": { "usedMb": 108, "limitMb": 2048, "usedPercent": 5.3 },
-            "disk": { "totalGb": 491, "freeGb": 356, "usedPercent": 27.5 }
+            "disk": { "path": "/data", "totalGb": 491, "freeGb": 356, "usedPercent": 27.5, "minFreeGb": 5.0 }
           },
           "checks": [
             { "name": "postgres", "type": "database", "status": "UP", "latencyMs": 4 },
@@ -95,6 +95,9 @@ class ContractParserTest {
         assertThat(snapshot.resources().memory().usedMb()).isEqualTo(108.0);
         assertThat(snapshot.resources().memory().usedPercent()).isEqualTo(5.3);
         assertThat(snapshot.resources().disk().freeGb()).isEqualTo(356.0);
+        assertThat(snapshot.resources().disk().path()).isEqualTo("/data");
+        assertThat(snapshot.resources().disk().minFreeGb()).isEqualTo(5.0);
+        assertThat(snapshot.checks()).isNotEmpty();
         assertThat(snapshot.traffic().requestCount()).isEqualTo(1200L);
         assertThat(snapshot.traffic().errorCount()).isEqualTo(3L);
     }

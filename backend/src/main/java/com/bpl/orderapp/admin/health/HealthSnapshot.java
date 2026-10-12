@@ -1,6 +1,7 @@
 package com.bpl.orderapp.admin.health;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * One application's health at one moment, in the normalized shape of
@@ -23,6 +24,7 @@ public record HealthSnapshot(
         App app,
         Build build,
         Resources resources,
+        List<Check> checks,
         Traffic traffic) {
 
     public record App(String name, String description, String environment, String version,
@@ -38,7 +40,11 @@ public record HealthSnapshot(
 
     public record Memory(Double usedMb, Double limitMb, Double usedPercent) {}
 
-    public record Disk(Double totalGb, Double freeGb, Double usedPercent) {}
+    /** One subsystem or dependency (database, cache, queue, external API...). */
+    public record Check(String name, String type, HealthStatus status,
+                        Double latencyMs, String message) {}
+
+    public record Disk(String path, Double totalGb, Double freeGb, Double usedPercent, Double minFreeGb) {}
 
     /** Request statistics over a recent window. */
     public record Traffic(Double windowMinutes, Long requestCount, Long errorCount,

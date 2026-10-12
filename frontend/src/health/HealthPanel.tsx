@@ -7,7 +7,7 @@ import { LoadingBlock } from '@/components/ui/Spinner';
 import { HealthBadge, timeAgo } from './HealthBadge';
 import { Sparkline } from './Sparkline';
 import { RangeButtons } from './RangeButtons';
-import type { HealthHistory } from './types';
+import type { HealthHistory, HealthStatus } from './types';
 import type { HealthLiveData } from './useHealthLive';
 
 type RangeKey = 'live' | 'day' | 'week' | 'month';
@@ -23,6 +23,13 @@ function historyRefreshMs(hours: number): number {
   if (hours <= 1) return 30000;
   if (hours <= 24) return 60000;
   return 300000;
+}
+
+function statusTone(status: HealthStatus): BadgeTone {
+  if (status === 'UP') return 'online';
+  if (status === 'DEGRADED') return 'pending';
+  if (status === 'DOWN') return 'error';
+  return 'offline';
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -366,11 +373,34 @@ export function HealthPanel({
                   percent={resources?.disk?.usedPercent}
                   detail={
                     resources?.disk?.freeGb !== undefined
-                      ? `${resources.disk.freeGb.toFixed(1)} GB free`
+                      ? `${resources.disk.freeGb.toFixed(1)} GB free${resources.disk.path ? ` on ${resources.disk.path}` : ''}${
+                          resources.disk.minFreeGb !== undefined ? ` (minimum ${resources.disk.minFreeGb} GB)` : ''
+                        }`
                       : undefined
                   }
                 />
               </div>
+            </Section>
+          )}
+
+          {snap?.checks && snap.checks.length > 0 && (
+            <Section title="Connected systems">
+              <ul className="divide-y divide-slate-200 dark:divide-gh-border">
+                {snap.checks.map((c) => (
+                  <li key={c.name} className="flex items-center justify-between gap-3 py-2 text-sm first:pt-0 last:pb-0">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-slate-900 dark:text-gh-fg">{c.name}</p>
+                      {c.message && <p className="text-xs text-slate-500 dark:text-gh-muted">{c.message}</p>}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {c.latencyMs !== undefined && (
+                        <span className="text-xs text-slate-500 dark:text-gh-muted">{Math.round(c.latencyMs)} ms</span>
+                      )}
+                      <Badge tone={statusTone(c.status)}>{c.status}</Badge>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </Section>
           )}
 
