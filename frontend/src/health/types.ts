@@ -85,6 +85,26 @@ export interface HealthHistory {
   }[];
 }
 
+/** GET /applications/{id}/health/uptime */
+export interface UptimeBars {
+  range: 'day' | 'week' | 'month';
+  /** IANA zone the bars were built in (what the server actually used) */
+  timeZone: string;
+  checks: number;
+  failedChecks: number;
+  /** share of checks that succeeded over the elapsed time only, null when there is no data */
+  availabilityPercent: number | null;
+  bars: {
+    /** ISO instants; the bar covers [start, end) */
+    start: string;
+    end: string;
+    checks: number;
+    failedChecks: number;
+    /** true when the bar has not started yet (drawn ash) */
+    future: boolean;
+  }[];
+}
+
 /** GET /applications/{id}/health/config (SYS_ADMIN) */
 export interface HealthConfig {
   configured: boolean;
