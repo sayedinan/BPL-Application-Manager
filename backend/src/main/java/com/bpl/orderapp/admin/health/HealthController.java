@@ -32,7 +32,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.sql.Timestamp;
+import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -165,6 +169,91 @@ public class HealthController {
         body.put("availabilityPercent", totalChecks == 0
             ? null : Math.round(1000.0 * (totalChecks - totalFailed) / totalChecks) / 10.0);
         body.put("points", points);
+        return ResponseEntity.ok(body);
+    }
+
+    /**
+     * Calendar-based availability bars in the caller's timezone.
+     * range=day   -> 24 hourly bars for today (00:00 to 23:59:59)
+     * range=week  -> 7 daily bars, today and the 6 days before
+     * range=month -> 30 daily bars, today and the 29 days before
+     * Bars that have not started yet come back with future=true.
+     * tz is an IANA zone id (e.g. Asia/Dhaka); missing or invalid falls
+     * back to the server zone.
+     */
+    @GetMapping("/uptime")
+    public ResponseEntity<Map<String, Object>> uptime(@PathVariable Long id,
+            @RequestParam(defaultValue = "day") String range,
+            @RequestParam(required = false) String tz) {
+        requireApplicationAccess(currentCaller(), id);
+
+        boolean hourly;
+        int count;
+        switch (range) {
+            case "day" -> { hourly = true; count = 24; }
+            case "week" -> { hourly = false; count = 7; }
+            case "month" -> { hourly = false; count = 30; }
+            default -> throw badRequest("range must be day, week or month");
+        }
+
+        ZoneId zone;
+        try {
+            zone = (tz == null || tz.isBlank()) ? ZoneId.systemDefault() : ZoneId.of(tz.trim());
+        } catch (DateTimeException e) {
+            zone = ZoneId.systemDefault();
+        }
+
+        Instant now = Instant.now();
+        LocalDate today = now.atZone(zone).toLocalDate();
+
+        List<Map<String, Object>> bars = new ArrayList<>();
+        long totalChecks = 0;
+        long totalFailed = 0;
+        for (int i = 0; i < count; i++) {
+            Instant start;
+            Instant end;
+            if (hourly) {
+                ZonedDateTime s = today.atStartOfDay(zone).plusHours(i);
+                start = s.toInstant();
+                end = s.plusHours(1).toInstant();
+            } else {
+                LocalDate day = today.minusDays(count - 1L - i);
+                start = day.atStartOfDay(zone).toInstant();
+                end = day.plusDays(1).atStartOfDay(zone).toInstant();
+            }
+            boolean future = start.isAfter(now);
+            long checks = 0;
+            long failed = 0;
+            if (!future) {
+                Map<String, Object> row = jdbc.queryForMap(
+                    "SELECT COUNT(*) AS checks, "
+                        + "COUNT(*) FILTER (WHERE NOT reachable OR status IS NULL OR status = 'DOWN') AS failed "
+                        + "FROM application_health_history "
+                        + "WHERE application_id = ? AND checked_at >= ? AND checked_at < ?",
+                    id, Timestamp.from(start), Timestamp.from(end));
+                checks = ((Number) row.get("checks")).longValue();
+                failed = ((Number) row.get("failed")).longValue();
+            }
+            totalChecks += checks;
+            totalFailed += failed;
+
+            Map<String, Object> bar = new LinkedHashMap<>();
+            bar.put("start", start.toString());
+            bar.put("end", end.toString());
+            bar.put("checks", checks);
+            bar.put("failedChecks", failed);
+            bar.put("future", future);
+            bars.add(bar);
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("range", range);
+        body.put("timeZone", zone.getId());
+        body.put("checks", totalChecks);
+        body.put("failedChecks", totalFailed);
+        body.put("availabilityPercent", totalChecks == 0
+            ? null : Math.round(1000.0 * (totalChecks - totalFailed) / totalChecks) / 10.0);
+        body.put("bars", bars);
         return ResponseEntity.ok(body);
     }
 
