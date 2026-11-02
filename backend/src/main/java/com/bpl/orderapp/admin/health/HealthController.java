@@ -222,17 +222,32 @@ public class HealthController {
                 end = day.plusDays(1).atStartOfDay(zone).toInstant();
             }
             boolean future = start.isAfter(now);
-            long checks = 0;
-            long failed = 0;
+            int sliceCount = hourly ? 12 : 24;
+            long sliceSeconds = (end.getEpochSecond() - start.getEpochSecond()) / sliceCount;
+            long[] sliceChecks = new long[sliceCount];
+            long[] sliceFailed = new long[sliceCount];
             if (!future) {
-                Map<String, Object> row = jdbc.queryForMap(
-                    "SELECT COUNT(*) AS checks, "
+                List<Map<String, Object>> rows = jdbc.queryForList(
+                    "SELECT floor((extract(epoch FROM checked_at) - ?) / ?)::int AS slice, "
+                        + "COUNT(*) AS checks, "
                         + "COUNT(*) FILTER (WHERE NOT reachable OR status IS NULL OR status = 'DOWN') AS failed "
                         + "FROM application_health_history "
-                        + "WHERE application_id = ? AND checked_at >= ? AND checked_at < ?",
-                    id, Timestamp.from(start), Timestamp.from(end));
-                checks = ((Number) row.get("checks")).longValue();
-                failed = ((Number) row.get("failed")).longValue();
+                        + "WHERE application_id = ? AND checked_at >= ? AND checked_at < ? "
+                        + "GROUP BY slice",
+                    start.getEpochSecond(), sliceSeconds, id, Timestamp.from(start), Timestamp.from(end));
+                for (Map<String, Object> row : rows) {
+                    int slot = Math.max(0, Math.min(sliceCount - 1, ((Number) row.get("slice")).intValue()));
+                    sliceChecks[slot] += ((Number) row.get("checks")).longValue();
+                    sliceFailed[slot] += ((Number) row.get("failed")).longValue();
+                }
+            }
+            long checks = 0;
+            long failed = 0;
+            List<List<Long>> slices = new ArrayList<>();
+            for (int k = 0; k < sliceCount; k++) {
+                checks += sliceChecks[k];
+                failed += sliceFailed[k];
+                slices.add(List.of(sliceChecks[k], sliceFailed[k]));
             }
             totalChecks += checks;
             totalFailed += failed;
@@ -243,6 +258,7 @@ public class HealthController {
             bar.put("checks", checks);
             bar.put("failedChecks", failed);
             bar.put("future", future);
+            bar.put("slices", slices);
             bars.add(bar);
         }
 

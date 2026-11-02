@@ -102,6 +102,8 @@ export interface UptimeBars {
     failedChecks: number;
     /** true when the bar has not started yet (drawn ash) */
     future: boolean;
+    /** [checks, failedChecks] per equal time slice, earliest first (12 per hourly bar, 24 per daily bar) */
+    slices: [number, number][];
   }[];
 }
 

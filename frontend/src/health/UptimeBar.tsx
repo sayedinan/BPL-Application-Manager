@@ -26,6 +26,23 @@ const shortDate = (d: Date): string => d.toLocaleDateString(undefined, { month: 
 /** Last minute covered by a bar (bars are [start, end), shown as 00:00 to 23:59). */
 const lastMinute = (b: Bar): Date => new Date(new Date(b.end).getTime() - 60_000);
 
+/** Merged time ranges where checks failed, e.g. "12:00 PM – 1:59 PM". */
+function downRanges(b: Bar): string[] {
+  const start = new Date(b.start).getTime();
+  const size = (new Date(b.end).getTime() - start) / b.slices.length;
+  const out: string[] = [];
+  let from = -1;
+  b.slices.forEach(([, failed], i) => {
+    if (failed > 0 && from < 0) from = i;
+    if ((failed === 0 || i === b.slices.length - 1) && from >= 0) {
+      const last = failed > 0 ? i : i - 1;
+      out.push(`${time(new Date(start + from * size))} – ${time(new Date(start + (last + 1) * size - 60_000))}`);
+      from = -1;
+    }
+  });
+  return out;
+}
+
 function barTitle(b: Bar, hourly: boolean): string {
   const start = new Date(b.start);
   const when = hourly
@@ -33,7 +50,10 @@ function barTitle(b: Bar, hourly: boolean): string {
     : start.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   if (b.future) return `${when} · not yet`;
   if (b.checks === 0) return `${when} · no data`;
-  return `${when} · ${(((b.checks - b.failedChecks) / b.checks) * 100).toFixed(1)}% available`;
+  const down = downRanges(b);
+  return `${when} · ${(((b.checks - b.failedChecks) / b.checks) * 100).toFixed(1)}% available${
+    down.length ? ` · down ${down.join(', ')}` : ''
+  }`;
 }
 
 export function UptimeBar({ applicationId }: { applicationId: number }): JSX.Element {
@@ -91,12 +111,14 @@ export function UptimeBar({ applicationId }: { applicationId: number }): JSX.Ele
             title={b ? barTitle(b, hourly) : undefined}
             className="flex flex-1 flex-col overflow-hidden rounded-sm bg-slate-300 dark:bg-gh-hover"
           >
-            {b && !b.future && b.checks > 0 && (
-              <>
-                <div className="bg-status-online" style={{ flex: `${b.checks - b.failedChecks} 1 0%` }} />
-                <div className="bg-status-error" style={{ flex: `${b.failedChecks} 1 0%` }} />
-              </>
-            )}
+            {b &&
+              b.slices.map(([checks, failed], k) => (
+                <div
+                  key={k}
+                  className={checks === 0 ? '' : failed > 0 ? 'bg-status-error' : 'bg-status-online'}
+                  style={{ flex: '1 1 0%' }}
+                />
+              ))}
           </div>
         ))}
       </div>
