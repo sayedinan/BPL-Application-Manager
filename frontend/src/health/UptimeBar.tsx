@@ -109,7 +109,7 @@ export function UptimeBar({ applicationId }: { applicationId: number }): JSX.Ele
           <div
             key={i}
             title={b ? barTitle(b, hourly) : undefined}
-            className="flex flex-1 flex-col overflow-hidden rounded-sm bg-slate-300 dark:bg-gh-hover"
+            className="flex flex-1 flex-col-reverse overflow-hidden rounded-sm bg-slate-300 dark:bg-gh-hover"
           >
             {b &&
               b.slices.map(([checks, failed], k) => (
