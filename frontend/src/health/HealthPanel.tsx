@@ -103,10 +103,13 @@ function Gauge({
   label,
   percent,
   detail,
+  toggle,
 }: {
   label: string;
   percent: number | null | undefined;
   detail?: string;
+  /** Optional button shown right after the label (opens the history graph). */
+  toggle?: ReactNode;
 }): JSX.Element | null {
   if (percent == null) return null;
   const color = percent >= 90 ? 'bg-status-error' : percent >= 70 ? 'bg-status-pending' : 'bg-status-online';
@@ -114,7 +117,10 @@ function Gauge({
   return (
     <div>
       <div className="mb-1 flex justify-between gap-2 text-xs">
-        <span className="font-medium text-slate-700 dark:text-gh-fgSoft">{label}</span>
+        <span className="inline-flex items-center gap-1 font-medium text-slate-700 dark:text-gh-fgSoft">
+          {label}
+          {toggle}
+        </span>
         <span className="text-slate-500 dark:text-gh-muted">
           {detail ? `${detail} · ` : ''}
           {percent.toFixed(1)}%
@@ -475,27 +481,54 @@ export function HealthPanel({
           {(resources?.cpu || resources?.memory || resources?.disk) && (
             <Section title="Resources">
               <div className="space-y-4">
-                <Gauge label="CPU" percent={resources?.cpu?.systemPercent ?? resources?.cpu?.processPercent} />
-                <Gauge
-                  label="Memory"
-                  percent={resources?.memory?.usedPercent}
-                  detail={
-                    resources?.memory?.usedMb !== undefined && resources.memory.limitMb !== undefined
-                      ? `${Math.round(resources.memory.usedMb)} of ${Math.round(resources.memory.limitMb)} MB`
-                      : undefined
-                  }
-                />
-                <Gauge
-                  label="Disk"
-                  percent={resources?.disk?.usedPercent}
-                  detail={
-                    resources?.disk?.freeGb !== undefined
-                      ? `${resources.disk.freeGb.toFixed(1)} GB free${resources.disk.path ? ` on ${resources.disk.path}` : ''}${
-                          resources.disk.minFreeGb !== undefined ? ` (minimum ${resources.disk.minFreeGb} GB)` : ''
-                        }`
-                      : undefined
-                  }
-                />
+                <div>
+                  <Gauge
+                    label="CPU"
+                    percent={resources?.cpu?.systemPercent ?? resources?.cpu?.processPercent}
+                    toggle={<HistoryToggle open={open.cpu} onClick={() => toggle('cpu')} label="CPU" />}
+                  />
+                  {open.cpu && (
+                    <div className="pt-3">
+                      <MetricHistory applicationId={applicationId} metric="cpu" samples={samples} />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <Gauge
+                    label="Memory"
+                    percent={resources?.memory?.usedPercent}
+                    detail={
+                      resources?.memory?.usedMb !== undefined && resources.memory.limitMb !== undefined
+                        ? `${Math.round(resources.memory.usedMb)} of ${Math.round(resources.memory.limitMb)} MB`
+                        : undefined
+                    }
+                    toggle={<HistoryToggle open={open.memory} onClick={() => toggle('memory')} label="memory" />}
+                  />
+                  {open.memory && (
+                    <div className="pt-3">
+                      <MetricHistory applicationId={applicationId} metric="memory" samples={samples} />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <Gauge
+                    label="Disk"
+                    percent={resources?.disk?.usedPercent}
+                    detail={
+                      resources?.disk?.freeGb !== undefined
+                        ? `${resources.disk.freeGb.toFixed(1)} GB free${resources.disk.path ? ` on ${resources.disk.path}` : ''}${
+                            resources.disk.minFreeGb !== undefined ? ` (minimum ${resources.disk.minFreeGb} GB)` : ''
+                          }`
+                        : undefined
+                    }
+                    toggle={<HistoryToggle open={open.disk} onClick={() => toggle('disk')} label="disk" />}
+                  />
+                  {open.disk && (
+                    <div className="pt-3">
+                      <MetricHistory applicationId={applicationId} metric="disk" samples={samples} />
+                    </div>
+                  )}
+                </div>
               </div>
             </Section>
           )}
