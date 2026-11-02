@@ -33,12 +33,12 @@ function statusTone(status: HealthStatus): BadgeTone {
 }
 
 function formatDuration(totalSeconds: number): string {
-  const d = Math.floor(totalSeconds / 86400);
-  const h = Math.floor((totalSeconds % 86400) / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+  const t = Math.max(0, Math.floor(totalSeconds));
+  const d = Math.floor(t / 86400);
+  const h = Math.floor((t % 86400) / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  return `${d}d ${h}h ${m}m ${s}s`;
 }
 
 function formatWhen(iso: string | null | undefined): string {

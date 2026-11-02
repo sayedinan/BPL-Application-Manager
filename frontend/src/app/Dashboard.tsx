@@ -27,10 +27,11 @@ function formatRunningTime(startedAt: string | null): string | null {
   const ms = Date.now() - new Date(startedAt).getTime();
   if (ms < 0) return null;
   const totalSeconds = Math.floor(ms / 1000);
-  const h = Math.floor(totalSeconds / 3600);
+  const d = Math.floor(totalSeconds / 86400);
+  const h = Math.floor((totalSeconds % 86400) / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
-  return `${h}h ${m}m ${s}s`;
+  return `${d}d ${h}h ${m}m ${s}s`;
 }
 
 export function DashboardPlaceholder(): JSX.Element {
