@@ -8,7 +8,7 @@ import { HealthBadge, timeAgo } from './HealthBadge';
 import { Sparkline } from './Sparkline';
 import { RangeButtons } from './RangeButtons';
 import type { HealthHistory, HealthStatus } from './types';
-import type { HealthLiveData } from './useHealthLive';
+import type { HealthLiveData, HealthSample } from './useHealthLive';
 
 type RangeKey = 'live' | 'day' | 'week' | 'month';
 const RANGES: { key: RangeKey; label: string; hours: number }[] = [
@@ -225,6 +225,139 @@ function HistoryChart({
   );
 }
 
+type MetricKey = 'response' | 'cpu' | 'memory' | 'disk';
+const METRICS: Record<
+  MetricKey,
+  {
+    label: string;
+    unit: string;
+    decimals: number;
+    fixedMax?: number;
+    pick: (p: HealthHistory['points'][number]) => number | null | undefined;
+    live: (s: HealthSample) => number | null;
+  }
+> = {
+  response: { label: 'Response time', unit: ' ms', decimals: 0, pick: (p) => p.avgResponseMs, live: (s) => s.responseMs },
+  cpu: { label: 'CPU', unit: '%', decimals: 1, fixedMax: 100, pick: (p) => p.avgCpuPercent, live: (s) => s.cpu },
+  memory: { label: 'Memory', unit: '%', decimals: 1, fixedMax: 100, pick: (p) => p.avgMemoryPercent, live: (s) => s.memory },
+  disk: { label: 'Disk', unit: '%', decimals: 1, fixedMax: 100, pick: (p) => p.avgDiskPercent, live: (s) => s.disk },
+};
+
+/** Small chevron that opens or closes a metric's history graph. */
+function HistoryToggle({
+  open,
+  onClick,
+  label,
+}: {
+  open: boolean;
+  onClick: () => void;
+  label: string;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={open}
+      aria-label={`${open ? 'Hide' : 'Show'} ${label} history`}
+      title={`${open ? 'Hide' : 'Show'} history`}
+      className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-500 hover:bg-slate-200 dark:text-gh-muted dark:hover:bg-gh-hover"
+    >
+      <svg
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`}
+        aria-hidden="true"
+      >
+        <path
+          fillRule="evenodd"
+          d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+          clipRule="evenodd"
+        />
+      </svg>
+    </button>
+  );
+}
+
+/**
+ * The history graph of one metric, with its own range selector (1 day by
+ * default). It only exists while opened, so it only loads data then.
+ */
+function MetricHistory({
+  applicationId,
+  metric,
+  samples,
+}: {
+  applicationId: number;
+  metric: MetricKey;
+  samples: HealthSample[];
+}): JSX.Element {
+  const m = METRICS[metric];
+  const [range, setRange] = useState<RangeKey>('day');
+  const hours = RANGES.find((r) => r.key === range)?.hours ?? 24;
+  const [history, setHistory] = useState<HealthHistory | null>(null);
+
+  useEffect(() => {
+    if (range === 'live') return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const h = await api.get<HealthHistory>(API.APPLICATIONS.HEALTH_HISTORY(applicationId, hours));
+        if (!cancelled) setHistory(h);
+      } catch {
+        // keep the previous graph; connection problems show in the live part
+      }
+    };
+    void load();
+    const timer = setInterval(() => void load(), historyRefreshMs(hours));
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [applicationId, hours, range]);
+
+  return (
+    <div className="space-y-3">
+      <RangeButtons options={RANGES} value={range} onChange={setRange} />
+      {range === 'live' ? (
+        samples.length >= 2 ? (
+          <>
+            <Sparkline
+              label={m.label}
+              values={samples.map(m.live)}
+              unit={m.unit}
+              fixedMax={m.fixedMax}
+              decimals={m.decimals}
+            />
+            <p className="text-xs text-slate-500 dark:text-gh-muted">
+              Last {samples.length} checks, since you opened this page
+            </p>
+          </>
+        ) : (
+          <p className="text-xs text-slate-500 dark:text-gh-muted">Collecting readings… graph appears after two checks.</p>
+        )
+      ) : history && history.hours === hours && history.points.length >= 2 ? (
+        <>
+          <HistoryChart
+            label={m.label}
+            points={history.points}
+            pick={m.pick}
+            unit={m.unit}
+            fixedMax={m.fixedMax}
+            decimals={m.decimals}
+          />
+          <p className="text-xs text-slate-500 dark:text-gh-muted">
+            {formatWhen(history.points[0].t)} to now · red marks show failed checks
+          </p>
+        </>
+      ) : history && history.hours === hours ? (
+        <p className="text-xs text-slate-500 dark:text-gh-muted">Not enough data yet.</p>
+      ) : (
+        <LoadingBlock label="Loading history…" className="py-4" />
+      )}
+    </div>
+  );
+}
+
 /**
  * All the health information for one application, as a stack of cards.
  * The live readings are handed in (the page owns them, because its header
@@ -237,10 +370,15 @@ export function HealthPanel({
   applicationId: number;
   data: HealthLiveData;
 }): JSX.Element {
-  const [range, setRange] = useState<RangeKey>('live');
-  const rangeInfo = RANGES.find((r) => r.key === range) ?? RANGES[0];
-  // Live has no stored history, but the Availability row still needs some, so use 24 h then.
-  const hours = rangeInfo.hours || 24;
+  // The Availability row always covers the last day.
+  const hours = 24;
+  const [open, setOpen] = useState<Record<MetricKey, boolean>>({
+    response: false,
+    cpu: false,
+    memory: false,
+    disk: false,
+  });
+  const toggle = (k: MetricKey) => setOpen((o) => ({ ...o, [k]: !o[k] }));
   const [history, setHistory] = useState<HealthHistory | null>(null);
   const [, setTick] = useState(0);
   const { latest, samples, live, loading, error } = data;
@@ -306,48 +444,27 @@ export function HealthPanel({
         <>
           {latest.error && <Alert tone="warning">Last check problem: {latest.error}</Alert>}
 
-          <Section
-            title="Readings"
-            aside={<RangeButtons options={RANGES} value={range} onChange={setRange} />}
-          >
-            {range === 'live' ? (
-              samples.length >= 2 ? (
-                <div className="space-y-4">
-                  <Sparkline label="Response time" values={samples.map((x) => x.responseMs)} unit=" ms" />
-                  <Sparkline label="CPU" values={samples.map((x) => x.cpu)} unit="%" fixedMax={100} decimals={1} />
-                  <Sparkline label="Memory" values={samples.map((x) => x.memory)} unit="%" fixedMax={100} decimals={1} />
-                  <Sparkline label="Disk" values={samples.map((x) => x.disk)} unit="%" fixedMax={100} decimals={1} />
-                  <p className="text-xs text-slate-500 dark:text-gh-muted">
-                    Last {samples.length} checks, since you opened this page
-                  </p>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500 dark:text-gh-muted">Collecting readings… graphs appear after two checks.</p>
-              )
-            ) : history && history.hours === hours && history.points.length >= 2 ? (
-              <div className="space-y-4">
-                <HistoryChart label="Response time" points={history.points} pick={(p) => p.avgResponseMs} unit=" ms" />
-                <HistoryChart label="CPU" points={history.points} pick={(p) => p.avgCpuPercent} unit="%" fixedMax={100} decimals={1} />
-                <HistoryChart label="Memory" points={history.points} pick={(p) => p.avgMemoryPercent} unit="%" fixedMax={100} decimals={1} />
-                <HistoryChart label="Disk" points={history.points} pick={(p) => p.avgDiskPercent} unit="%" fixedMax={100} decimals={1} />
-                <p className="text-xs text-slate-500 dark:text-gh-muted">
-                  {formatWhen(history.points[0].t)} to now · red marks show failed checks
-                </p>
-              </div>
-            ) : history && history.hours === hours ? (
-              <p className="text-xs text-slate-500 dark:text-gh-muted">Not enough data yet.</p>
-            ) : (
-              <LoadingBlock label="Loading history…" className="py-4" />
-            )}
-          </Section>
-
           <Section title="Vital signs">
             <dl>
               <Row label="Reachable">{latest.reachable ? 'Yes' : 'No'}</Row>
-              {latest.responseMs != null && <Row label="Response time">{latest.responseMs} ms</Row>}
+              {latest.responseMs != null && (
+                <>
+                  <Row label="Response time">
+                    <span className="inline-flex items-center gap-1">
+                      {latest.responseMs} ms
+                      <HistoryToggle open={open.response} onClick={() => toggle('response')} label="response time" />
+                    </span>
+                  </Row>
+                  {open.response && (
+                    <div className="pb-2 pt-1">
+                      <MetricHistory applicationId={applicationId} metric="response" samples={samples} />
+                    </div>
+                  )}
+                </>
+              )}
               {uptimeSeconds !== null && <Row label="Running for">{formatDuration(uptimeSeconds)}</Row>}
               {history?.availabilityPercent != null && (
-                <Row label={`Availability (${range === 'live' ? '1 day' : rangeInfo.label})`}>
+                <Row label="Availability (1 day)">
                   {history.availabilityPercent.toFixed(1)}% of checks passed ({history.failedChecks} of{' '}
                   {history.checks} failed)
                 </Row>
