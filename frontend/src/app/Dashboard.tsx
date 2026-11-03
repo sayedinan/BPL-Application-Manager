@@ -12,6 +12,7 @@ import { HealthSummary } from '@/health/HealthBadge';
 import { classifyApp, STATE_ORDER, type AppState } from '@/lib/appState';
 import { onLiveStreamState, subscribeHealth, subscribeStatus } from '@/lib/liveStream';
 import type { HealthLatest } from '@/health/types';
+import { appPath } from '@/lib/appRoute';
 
 interface ApplicationSummary {
   id: number;
@@ -288,7 +289,7 @@ export function DashboardPlaceholder(): JSX.Element {
             )}
           </div>
           <Link
-            to={`/apps/${app.id}`}
+            to={appPath(app.name)}
             className="mt-2 block w-full text-center text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-gh-muted dark:hover:text-gh-fg"
           >
             Details →

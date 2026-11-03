@@ -14,6 +14,7 @@ import { maintenanceActive, maintenanceScheduled } from '@/health/HealthBadge';
 import { HealthSettingsModal } from '@/health/HealthSettingsModal';
 import { MaintenanceModal } from '@/health/MaintenanceModal';
 import { useHealthLive } from '@/health/useHealthLive';
+import { findAppByName } from '@/lib/appRoute';
 
 interface ApplicationSummary {
   id: number;
@@ -74,19 +75,18 @@ function BackLink(): JSX.Element {
  * One page per application, reached from its Dashboard card: Online/Offline
  * state and uptime history, then everything the health monitoring knows.
  *
- * There is no page to create or delete. The page is the route /apps/:id, and
+ * There is no page to create or delete. The page is the route /apps/:name, and
  * the application list decides whether it exists: a new application gets a
  * page the moment it is in the list, and once it is deleted (or the viewer
  * is not assigned to it) the page shows "not found" instead.
  */
 export function ApplicationDetailsPage(): JSX.Element {
-  const { id } = useParams();
+  const { name } = useParams();
   const { user } = useAuth();
-  const appId = Number(id);
-  const validId = Number.isInteger(appId) && appId > 0;
 
   // undefined = still loading, null = not in the list (deleted or no access)
   const [app, setApp] = useState<ApplicationSummary | null | undefined>(undefined);
+  const appId = app?.id ?? 0;
   const [stats, setStats] = useState<AppStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -96,33 +96,36 @@ export function ApplicationDetailsPage(): JSX.Element {
   const loadApp = useCallback(async () => {
     try {
       const list = await api.get<ApplicationSummary[]>(API.APPLICATIONS.LIST);
-      setApp(list.find((a) => a.id === appId) ?? null);
+      setApp(findAppByName(list, name) ?? null);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to load the application.');
     }
-  }, [appId]);
+  }, [name]);
 
   useEffect(() => {
-    if (!validId) return;
+    // Navigating from one application to another: drop the old one's data
+    // so it never flashes under the new name.
+    setApp(undefined);
+    setStats(null);
     void loadApp();
     const timer = setInterval(() => void loadApp(), 5000);
     return () => clearInterval(timer);
-  }, [validId, loadApp]);
+  }, [loadApp]);
 
   // Uptime history. Only asked for while the application is in the list: the
   // stats endpoint fails for an application that no longer exists.
   // Live health, owned here because the header needs the maintenance state too.
-  const healthLive = useHealthLive(appId, validId && !!app);
+  const healthLive = useHealthLive(appId, !!app);
   const online = app ? app.online : null;
   const inMaintenance = maintenanceActive(healthLive.latest);
   const maintenanceIsScheduled = maintenanceScheduled(healthLive.latest);
   useEffect(() => {
-    if (!validId || online === null) return;
+    if (!app) return;
     let cancelled = false;
     const loadStats = () =>
       api
-        .get<AppStats>(API.APPLICATIONS.STATS(appId))
+        .get<AppStats>(API.APPLICATIONS.STATS(app.id))
         .then((s) => {
           if (!cancelled) setStats(s);
         })
@@ -135,14 +138,14 @@ export function ApplicationDetailsPage(): JSX.Element {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [validId, online, appId]);
+  }, [app]);
 
   useEffect(() => {
     const clock = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(clock);
   }, []);
 
-  if (!validId || app === null) {
+  if (app === null) {
     return (
       <div className="mx-auto max-w-6xl p-6 sm:p-8">
         <BackLink />
