@@ -121,11 +121,11 @@ export function ApplicationDetailsPage(): JSX.Element {
   const inMaintenance = maintenanceActive(healthLive.latest);
   const maintenanceIsScheduled = maintenanceScheduled(healthLive.latest);
   useEffect(() => {
-    if (!app) return;
+    if (online === null) return;
     let cancelled = false;
     const loadStats = () =>
       api
-        .get<AppStats>(API.APPLICATIONS.STATS(app.id))
+        .get<AppStats>(API.APPLICATIONS.STATS(appId))
         .then((s) => {
           if (!cancelled) setStats(s);
         })
@@ -138,7 +138,7 @@ export function ApplicationDetailsPage(): JSX.Element {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [app]);
+  }, [online, appId]);
 
   useEffect(() => {
     const clock = setInterval(() => setTick((n) => n + 1), 1000);
