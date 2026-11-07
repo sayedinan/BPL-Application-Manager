@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.SecureRandom;
-import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -254,27 +253,18 @@ public class UserController {
         String resetActorRole = resetAuth.getAuthorities().stream()
             .anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN")) ? "SYS_ADMIN" : "ADMIN";
 
-        // 1. Look up the user. Soft-deleted users are filtered
-        //    out — a Sys.Admin resetting a soft-deleted user's
-        //    password would resurrect them by accident, and the
-        //    §12.2 "deliver out-of-band" step would fail because
-        //    the user can't log in.
-        List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT id, username, role FROM users WHERE id = ? AND deleted_at IS NULL",
-            id
-        );
-        if (rows.isEmpty()) {
-            log.info("Reset-password rejected: user id={} not found or soft-deleted", id);
-            throw new NotFoundException();
-        }
-
-        String username = (String) rows.get(0).get("username");
+        // 1. Look up the user through the repository.
+        User user = userRepository.findById(id).orElseThrow(() -> {
+            log.info("Reset-password rejected: user id={} not found", id);
+            return new NotFoundException();
+        });
+        String username = user.getUsername();
 
         // Admin ceiling (SPEC §1): an ADMIN must not be able to reset a
         // SYS_ADMIN's password, since they would receive the temporary
         // password and could sign in as that account. Same rule as the
         // delete and update endpoints.
-        if ("SYS_ADMIN".equals(rows.get(0).get("role")) && !"SYS_ADMIN".equals(resetActorRole)) {
+        if ("SYS_ADMIN".equals(user.getRole()) && !"SYS_ADMIN".equals(resetActorRole)) {
             throw new com.bpl.orderapp.admin.common.AdminCeilingException();
         }
 
@@ -294,21 +284,14 @@ public class UserController {
         //    must_change_password=true. Atomic; either both apply
         //    or neither does.
         String newHash = encoder.encode(cleartext);
-        Instant now = Instant.now();
+        user.setPasswordHash(newHash);
+        user.setMustChangePassword(true);
+        userRepository.save(user);
 
-        int updated = jdbc.update(
-            "UPDATE users SET password_hash = ?, must_change_password = true, "
-                + "updated_at = ? WHERE id = ?",
-            newHash, java.sql.Timestamp.from(now), id
-        );
-        if (updated != 1) {
-            // Defensive: a concurrent delete between SELECT and
-            // UPDATE would land here. Should be impossible given
-            // the SELECT filter, but make the impossible visible
-            // rather than silently no-op.
-            throw new IllegalStateException(
-                "Expected to update exactly 1 user row, got " + updated);
-        }
+        // Both columns still change in one UPDATE, so the "both apply or neither"
+        // rule holds. updated_at comes from @PreUpdate. The updated != 1 check is
+        // gone because save() has no row count, and the 404 above already covers
+        // a missing user.
 
         // 4. Log WITHOUT the cleartext. The username is fine; the
         //    temp password is not.
