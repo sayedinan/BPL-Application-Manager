@@ -1,5 +1,7 @@
 package com.bpl.orderapp.admin.auth;
 
+import com.bpl.orderapp.admin.user.User;
+import com.bpl.orderapp.admin.user.UserRepository;
 import com.bpl.orderapp.admin.auth.dto.ChangePasswordRequest;
 import com.bpl.orderapp.admin.auth.dto.LoginRequest;
 import com.bpl.orderapp.admin.auth.dto.LoginResponse;
@@ -108,17 +110,20 @@ public class AuthController {
     private final BCryptPasswordEncoder encoder;
     private final SecurityContextRepository securityContextRepository;
     private final AuditWriter auditWriter;
+    private final UserRepository userRepository;
 
     public AuthController(
         JdbcTemplate jdbc,
         BCryptPasswordEncoder encoder,
         SecurityContextRepository securityContextRepository,
-        AuditWriter auditWriter
+        AuditWriter auditWriter,
+        UserRepository userRepository
     ) {
         this.jdbc = jdbc;
         this.encoder = encoder;
         this.securityContextRepository = securityContextRepository;
         this.auditWriter = auditWriter;
+        this.userRepository = userRepository;
     }
 
     @PostMapping("/login")
@@ -126,16 +131,8 @@ public class AuthController {
             @Valid @RequestBody LoginRequest request,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
-        // 1. Look up the user. Soft-deleted users are filtered out —
-        //    a soft-deleted user with a matching username should NOT
-        //    be able to authenticate, even if their password hash
-        //    is still in the table.
-        List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT id, username, role, password_hash, must_change_password " +
-                "FROM users " +
-                "WHERE username = ? AND deleted_at IS NULL",
-            request.username()
-        );
+        // 1. Look up the user through the repository.
+        java.util.Optional<User> found = userRepository.findByUsername(request.username());
 
         String passwordHash;
         java.util.UUID id;
@@ -143,12 +140,11 @@ public class AuthController {
         String role;
         boolean mustChangePassword;
 
-        if (rows.isEmpty()) {
-            // No such user (or soft-deleted). To avoid leaking
-            // which usernames exist, run a real bcrypt comparison
-            // against a dummy hash so the timing matches the
-            // "user exists, wrong password" path.
-            log.info("Login attempt for unknown or soft-deleted user: '{}'", request.username());
+        if (found.isEmpty()) {
+            // No such user. To avoid leaking which usernames exist,
+            // run a real bcrypt comparison against a dummy hash so the
+            // timing matches the "user exists, wrong password" path.
+            log.info("Login attempt for unknown user: '{}'", request.username());
             encoder.matches(request.password(), DUMMY_BCRYPT_HASH);
             try {
                 auditWriter.write("LOGIN", request.username(), "UNKNOWN", null, null, null,
@@ -159,12 +155,12 @@ public class AuthController {
             throw new InvalidCredentialsException();
         }
 
-        Map<String, Object> row = rows.get(0);
-        id = (java.util.UUID) row.get("id");
-        username = (String) row.get("username");
-        role = (String) row.get("role");
-        passwordHash = (String) row.get("password_hash");
-        mustChangePassword = (Boolean) row.get("must_change_password");
+        User user = found.get();
+        id = user.getId();
+        username = user.getUsername();
+        role = user.getRole();
+        passwordHash = user.getPasswordHash();
+        mustChangePassword = user.isMustChangePassword();
 
         // 2. Constant-time password check. BCryptPasswordEncoder.matches
         //    uses the underlying bcrypt constant-time compare.
