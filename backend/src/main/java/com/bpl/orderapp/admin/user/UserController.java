@@ -96,29 +96,41 @@ public class UserController {
     private final JdbcTemplate jdbc;
     private final AuditWriter auditWriter;
     private final BCryptPasswordEncoder encoder;
+    private final UserRepository userRepository;
 
-    public UserController(JdbcTemplate jdbc, BCryptPasswordEncoder encoder, AuditWriter auditWriter) {
+    public UserController(JdbcTemplate jdbc, BCryptPasswordEncoder encoder, AuditWriter auditWriter,
+                          UserRepository userRepository) {
         this.jdbc = jdbc;
         this.encoder = encoder;
         this.auditWriter = auditWriter;
+        this.userRepository = userRepository;
     }
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
     public ResponseEntity<List<Map<String, Object>>> listUsers() {
-        List<Map<String, Object>> users = jdbc.queryForList(
-            "SELECT id, username, full_name, role, email, phone_number, must_change_password, created_at FROM users WHERE deleted_at IS NULL ORDER BY username"
-        );
-        for (Map<String,Object> row : users) {
-            java.util.UUID userRowId = (java.util.UUID) row.get("id");
+        List<User> found = userRepository.findAll(org.springframework.data.domain.Sort.by("username"));
+        List<Map<String, Object>> users = new java.util.ArrayList<>();
+        for (User u : found) {
+            // Same keys as the old SELECT so the frontend JSON doesn't change.
+            Map<String, Object> row = new java.util.LinkedHashMap<>();
+            row.put("id", u.getId());
+            row.put("username", u.getUsername());
+            row.put("full_name", u.getFullName());
+            row.put("role", u.getRole());
+            row.put("email", u.getEmail());
+            row.put("phone_number", u.getPhoneNumber());
+            row.put("must_change_password", u.isMustChangePassword());
+            row.put("created_at", u.getCreatedAt());
             java.util.List<Long> assigned = jdbc.queryForList(
                 "SELECT application_id FROM user_application_assignments WHERE user_id = ?",
-                Long.class, userRowId);
+                Long.class, u.getId());
             row.put("assignedApplicationIds", assigned);
             Integer liveConnections = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM websocket_connections WHERE username = ?",
-                Integer.class, row.get("username"));
+                Integer.class, u.getUsername());
             row.put("online", liveConnections != null && liveConnections > 0);
+            users.add(row);
         }
         return ResponseEntity.ok(users);
     }
@@ -144,9 +156,7 @@ public class UserController {
         if (!"USER".equals(role) && !callerIsSysAdmin) {
             throw new com.bpl.orderapp.admin.common.AdminCeilingException();
         }
-        java.util.List<Map<String, Object>> existing = jdbc.queryForList(
-            "SELECT id FROM users WHERE username = ? AND deleted_at IS NULL", username);
-        if (!existing.isEmpty()) {
+        if (userRepository.existsByUsername(username)) {
             throw new com.bpl.orderapp.admin.common.DuplicateNameException(username);
         }
         java.security.SecureRandom rng = new java.security.SecureRandom();
@@ -154,18 +164,17 @@ public class UserController {
         rng.nextBytes(bytes);
         String cleartext = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         String hash = encoder.encode(cleartext);
-        java.time.Instant now = java.time.Instant.now();
-        // Get the new row's id directly from the INSERT via RETURNING,
-        // rather than a follow-up SELECT by username. A follow-up
-        // SELECT WHERE username = ? (with no deleted_at filter) can
-        // match more than one row once a username has been deleted
-        // and recreated — soft-deleted rows are kept forever by
-        // design — which throws IncorrectResultSizeDataAccessException
-        // and previously surfaced as an uncaught 500 AFTER the insert
-        // had already committed, silently losing the one-time password.
-        java.util.UUID newId = jdbc.queryForObject(
-            "INSERT INTO users (username, full_name, password_hash, role, email, phone_number, must_change_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, true, ?, ?) RETURNING id",
-            java.util.UUID.class, username, fullName.trim(), hash, role, email, phoneNumber, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
+        // save() generates the UUID in Java and sets created_at/updated_at
+        // via the entity's @PrePersist hook, so no RETURNING is needed.
+        User newUser = new User();
+        newUser.setUsername(username);
+        newUser.setFullName(fullName.trim());
+        newUser.setPasswordHash(hash);
+        newUser.setRole(role);
+        newUser.setEmail(email);
+        newUser.setPhoneNumber(phoneNumber);
+        newUser.setMustChangePassword(true);
+        java.util.UUID newId = userRepository.save(newUser).getId();
         // Admin/Sys.Admin see all applications regardless of
         // assignment rows (RBAC checks role first everywhere else in
         // the app) — so assignments are only meaningful, and only
