@@ -26,7 +26,10 @@ class GlobalExceptionHandlerSelfDeleteTest {
     @Test
     void selfDeleteForbidden_mapsTo403WithSELF_DELETE_FORBIDDENCode() {
         ResponseEntity<ProblemDetail> response = handler.handleSelfDeleteForbidden(
-            new SelfDeleteForbiddenException(42L, 42L)
+            new SelfDeleteForbiddenException(
+                java.util.UUID.fromString("00000000-0000-0000-0000-00000000002a"),
+                java.util.UUID.fromString("00000000-0000-0000-0000-00000000002a")
+            )
         );
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
