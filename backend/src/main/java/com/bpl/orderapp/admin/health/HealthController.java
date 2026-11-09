@@ -8,6 +8,7 @@ import com.bpl.orderapp.admin.common.Role;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.security.Action;
 import com.bpl.orderapp.admin.security.Rbac;
+import com.bpl.orderapp.admin.user.UserRepository;
 import com.bpl.orderapp.admin.status.StatusPollingOrchestrator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -83,10 +84,11 @@ public class HealthController {
     private final HealthReadService healthReadService;
     private final StatusPollingOrchestrator statusPolling;
     private final ObjectMapper compactMapper;
+    private final UserRepository userRepository;
 
     public HealthController(JdbcTemplate jdbc, SshCredentialCipher cipher, AuditWriter auditWriter,
             HealthCheckService healthCheckService, HealthReadService healthReadService,
-            StatusPollingOrchestrator statusPolling, ObjectMapper mapper) {
+            StatusPollingOrchestrator statusPolling, ObjectMapper mapper, UserRepository userRepository) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.auditWriter = auditWriter;
@@ -94,6 +96,7 @@ public class HealthController {
         this.healthReadService = healthReadService;
         this.statusPolling = statusPolling;
         this.compactMapper = mapper.copy().setSerializationInclusion(JsonInclude.Include.NON_NULL);
+        this.userRepository = userRepository;
     }
 
     /**
@@ -520,11 +523,7 @@ public class HealthController {
     private void requireApplicationAccess(Caller caller, Long applicationId) {
         requireAction(caller, Action.LIST_APPLICATIONS);
         List<Long> assigned = caller.role() == Role.USER
-            ? jdbc.queryForList(
-                "SELECT uaa.application_id FROM user_application_assignments uaa "
-                    + "JOIN users u ON u.id = uaa.user_id "
-                    + "WHERE u.username = ? AND u.deleted_at IS NULL",
-                Long.class, caller.username())
+            ? userRepository.findAssignedApplicationIds(caller.username())
             : List.of();
         if (!Rbac.canAccessApplication(caller.role(), assigned, applicationId)) {
             throw new AccessDeniedAppException();

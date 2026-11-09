@@ -35,4 +35,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
          + "WHERE a.application_id = :applicationId AND u.role = 'USER' "
          + "AND u.phone_number IS NOT NULL", nativeQuery = true)
     List<String> findAssignedUserPhoneNumbers(@Param("applicationId") Long applicationId);
+
+    @Query(value = "SELECT uaa.application_id FROM user_application_assignments uaa "
+         + "JOIN users u ON u.id = uaa.user_id "
+         + "WHERE u.username = :username", nativeQuery = true)
+    List<Long> findAssignedApplicationIds(@Param("username") String username);
 }
