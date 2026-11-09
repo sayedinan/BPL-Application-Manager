@@ -1,5 +1,6 @@
 package com.bpl.orderapp.admin.notification;
 
+import com.bpl.orderapp.admin.user.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
@@ -43,8 +44,8 @@ import java.util.Optional;
 public class NotificationConfig {
 
     @Bean
-    public NotificationRecipientResolver notificationRecipientResolver(JdbcTemplate jdbc) {
-        return new NotificationRecipientResolver(jdbc);
+    public NotificationRecipientResolver notificationRecipientResolver(UserRepository userRepository) {
+        return new NotificationRecipientResolver(userRepository);
     }
 
     @Bean
