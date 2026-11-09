@@ -2,6 +2,8 @@ package com.bpl.orderapp.admin.websocket;
 
 import com.bpl.orderapp.admin.common.Role;
 import com.bpl.orderapp.admin.log.WebSocketLimits;
+import com.bpl.orderapp.admin.user.User;
+import com.bpl.orderapp.admin.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -30,6 +32,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(WebSocketAccessInterceptor.class);
     private final JdbcTemplate jdbc;
+    private final UserRepository userRepository;
     private final AtomicInteger globalConnections = new AtomicInteger(0);
     private final ConcurrentHashMap<String, AtomicInteger> perUserConnections = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicInteger> perApplicationSubscribers = new ConcurrentHashMap<>();
@@ -46,10 +49,12 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             return t;
         });
 
-    public WebSocketAccessInterceptor(JdbcTemplate jdbc, AuditWriter auditWriter, ApplicationEventPublisher events) {
+    public WebSocketAccessInterceptor(JdbcTemplate jdbc, AuditWriter auditWriter,
+                                      ApplicationEventPublisher events, UserRepository userRepository) {
         this.jdbc = jdbc;
         this.auditWriter = auditWriter;
         this.events = events;
+        this.userRepository = userRepository;
     }
 
     @jakarta.annotation.PostConstruct
@@ -179,9 +184,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             "SELECT COUNT(*) FROM spring_session WHERE principal_name = ? AND expiry_time > ?",
             Integer.class, username, System.currentTimeMillis());
         if (sessions == null || sessions == 0) return; // already logged out / expired
-        List<String> roles = jdbc.queryForList(
-            "SELECT role FROM users WHERE username = ? AND deleted_at IS NULL", String.class, username);
-        String role = roles.isEmpty() ? "UNKNOWN" : roles.get(0);
+        String role = userRepository.findByUsername(username).map(User::getRole).orElse("UNKNOWN");
         auditWriter.writeAt(disconnectedAt, "LOGOUT", username, role, Map.of("reason", "BROWSER_CLOSED"), "SUCCESS");
         jdbc.update("DELETE FROM spring_session WHERE principal_name = ?", username);
         log.info("Browser closed detected for '{}' at {}; LOGOUT audited, orphaned session removed", username, disconnectedAt);
@@ -224,12 +227,14 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
     }
 
     private Role lookupRole(String username) {
-        List<String> rows = jdbc.queryForList("SELECT role FROM users WHERE username = ? AND deleted_at IS NULL", String.class, username);
-        if (rows.isEmpty()) throw new MessageDeliveryException("User not found or deleted");
-        return Role.valueOf(rows.get(0));
+        return userRepository.findByUsername(username)
+            .map(u -> Role.valueOf(u.getRole()))
+            .orElseThrow(() -> new MessageDeliveryException("User not found or deleted"));
     }
 
     private java.util.UUID lookupUserId(String username) {
-        return jdbc.queryForObject("SELECT id FROM users WHERE username = ? AND deleted_at IS NULL", java.util.UUID.class, username);
+        return userRepository.findByUsername(username)
+            .map(User::getId)
+            .orElseThrow(() -> new MessageDeliveryException("User not found or deleted"));
     }
 }
