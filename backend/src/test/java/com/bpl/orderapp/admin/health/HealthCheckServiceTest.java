@@ -2,6 +2,8 @@ package com.bpl.orderapp.admin.health;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -67,12 +69,13 @@ class HealthCheckServiceTest {
     }
 
     private void respond(int statusCode, String body) {
-        when(httpClient.fetch(any(), any(), any()))
-            .thenReturn(new HealthHttpClient.Response(statusCode, body, 12L, null));
+        doReturn(new HealthHttpClient.Response(statusCode, body, 12L, null))
+            .when(httpClient).fetch(any(), any(), any());
     }
 
     private void cannotReach(String reason) {
-        when(httpClient.fetch(any(), any(), any())).thenThrow(new HealthFetchException(reason));
+        doThrow(new HealthFetchException(reason))
+            .when(httpClient).fetch(any(), any(), any());
     }
 
     @Test
