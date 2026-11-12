@@ -51,13 +51,15 @@ public class ApplicationController {
     private final java.util.List<com.bpl.orderapp.admin.notification.Notifier> notifiers;
     private final AccessGuard accessGuard;
     private final UserRepository userRepository;
+    private final ApplicationRepository applicationRepository;
 
     public ApplicationController(JdbcTemplate jdbc, SshCredentialCipher cipher,
             IdempotencyService idempotencyService, SshConnection sshConnection,
             AuditWriter auditWriter, LogPollingOrchestrator logPollingOrchestrator,
             StatusPollingOrchestrator statusPollingOrchestrator,
             java.util.List<com.bpl.orderapp.admin.notification.Notifier> notifiers,
-            AccessGuard accessGuard, UserRepository userRepository) {
+            AccessGuard accessGuard, UserRepository userRepository,
+            ApplicationRepository applicationRepository) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.idempotencyService = idempotencyService;
@@ -68,6 +70,7 @@ public class ApplicationController {
         this.notifiers = notifiers;
         this.accessGuard = accessGuard;
         this.userRepository = userRepository;
+        this.applicationRepository = applicationRepository;
     }
 
     @GetMapping
@@ -261,9 +264,9 @@ public class ApplicationController {
         accessGuard.require(Action.CREATE_APPLICATION);
         String name = (String) req.get("name");
         String serverIp = (String) req.get("serverIp");
-        if (serverIp == null || !serverIp.matches("^(\\d{1,3}\\.){3}\\d{1,3}$")) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.BAD_REQUEST, "serverIp must be a valid IPv4 address");
+        java.net.InetAddress serverAddress = IpAddresses.parseIpv4(serverIp);
+        if (name != null && applicationRepository.existsByNameIgnoreCase(name)) {
+            throw new com.bpl.orderapp.admin.common.DuplicateNameException(name);
         }
         String sshUsername = (String) req.get("sshUsername");
         String sshPassword = (String) req.get("sshPassword");
@@ -287,16 +290,24 @@ public class ApplicationController {
             validator.validate(logScript);
         } catch (Exception e) { /* fail-open per §12.3, unchanged */ }
 
-        Long newId = jdbc.queryForObject(
-            "INSERT INTO applications (name, server_ip, ssh_username, ssh_password_enc, ssh_host_key_fingerprint, start_script, stop_script, log_script, " +
-            "email_start_message, email_stop_message, email_external_online_message, email_external_offline_message, " +
-            "sms_start_message, sms_stop_message, sms_external_online_message, sms_external_offline_message) " +
-                "VALUES (?, ?::inet, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
-            Long.class,
-            name, serverIp, sshUsername, encPassword, (String) req.get("sshHostKeyFingerprint"),
-            startScript, stopScript, logScript,
-            emailStartMessage, emailStopMessage, emailExternalOnlineMessage, emailExternalOfflineMessage,
-            smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage);
+        Application newApp = new Application();
+        newApp.setName(name);
+        newApp.setServerIp(serverAddress);
+        newApp.setSshUsername(sshUsername);
+        newApp.setSshPasswordEnc(encPassword);
+        newApp.setSshHostKeyFingerprint((String) req.get("sshHostKeyFingerprint"));
+        newApp.setStartScript(startScript);
+        newApp.setStopScript(stopScript);
+        newApp.setLogScript(logScript);
+        newApp.setEmailStartMessage(emailStartMessage);
+        newApp.setEmailStopMessage(emailStopMessage);
+        newApp.setEmailExternalOnlineMessage(emailExternalOnlineMessage);
+        newApp.setEmailExternalOfflineMessage(emailExternalOfflineMessage);
+        newApp.setSmsStartMessage(smsStartMessage);
+        newApp.setSmsStopMessage(smsStopMessage);
+        newApp.setSmsExternalOnlineMessage(smsExternalOnlineMessage);
+        newApp.setSmsExternalOfflineMessage(smsExternalOfflineMessage);
+        Long newId = applicationRepository.save(newApp).getId();
 
         // Immediate first reading (STATUS-REDESIGN.md §4) rather than
         // sitting offline until the next scheduled tick.
