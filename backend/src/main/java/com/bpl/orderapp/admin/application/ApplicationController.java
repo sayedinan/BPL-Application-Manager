@@ -160,8 +160,8 @@ public class ApplicationController {
     @GetMapping("/{id}/stats")
     public ResponseEntity<Map<String, Object>> getStats(@PathVariable Long id) {
         accessGuard.requireApplication(Action.LIST_APPLICATIONS, id);
-        java.sql.Timestamp createdAt = jdbc.queryForObject(
-            "SELECT created_at FROM applications WHERE id = ?", java.sql.Timestamp.class, id);
+        java.sql.Timestamp createdAt = java.sql.Timestamp.from(
+            applicationRepository.findCreatedAtById(id).orElseThrow(NotFoundException::new));
 
         // Walk every recorded flip chronologically and sum the duration
         // spent in each state. A brand-new app with zero transitions yet
@@ -340,15 +340,13 @@ public class ApplicationController {
             throw e;
         }
 
-        Map<String, Object> app = jdbc.queryForMap(
-            "SELECT server_ip, ssh_username, ssh_password_enc, ssh_host_key_fingerprint, start_script FROM applications WHERE id = ?",
-            id
-        );
-        String host = app.get("server_ip").toString();
-        String user = (String) app.get("ssh_username");
-        String encPass = (String) app.get("ssh_password_enc");
-        String fingerprint = (String) app.get("ssh_host_key_fingerprint");
-        String startScript = (String) app.get("start_script");
+        Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
+        // getHostAddress(), not toString(): toString() would give "/10.0.0.5" and SSH would fail.
+        String host = app.getServerIp().getHostAddress();
+        String user = app.getSshUsername();
+        String encPass = app.getSshPasswordEnc();
+        String fingerprint = app.getSshHostKeyFingerprint();
+        String startScript = app.getStartScript();
 
         try {
             var startActor = currentActor();
@@ -411,15 +409,12 @@ public class ApplicationController {
         requireHealthMonitoring(id);
         idempotencyService.checkAndStore(idempotencyKey, userId, id);
 
-        Map<String, Object> app = jdbc.queryForMap(
-            "SELECT server_ip, ssh_username, ssh_password_enc, ssh_host_key_fingerprint, stop_script FROM applications WHERE id = ?",
-            id
-        );
-        String host = app.get("server_ip").toString();
-        String user = (String) app.get("ssh_username");
-        String encPass = (String) app.get("ssh_password_enc");
-        String fingerprint = (String) app.get("ssh_host_key_fingerprint");
-        String stopScript = (String) app.get("stop_script");
+        Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
+        String host = app.getServerIp().getHostAddress();
+        String user = app.getSshUsername();
+        String encPass = app.getSshPasswordEnc();
+        String fingerprint = app.getSshHostKeyFingerprint();
+        String stopScript = app.getStopScript();
 
         try {
             var stopActor = currentActor();
@@ -587,11 +582,10 @@ public class ApplicationController {
             return ResponseEntity.status(409).build();
         }
 
-        Map<String, Object> app = jdbc.queryForMap(
-            "SELECT server_ip, ssh_username, ssh_host_key_fingerprint FROM applications WHERE id = ?", id);
-        String host = app.get("server_ip").toString();
-        String user = (String) app.get("ssh_username");
-        String fingerprint = (String) app.get("ssh_host_key_fingerprint");
+        Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
+        String host = app.getServerIp().getHostAddress();
+        String user = app.getSshUsername();
+        String fingerprint = app.getSshHostKeyFingerprint();
 
         statusPollingOrchestrator.stopPolling(id);
         logPollingOrchestrator.stopPolling(id);
@@ -602,8 +596,8 @@ public class ApplicationController {
         sshConnection.closeConnection(host, user, fingerprint, "status");
         sshConnection.closeConnection(host, user, fingerprint);
 
-        String deletedName = jdbc.queryForObject("SELECT name FROM applications WHERE id = ?", String.class, id);
-        jdbc.update("DELETE FROM applications WHERE id = ?", id);
+        String deletedName = app.getName();
+        applicationRepository.deleteById(id);
 
         try {
             var actor = currentActor();
