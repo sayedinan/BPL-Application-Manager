@@ -9,6 +9,7 @@ import com.bpl.orderapp.admin.security.Action;
 import com.bpl.orderapp.admin.ssh.SshConnection;
 import com.bpl.orderapp.admin.status.StatusConfirmationTimeoutException;
 import com.bpl.orderapp.admin.status.StatusPollingOrchestrator;
+import com.bpl.orderapp.admin.user.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -49,13 +50,14 @@ public class ApplicationController {
     private final StatusPollingOrchestrator statusPollingOrchestrator;
     private final java.util.List<com.bpl.orderapp.admin.notification.Notifier> notifiers;
     private final AccessGuard accessGuard;
+    private final UserRepository userRepository;
 
     public ApplicationController(JdbcTemplate jdbc, SshCredentialCipher cipher,
             IdempotencyService idempotencyService, SshConnection sshConnection,
             AuditWriter auditWriter, LogPollingOrchestrator logPollingOrchestrator,
             StatusPollingOrchestrator statusPollingOrchestrator,
             java.util.List<com.bpl.orderapp.admin.notification.Notifier> notifiers,
-            AccessGuard accessGuard) {
+            AccessGuard accessGuard, UserRepository userRepository) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.idempotencyService = idempotencyService;
@@ -65,6 +67,7 @@ public class ApplicationController {
         this.statusPollingOrchestrator = statusPollingOrchestrator;
         this.notifiers = notifiers;
         this.accessGuard = accessGuard;
+        this.userRepository = userRepository;
     }
 
     @GetMapping
@@ -75,13 +78,10 @@ public class ApplicationController {
             throw new com.bpl.orderapp.admin.common.InvalidCredentialsException();
         }
         String username = auth.getPrincipal().toString();
-        List<Map<String, Object>> userRows = jdbc.queryForList(
-            "SELECT id, role FROM users WHERE username = ? AND deleted_at IS NULL", username);
-        if (userRows.isEmpty()) {
-            throw new com.bpl.orderapp.admin.common.InvalidCredentialsException();
-        }
-        java.util.UUID userId = (java.util.UUID) userRows.get(0).get("id");
-        String role = (String) userRows.get(0).get("role");
+        com.bpl.orderapp.admin.user.User user = userRepository.findByUsername(username)
+            .orElseThrow(com.bpl.orderapp.admin.common.InvalidCredentialsException::new);
+        java.util.UUID userId = user.getId();
+        String role = user.getRole();
 
         // online/streak_started_at come from application_status_streak
         // (STATUS-REDESIGN.md §4) via LEFT JOIN — a just-created
@@ -644,10 +644,7 @@ public class ApplicationController {
     }
 
     private Map<String, String> currentActor() {
-        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        String username = auth.getName();
-        String role = jdbc.queryForObject(
-            "SELECT role FROM users WHERE username = ? AND deleted_at IS NULL", String.class, username);
-        return Map.of("username", username, "role", role);
+        AccessGuard.Caller caller = accessGuard.currentCaller();
+        return Map.of("username", caller.username(), "role", caller.role().name());
     }
 }

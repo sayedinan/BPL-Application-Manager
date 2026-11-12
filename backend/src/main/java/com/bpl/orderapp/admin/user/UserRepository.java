@@ -40,4 +40,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
          + "JOIN users u ON u.id = uaa.user_id "
          + "WHERE u.username = :username", nativeQuery = true)
     List<Long> findAssignedApplicationIds(@Param("username") String username);
+
+    long countByRole(String role);
 }

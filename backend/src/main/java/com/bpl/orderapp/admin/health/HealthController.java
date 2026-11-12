@@ -8,6 +8,7 @@ import com.bpl.orderapp.admin.common.Role;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.security.Action;
 import com.bpl.orderapp.admin.security.Rbac;
+import com.bpl.orderapp.admin.user.User;
 import com.bpl.orderapp.admin.user.UserRepository;
 import com.bpl.orderapp.admin.status.StatusPollingOrchestrator;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -504,12 +505,9 @@ public class HealthController {
             throw new InvalidCredentialsException();
         }
         String username = auth.getName();
-        List<String> roles = jdbc.queryForList(
-            "SELECT role FROM users WHERE username = ? AND deleted_at IS NULL", String.class, username);
-        if (roles.isEmpty()) {
-            throw new InvalidCredentialsException();
-        }
-        return new Caller(username, Role.valueOf(roles.get(0)));
+        User user = userRepository.findByUsername(username)
+            .orElseThrow(InvalidCredentialsException::new);
+        return new Caller(username, Role.valueOf(user.getRole()));
     }
 
     private void requireAction(Caller caller, Action action) {
