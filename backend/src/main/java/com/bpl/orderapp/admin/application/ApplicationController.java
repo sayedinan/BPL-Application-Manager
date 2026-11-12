@@ -2,6 +2,7 @@ package com.bpl.orderapp.admin.application;
 
 import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.common.IdempotencyService;
+import com.bpl.orderapp.admin.common.NotFoundException;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
 import com.bpl.orderapp.admin.security.AccessGuard;
@@ -133,28 +134,25 @@ public class ApplicationController {
     @GetMapping("/{id}")
     public ResponseEntity<Map<String, Object>> getApplication(@PathVariable Long id) {
         accessGuard.require(Action.ACCESS_APPLICATION);
-        Map<String, Object> app = jdbc.queryForMap(
-            "SELECT id, name, server_ip, ssh_username, ssh_host_key_fingerprint, start_script, stop_script, log_script, " +
-            "email_start_message, email_stop_message, email_external_online_message, email_external_offline_message, " +
-            "sms_start_message, sms_stop_message, sms_external_online_message, sms_external_offline_message FROM applications WHERE id = ?",            id
-        );
+        Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("id", ((Number) app.get("id")).longValue());
-        body.put("name", app.get("name"));
-        body.put("serverIp", app.get("server_ip").toString());
-        body.put("sshUsername", app.get("ssh_username"));
-        body.put("sshHostKeyFingerprint", app.get("ssh_host_key_fingerprint"));
-        body.put("startScript", app.get("start_script"));
-        body.put("emailStartMessage", app.get("email_start_message"));
-        body.put("emailStopMessage", app.get("email_stop_message"));
-        body.put("emailExternalOnlineMessage", app.get("email_external_online_message"));
-        body.put("emailExternalOfflineMessage", app.get("email_external_offline_message"));
-        body.put("smsStartMessage", app.get("sms_start_message"));
-        body.put("smsStopMessage", app.get("sms_stop_message"));
-        body.put("smsExternalOnlineMessage", app.get("sms_external_online_message"));
-        body.put("smsExternalOfflineMessage", app.get("sms_external_offline_message"));
-        body.put("stopScript", app.get("stop_script"));
-        body.put("logScript", app.get("log_script"));
+        body.put("id", app.getId());
+        body.put("name", app.getName());
+        // getHostAddress(), not toString(): InetAddress.toString() adds a leading "/".
+        body.put("serverIp", app.getServerIp().getHostAddress());
+        body.put("sshUsername", app.getSshUsername());
+        body.put("sshHostKeyFingerprint", app.getSshHostKeyFingerprint());
+        body.put("startScript", app.getStartScript());
+        body.put("emailStartMessage", app.getEmailStartMessage());
+        body.put("emailStopMessage", app.getEmailStopMessage());
+        body.put("emailExternalOnlineMessage", app.getEmailExternalOnlineMessage());
+        body.put("emailExternalOfflineMessage", app.getEmailExternalOfflineMessage());
+        body.put("smsStartMessage", app.getSmsStartMessage());
+        body.put("smsStopMessage", app.getSmsStopMessage());
+        body.put("smsExternalOnlineMessage", app.getSmsExternalOnlineMessage());
+        body.put("smsExternalOfflineMessage", app.getSmsExternalOfflineMessage());
+        body.put("stopScript", app.getStopScript());
+        body.put("logScript", app.getLogScript());
         body.put("online", statusPollingOrchestrator.isOnline(id));
         return ResponseEntity.ok(body);
     }
@@ -544,26 +542,32 @@ public class ApplicationController {
         String smsExternalOnlineMessage = (String) req.get("smsExternalOnlineMessage");
         String smsExternalOfflineMessage = (String) req.get("smsExternalOfflineMessage");
         rejectIfAnySmsTooLong(smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage);
+        java.net.InetAddress serverAddress = IpAddresses.parseIpv4(serverIp);
+        if (name != null && applicationRepository.existsByNameIgnoreCaseAndIdNot(name, id)) {
+            throw new com.bpl.orderapp.admin.common.DuplicateNameException(name);
+        }
+        Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
 
         String sshPassword = (String) req.get("sshPassword");
+        app.setName(name);
+        app.setServerIp(serverAddress);
+        app.setSshUsername(sshUsername);
+        // A blank password means "keep the stored one".
         if (sshPassword != null && !sshPassword.isBlank()) {
-            String encPassword = cipher.encrypt(sshPassword);
-            jdbc.update(
-                "UPDATE applications SET name=?, server_ip=?::inet, ssh_username=?, ssh_password_enc=?, start_script=?, stop_script=?, log_script=?, " +
-                "email_start_message=?, email_stop_message=?, email_external_online_message=?, email_external_offline_message=?, " +
-                "sms_start_message=?, sms_stop_message=?, sms_external_online_message=?, sms_external_offline_message=?, updated_at=NOW() WHERE id=?",
-                name, serverIp, sshUsername, encPassword, startScript, stopScript, logScript,
-                emailStartMessage, emailStopMessage, emailExternalOnlineMessage, emailExternalOfflineMessage,
-                smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage, id);
-        } else {
-            jdbc.update(
-                "UPDATE applications SET name=?, server_ip=?::inet, ssh_username=?, start_script=?, stop_script=?, log_script=?, " +
-                "email_start_message=?, email_stop_message=?, email_external_online_message=?, email_external_offline_message=?, " +
-                "sms_start_message=?, sms_stop_message=?, sms_external_online_message=?, sms_external_offline_message=?, updated_at=NOW() WHERE id=?",
-                name, serverIp, sshUsername, startScript, stopScript, logScript,
-                emailStartMessage, emailStopMessage, emailExternalOnlineMessage, emailExternalOfflineMessage,
-                smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage, id);
+            app.setSshPasswordEnc(cipher.encrypt(sshPassword));
         }
+        app.setStartScript(startScript);
+        app.setStopScript(stopScript);
+        app.setLogScript(logScript);
+        app.setEmailStartMessage(emailStartMessage);
+        app.setEmailStopMessage(emailStopMessage);
+        app.setEmailExternalOnlineMessage(emailExternalOnlineMessage);
+        app.setEmailExternalOfflineMessage(emailExternalOfflineMessage);
+        app.setSmsStartMessage(smsStartMessage);
+        app.setSmsStopMessage(smsStopMessage);
+        app.setSmsExternalOnlineMessage(smsExternalOnlineMessage);
+        app.setSmsExternalOfflineMessage(smsExternalOfflineMessage);
+        applicationRepository.save(app);
 
         try {
             var actor = currentActor();
