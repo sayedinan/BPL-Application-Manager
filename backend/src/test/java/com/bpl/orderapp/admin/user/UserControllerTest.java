@@ -15,8 +15,13 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -43,6 +48,18 @@ class UserControllerTest {
     @MockBean private AuditWriter auditWriter;
 
     private static final UUID TEST_USER_ID = UUID.fromString("12345678-1234-5678-1234-567812345678");
+
+    @BeforeEach
+    void loginAsSysAdmin() {
+        SecurityContextHolder.getContext().setAuthentication(
+            new UsernamePasswordAuthenticationToken("admin", "n/a",
+                List.of(new SimpleGrantedAuthority("ROLE_SYS_ADMIN"))));
+    }
+
+    @AfterEach
+    void clearLogin() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
     void resetPassword_succeeds_generatesTempPasswordAndFlipsFlag() throws Exception {
@@ -76,18 +93,6 @@ class UserControllerTest {
         when(userRepository.findById(missing)).thenReturn(Optional.empty());
 
         mvc.perform(post("/api/v1/users/" + missing + "/reset-password"))
-            .andExpect(status().isNotFound())
-            .andExpect(jsonPath("$.code").value("NOT_FOUND"));
-
-        verify(userRepository, never()).save(any());
-    }
-
-    @Test
-    void resetPassword_softDeletedUser_treatedAsNotFound() throws Exception {
-        UUID deleted = UUID.randomUUID();
-        when(userRepository.findById(deleted)).thenReturn(Optional.empty());
-
-        mvc.perform(post("/api/v1/users/" + deleted + "/reset-password"))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.code").value("NOT_FOUND"));
 
