@@ -1,5 +1,7 @@
 package com.bpl.orderapp.admin.log;
 
+import com.bpl.orderapp.admin.application.Application;
+import com.bpl.orderapp.admin.application.ApplicationRepository;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.ssh.SshConnection;
 import org.slf4j.Logger;
@@ -43,15 +45,17 @@ public class LogPollingOrchestrator {
     private final SshConnection sshConnection;
     private final WebSocketBroadcast broadcast;
     private final ThreadPoolTaskScheduler scheduler;
+    private final ApplicationRepository applicationRepository;
 
     private final ConcurrentHashMap<Long, ScheduledFuture<?>> activePollers = new ConcurrentHashMap<>();
 
     public LogPollingOrchestrator(JdbcTemplate jdbc, SshCredentialCipher cipher,
-            SshConnection sshConnection, WebSocketBroadcast broadcast) {
+            SshConnection sshConnection, WebSocketBroadcast broadcast, ApplicationRepository applicationRepository) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.sshConnection = sshConnection;
         this.broadcast = broadcast;
+        this.applicationRepository = applicationRepository;
         this.scheduler = new ThreadPoolTaskScheduler();
         this.scheduler.setPoolSize(4);
         this.scheduler.setThreadNamePrefix("log-poller-");
@@ -113,21 +117,18 @@ public class LogPollingOrchestrator {
             stopPolling(applicationId);
             return;
         }
-        Map<String, Object> app;
-        try {
-            app = jdbc.queryForMap(
-                "SELECT server_ip, ssh_username, ssh_password_enc, ssh_host_key_fingerprint, log_script FROM applications WHERE id = ?",
-                applicationId);
-        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+        java.util.Optional<Application> found = applicationRepository.findById(applicationId);
+        if (found.isEmpty()) {
             stopPolling(applicationId);
             return;
         }
-
-        String host = app.get("server_ip").toString();
-        String user = (String) app.get("ssh_username");
-        String encPass = (String) app.get("ssh_password_enc");
-        String fingerprint = (String) app.get("ssh_host_key_fingerprint");
-        String logScript = (String) app.get("log_script");
+        Application app = found.get();
+        // getHostAddress(), not toString(): toString() would give "/10.0.0.5".
+        String host = app.getServerIp().getHostAddress();
+        String user = app.getSshUsername();
+        String encPass = app.getSshPasswordEnc();
+        String fingerprint = app.getSshHostKeyFingerprint();
+        String logScript = app.getLogScript();
 
         String rawOutput;
         try {
