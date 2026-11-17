@@ -548,6 +548,10 @@ public class ApplicationController {
         app.setName(name);
         app.setServerIp(serverAddress);
         app.setSshUsername(sshUsername);
+        String newFingerprint = (String) req.get("sshHostKeyFingerprint");
+        if (newFingerprint != null && !newFingerprint.isBlank()) {
+            app.setSshHostKeyFingerprint(newFingerprint.trim());
+        }
         // A blank password means "keep the stored one".
         if (sshPassword != null && !sshPassword.isBlank()) {
             app.setSshPasswordEnc(cipher.encrypt(sshPassword));
