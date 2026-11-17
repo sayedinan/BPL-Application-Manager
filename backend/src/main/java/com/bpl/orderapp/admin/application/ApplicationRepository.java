@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 public interface ApplicationRepository extends JpaRepository<Application, Long> {
@@ -19,4 +20,7 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 
     @Query("select a.createdAt from Application a where a.id = :id")
     Optional<Instant> findCreatedAtById(@Param("id") Long id);
+
+    @Query("select a.id from Application a")
+    List<Long> findAllIds();
 }

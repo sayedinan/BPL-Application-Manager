@@ -419,7 +419,7 @@ form-action 'self'
 ```
 BPL-Order-Application-Admin/
 ├── .claude/                 # Claude Code config (hooks, skills, agents)
-├── backend/                 # Spring Boot 3.3 + Java 21 + Gradle
+├── backend/                 # Spring Boot 3.5 + Java 25 + Gradle
 │   ├── src/main/java/...    # Application code
 │   ├── src/main/resources/  # application.yml, db/migration/
 │   ├── build.gradle.kts
@@ -443,7 +443,7 @@ BPL-Order-Application-Admin/
 ```yaml
 services:
   postgres:     postgres:16-alpine (SSL, scram-sha-256)
-  backend:      Distroless Java 21, read-only, non-root
+  backend:      Distroless Java 25, read-only, non-root
   frontend:     Nginx + Brotli, read-only
   caddy:        TLS termination, security headers, rate limit
 ```

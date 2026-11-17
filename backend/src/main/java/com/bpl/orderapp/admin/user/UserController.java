@@ -1,6 +1,7 @@
 package com.bpl.orderapp.admin.user;
 
 import com.bpl.orderapp.admin.audit.AuditWriter;
+import com.bpl.orderapp.admin.application.ApplicationRepository;
 import com.bpl.orderapp.admin.common.NotFoundException;
 import com.bpl.orderapp.admin.user.dto.ResetPasswordResponse;
 import com.bpl.orderapp.admin.user.dto.UpdateUserRequest;
@@ -96,13 +97,15 @@ public class UserController {
     private final AuditWriter auditWriter;
     private final BCryptPasswordEncoder encoder;
     private final UserRepository userRepository;
+    private final ApplicationRepository applicationRepository;
 
     public UserController(JdbcTemplate jdbc, BCryptPasswordEncoder encoder, AuditWriter auditWriter,
-                          UserRepository userRepository) {
+                          UserRepository userRepository, ApplicationRepository applicationRepository) {
         this.jdbc = jdbc;
         this.encoder = encoder;
         this.auditWriter = auditWriter;
         this.userRepository = userRepository;
+        this.applicationRepository = applicationRepository;
     }
 
     @GetMapping
@@ -479,9 +482,7 @@ public class UserController {
     private java.util.List<String> resolveAppNames(java.util.Set<Long> ids) {
         java.util.List<String> result = new java.util.ArrayList<>();
         for (Long appId : ids) {
-            java.util.List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT name FROM applications WHERE id = ?", appId);
-            String name = rows.isEmpty() ? "unknown" : (String) rows.get(0).get("name");
+            String name = applicationRepository.findNameById(appId).orElse("unknown");
             result.add(appId + ":" + name);
         }
         return result;

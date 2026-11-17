@@ -482,17 +482,18 @@ public class ApplicationController {
         }
         try {
             var actor = currentActor();
-            String appName = jdbc.queryForObject(
-                "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
-            for (com.bpl.orderapp.admin.notification.Notifier notifier : notifiers) {
-                try {
-                    notifier.notifyLifecycleEvent(
-                        applicationId, appName, eventType, actor.get("username"), actor.get("role"), null);
-                } catch (Exception e) {
-                    log.warn("Notification dispatch failed ({}) for application id={}",
-                        notifier.getClass().getSimpleName(), applicationId, e);
-                }
-            }
+            applicationRepository.findNameById(applicationId)
+                .ifPresent(appName -> {
+                    for (com.bpl.orderapp.admin.notification.Notifier notifier : notifiers) {
+                        try {
+                            notifier.notifyLifecycleEvent(
+                                applicationId, appName, eventType, actor.get("username"), actor.get("role"), null);
+                        } catch (Exception e) {
+                            log.warn("Notification dispatch failed ({}) for application id={}",
+                                notifier.getClass().getSimpleName(), applicationId, e);
+                        }
+                    }
+                });
         } catch (Exception e) {
             log.warn("Notification dispatch failed for application id={}", applicationId, e);
         }

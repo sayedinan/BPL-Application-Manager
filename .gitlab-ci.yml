@@ -1,4 +1,6 @@
-test-job:
+test-backend:
   stage: test
+  image: eclipse-temurin:25-jdk
   script:
-    - echo "Hello from test pipeline"
+    - cd backend
+    - ./gradlew test --no-daemon

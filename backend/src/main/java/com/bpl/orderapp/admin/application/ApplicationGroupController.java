@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -31,11 +30,14 @@ public class ApplicationGroupController {
     private final JdbcTemplate jdbc;
     private final AccessGuard accessGuard;
     private final AuditWriter auditWriter;
+    private final ApplicationRepository applicationRepository;
 
-    public ApplicationGroupController(JdbcTemplate jdbc, AccessGuard accessGuard, AuditWriter auditWriter) {
+    public ApplicationGroupController(JdbcTemplate jdbc, AccessGuard accessGuard, AuditWriter auditWriter,
+            ApplicationRepository applicationRepository) {
         this.jdbc = jdbc;
         this.accessGuard = accessGuard;
         this.auditWriter = auditWriter;
+        this.applicationRepository = applicationRepository;
     }
 
     public record GroupRequest(String groupName) {}
@@ -44,10 +46,12 @@ public class ApplicationGroupController {
     public ResponseEntity<Void> setGroup(@PathVariable Long id, @RequestBody GroupRequest req,
             HttpServletRequest httpRequest) {
         AccessGuard.Caller caller = accessGuard.require(Action.UPDATE_APPLICATION);
-        String appName = applicationName(id);
+        Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
+        String appName = app.getName();
         String group = cleanGroup(req.groupName());
 
-        jdbc.update("UPDATE applications SET group_name = ? WHERE id = ?", group, id);
+        app.setGroupName(group);
+        applicationRepository.save(app);
 
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("change", "group");
@@ -59,15 +63,6 @@ public class ApplicationGroupController {
             log.warn("Audit write failed for group change (application id={})", id, e);
         }
         return ResponseEntity.ok().build();
-    }
-
-    private String applicationName(Long applicationId) {
-        List<String> names = jdbc.queryForList(
-            "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
-        if (names.isEmpty()) {
-            throw new NotFoundException();
-        }
-        return names.get(0);
     }
 
     private static String cleanGroup(String raw) {

@@ -1,10 +1,18 @@
 package com.bpl.orderapp.admin.audit;
+
+import com.bpl.orderapp.admin.application.ApplicationRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import java.util.*;
+
 public class AuditWriter {
     private final JdbcTemplate jdbc;
-    public AuditWriter(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    private final ApplicationRepository applicationRepository;
+
+    public AuditWriter(JdbcTemplate jdbc, ApplicationRepository applicationRepository) {
+        this.jdbc = jdbc;
+        this.applicationRepository = applicationRepository;
+    }
 
     /** Back-compat overload for any call site that genuinely has no
      *  request in scope. Writes source_ip = NULL. Prefer the
@@ -28,8 +36,7 @@ public class AuditWriter {
         // audit row still says WHICH application after it is renamed/deleted.
         if (targetAppName == null && targetAppId != null) {
             try {
-                targetAppName = jdbc.queryForObject(
-                    "SELECT name FROM applications WHERE id = ?", String.class, targetAppId);
+                targetAppName = applicationRepository.findNameById(targetAppId).orElse(null);
             } catch (Exception ignored) {
                 // application already gone - leave the name null
             }

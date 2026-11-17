@@ -33,6 +33,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.bpl.orderapp.admin.audit.AuditWriter;
+import com.bpl.orderapp.admin.application.ApplicationRepository;
 import com.bpl.orderapp.admin.common.GlobalExceptionHandler;
 
 @WebMvcTest(UserController.class)
@@ -46,6 +47,7 @@ class UserControllerTest {
     @MockBean private BCryptPasswordEncoder encoder;
     @MockBean private UserRepository userRepository;
     @MockBean private AuditWriter auditWriter;
+    @MockBean private ApplicationRepository applicationRepository;
 
     private static final UUID TEST_USER_ID = UUID.fromString("12345678-1234-5678-1234-567812345678");
 

@@ -1,6 +1,7 @@
 package com.bpl.orderapp.admin.status;
 
 import com.bpl.orderapp.admin.audit.AuditWriter;
+import com.bpl.orderapp.admin.application.ApplicationRepository;
 import com.bpl.orderapp.admin.health.HealthCheckService;
 import com.bpl.orderapp.admin.health.HealthDecision;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
@@ -61,6 +62,7 @@ public class StatusPollingOrchestrator {
     // one is, two if both are. See NotificationConfig.
     private final List<Notifier> notifiers;
     private final HealthCheckService healthCheckService;
+    private final ApplicationRepository applicationRepository;
 
     // Flap detection for external transitions only (web-app-triggered
     // start/stop are deliberate one-off actions, never flapping).
@@ -88,13 +90,15 @@ public class StatusPollingOrchestrator {
     public StatusPollingOrchestrator(JdbcTemplate jdbc,
             WebSocketBroadcast broadcast,
             LogPollingOrchestrator logPollingOrchestrator, AuditWriter auditWriter,
-            List<Notifier> notifiers, HealthCheckService healthCheckService) {
+            List<Notifier> notifiers, HealthCheckService healthCheckService,
+            ApplicationRepository applicationRepository) {
         this.auditWriter = auditWriter;
         this.jdbc = jdbc;
         this.broadcast = broadcast;
         this.logPollingOrchestrator = logPollingOrchestrator;
         this.notifiers = notifiers;
         this.healthCheckService = healthCheckService;
+        this.applicationRepository = applicationRepository;
         this.healthScheduler = new ThreadPoolTaskScheduler();
         this.healthScheduler.setPoolSize(HEALTH_POLL_THREADS);
         this.healthScheduler.setThreadNamePrefix("health-poller-");
@@ -106,7 +110,7 @@ public class StatusPollingOrchestrator {
     // poller which only runs while online.
     @PostConstruct
     public void startPollersForAllApplications() {
-        List<Long> ids = jdbc.queryForList("SELECT id FROM applications", Long.class);
+        List<Long> ids = applicationRepository.findAllIds();
         for (Long id : ids) {
             ensureStreakRow(id);
             startPolling(id);
@@ -164,8 +168,10 @@ public class StatusPollingOrchestrator {
     // docker restart, reboot) is recorded as system/EXTERNAL.
     private void writeTransitionAudit(Long applicationId, boolean observedOnline, String detectedBy) {
         try {
-            String name = jdbc.queryForObject(
-                "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
+            String name = applicationRepository.findNameById(applicationId).orElse(null);
+            if (name == null) {
+                return; // application was deleted while the poller was running
+            }
             PendingAction pending = pendingActions.get(applicationId);
             boolean viaWebApp = pending != null && pending.expectedOnline() == observedOnline;
             if (viaWebApp) {
@@ -224,11 +230,8 @@ public class StatusPollingOrchestrator {
         if (isOnline(applicationId)) {
             return;
         }
-        List<String> names = jdbc.queryForList(
-            "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
-        if (!names.isEmpty()) {
-            notifyExternalTransition(applicationId, names.get(0), false);
-        }
+        applicationRepository.findNameById(applicationId)
+            .ifPresent(appName -> notifyExternalTransition(applicationId, appName, false));
     }
 
     // Cheap lookup — no SSH, just the streak pointer's last-known value.

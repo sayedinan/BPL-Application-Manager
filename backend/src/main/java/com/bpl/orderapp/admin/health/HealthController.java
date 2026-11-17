@@ -1,6 +1,7 @@
 package com.bpl.orderapp.admin.health;
 
 import com.bpl.orderapp.admin.audit.AuditWriter;
+import com.bpl.orderapp.admin.application.ApplicationRepository;
 import com.bpl.orderapp.admin.common.AccessDeniedAppException;
 import com.bpl.orderapp.admin.common.InvalidCredentialsException;
 import com.bpl.orderapp.admin.common.NotFoundException;
@@ -86,10 +87,12 @@ public class HealthController {
     private final StatusPollingOrchestrator statusPolling;
     private final ObjectMapper compactMapper;
     private final UserRepository userRepository;
+    private final ApplicationRepository applicationRepository;
 
     public HealthController(JdbcTemplate jdbc, SshCredentialCipher cipher, AuditWriter auditWriter,
             HealthCheckService healthCheckService, HealthReadService healthReadService,
-            StatusPollingOrchestrator statusPolling, ObjectMapper mapper, UserRepository userRepository) {
+            StatusPollingOrchestrator statusPolling, ObjectMapper mapper, UserRepository userRepository,
+            ApplicationRepository applicationRepository) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.auditWriter = auditWriter;
@@ -98,6 +101,7 @@ public class HealthController {
         this.statusPolling = statusPolling;
         this.compactMapper = mapper.copy().setSerializationInclusion(JsonInclude.Include.NON_NULL);
         this.userRepository = userRepository;
+        this.applicationRepository = applicationRepository;
     }
 
     /**
@@ -530,12 +534,8 @@ public class HealthController {
     }
 
     private String applicationName(Long applicationId) {
-        List<String> names = jdbc.queryForList(
-            "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
-        if (names.isEmpty()) {
-            throw new NotFoundException();
-        }
-        return names.get(0);
+        return applicationRepository.findNameById(applicationId)
+            .orElseThrow(NotFoundException::new);
     }
 
     // ------------------------------------------------------------------
