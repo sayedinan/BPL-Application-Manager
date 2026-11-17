@@ -1,5 +1,7 @@
 package com.bpl.orderapp.admin.notification;
 
+import com.bpl.orderapp.admin.application.Application;
+import com.bpl.orderapp.admin.application.ApplicationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -42,14 +44,17 @@ public class SmsNotificationService implements Notifier {
     private final JdbcTemplate jdbc;
     private final NotificationRecipientResolver recipientResolver;
     private final Optional<EmailNotificationService> emailNotificationService;
+    private final ApplicationRepository applicationRepository;
 
     public SmsNotificationService(DurbarSmsClient durbarSmsClient, JdbcTemplate jdbc,
             NotificationRecipientResolver recipientResolver,
-            Optional<EmailNotificationService> emailNotificationService) {
+            Optional<EmailNotificationService> emailNotificationService,
+            ApplicationRepository applicationRepository) {
         this.durbarSmsClient = durbarSmsClient;
         this.jdbc = jdbc;
         this.recipientResolver = recipientResolver;
         this.emailNotificationService = emailNotificationService;
+        this.applicationRepository = applicationRepository;
     }
 
     @Async
@@ -143,18 +148,21 @@ public class SmsNotificationService implements Notifier {
     // Mirrors EmailNotificationService.fetchCustomMessage exactly,
     // just against the sms_* columns instead of email_*.
     private String fetchCustomMessage(Long applicationId, LifecycleEventType eventType) {
-        String column = switch (eventType) {
-            case STARTED_VIA_DASHBOARD -> "sms_start_message";
-            case STOPPED_VIA_DASHBOARD -> "sms_stop_message";
-            case EXTERNAL_ONLINE -> "sms_external_online_message";
-            case EXTERNAL_OFFLINE -> "sms_external_offline_message";
-        };
         try {
-            String value = jdbc.queryForObject(
-                "SELECT " + column + " FROM applications WHERE id = ?", String.class, applicationId);
+            Application app = applicationRepository.findById(applicationId).orElse(null);
+            if (app == null) {
+                return null;
+            }
+            String value = switch (eventType) {
+                case STARTED_VIA_DASHBOARD -> app.getSmsStartMessage();
+                case STOPPED_VIA_DASHBOARD -> app.getSmsStopMessage();
+                case EXTERNAL_ONLINE -> app.getSmsExternalOnlineMessage();
+                case EXTERNAL_OFFLINE -> app.getSmsExternalOfflineMessage();
+            };
             return (value == null || value.isBlank()) ? null : value;
         } catch (Exception e) {
-            log.warn("Failed to look up custom {} for application id={}: {}", column, applicationId, e.getMessage());
+            log.warn("Failed to look up custom message for application id={} event={}: {}",
+                applicationId, eventType, e.getMessage());
             return null;
         }
     }

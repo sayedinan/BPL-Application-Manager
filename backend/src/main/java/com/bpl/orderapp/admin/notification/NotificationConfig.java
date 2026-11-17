@@ -1,5 +1,6 @@
 package com.bpl.orderapp.admin.notification;
 
+import com.bpl.orderapp.admin.application.ApplicationRepository;
 import com.bpl.orderapp.admin.user.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -53,8 +54,8 @@ public class NotificationConfig {
             JavaMailSender mailSender,
             @Value("${spring.mail.username}") String fromAddress,
             NotificationRecipientResolver recipientResolver,
-            JdbcTemplate jdbc) {
-        return new EmailNotificationService(mailSender, fromAddress, recipientResolver, jdbc);
+            ApplicationRepository applicationRepository) {
+        return new EmailNotificationService(mailSender, fromAddress, recipientResolver, applicationRepository);
     }
 
     @Bean
@@ -76,7 +77,8 @@ public class NotificationConfig {
             DurbarSmsClient durbarSmsClient,
             JdbcTemplate jdbc,
             NotificationRecipientResolver recipientResolver,
-            Optional<EmailNotificationService> emailNotificationService) {
-        return new SmsNotificationService(durbarSmsClient, jdbc, recipientResolver, emailNotificationService);
+            Optional<EmailNotificationService> emailNotificationService,
+            ApplicationRepository applicationRepository) {
+        return new SmsNotificationService(durbarSmsClient, jdbc, recipientResolver, emailNotificationService, applicationRepository);
     }
 }
