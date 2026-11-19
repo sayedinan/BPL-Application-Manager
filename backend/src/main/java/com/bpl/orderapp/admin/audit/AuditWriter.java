@@ -1,43 +1,56 @@
 package com.bpl.orderapp.admin.audit;
+
+import com.bpl.orderapp.admin.application.ApplicationRepository;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
 import java.util.*;
+
 public class AuditWriter {
-    private final JdbcTemplate jdbc;
-    public AuditWriter(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    private final AuditLogRepository auditLogRepository;
+    private final ApplicationRepository applicationRepository;
+
+    public AuditWriter(AuditLogRepository auditLogRepository, ApplicationRepository applicationRepository) {
+        this.auditLogRepository = auditLogRepository;
+        this.applicationRepository = applicationRepository;
+    }
+
+    private static final Set<String> SECRET_KEYS =
+        Set.of("ssh_password_enc", "temporaryPassword", "password_hash", "password");
 
     /** Back-compat overload for any call site that genuinely has no
      *  request in scope. Writes source_ip = NULL. Prefer the
      *  HttpServletRequest overload below wherever a request is available. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void write(String actionType, String actorUsername, String actorRole, Long targetAppId, String targetAppName, java.util.UUID targetUserId, Map<String,Object> detail, String result) {
-        insert(actionType, actorUsername, actorRole, targetAppId, targetAppName, targetUserId, detail, result, null);
+        insert(Instant.now(), actionType, actorUsername, actorRole, targetAppId, targetAppName, targetUserId, detail, result, null);
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void write(String actionType, String actorUsername, String actorRole, Long targetAppId, String targetAppName, java.util.UUID targetUserId, Map<String,Object> detail, String result, HttpServletRequest request) {
-        insert(actionType, actorUsername, actorRole, targetAppId, targetAppName, targetUserId, detail, result, extractSourceIp(request));
+        insert(Instant.now(), actionType, actorUsername, actorRole, targetAppId, targetAppName, targetUserId, detail, result, extractSourceIp(request));
     }
 
     /** Writes an audit row with an explicit event time (used when the event is detected after the fact, e.g. browser closed). source_ip = NULL. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void writeAt(java.time.Instant when, String actionType, String actorUsername, String actorRole, Map<String,Object> detail, String result) {
-        jdbc.update("INSERT INTO audit_logs (timestamp,actor_username,actor_role,action_type,detail,result,source_ip) VALUES (?,?,?,?,?::jsonb,?,NULL)",
-            java.sql.Timestamp.from(when), actorUsername, actorRole, actionType, new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(new HashMap<>(detail)).toString(), result);
+        insert(when, actionType, actorUsername, actorRole, null, null, null, detail, result, null);
     }
 
-    private void insert(String actionType, String actorUsername, String actorRole, Long targetAppId, String targetAppName, java.util.UUID targetUserId, Map<String,Object> detail, String result, String sourceIp) {
-        // Callers often only know the id; fill in the readable name so the
-        // audit row still says WHICH application after it is renamed/deleted.
+    private void insert(Instant when, String actionType, String actorUsername, String actorRole,
+                        Long targetAppId, String targetAppName, UUID targetUserId,
+                        Map<String, Object> detail, String result, String sourceIp) {
         if (targetAppName == null && targetAppId != null) {
             try {
-                targetAppName = jdbc.queryForObject(
-                    "SELECT name FROM applications WHERE id = ?", String.class, targetAppId);
-            } catch (Exception ignored) {
-                // application already gone - leave the name null
-            }
+                targetAppName = applicationRepository.findNameById(targetAppId).orElse(null);
+            } catch (Exception ignored) { /* application already gone */ }
         }
-        Map<String,Object> safe = new HashMap<>(detail);
-        safe.remove("ssh_password_enc"); safe.remove("temporaryPassword"); safe.remove("password_hash"); safe.remove("password");
-        jdbc.update("INSERT INTO audit_logs (timestamp,actor_username,actor_role,action_type,target_application_id,target_application_name,target_user_id,detail,result,source_ip) VALUES (NOW(),?,?,?,?,?,?,?::jsonb,?,?)",
-            actorUsername, actorRole, actionType, targetAppId, targetAppName, targetUserId, new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(safe).toString(), result, sourceIp);
+        Map<String, Object> safe = detail == null ? new HashMap<>() : new HashMap<>(detail);
+        SECRET_KEYS.forEach(safe::remove);
+        auditLogRepository.save(new AuditLog(when, actorUsername, actorRole, actionType,
+            targetAppId, targetAppName, targetUserId, safe, result, sourceIp));
     }
 
     /**

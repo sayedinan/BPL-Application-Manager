@@ -1,10 +1,14 @@
 # syntax=docker/dockerfile:1.7
 #
-# Multi-stage build — distroless Java 21 runtime (SPEC §11.1).
+# Multi-stage build — distroless Java 25 runtime (SPEC §11.1).
 # Read-only filesystem, non-root user, <150MB target image.
+# Fallback if gcr.io/distroless/java25-debian13:nonroot is unavailable:
+#   FROM eclipse-temurin:25-jre
+#   RUN useradd -u 65532 -r app
+#   USER 65532:65532
 
 # --- build ---
-FROM eclipse-temurin:21-jdk AS build
+FROM eclipse-temurin:25-jdk AS build
 WORKDIR /src
 
 # Cache Gradle wrapper + dependencies first for faster subsequent builds.
@@ -18,7 +22,7 @@ COPY src ./src
 RUN ./gradlew --no-daemon clean bootJar
 
 # --- runtime ---
-FROM gcr.io/distroless/java21-debian12:nonroot
+FROM gcr.io/distroless/java25-debian13:nonroot
 WORKDIR /app
 
 # Spring Boot's layered jar extracts more efficiently than a fat jar.

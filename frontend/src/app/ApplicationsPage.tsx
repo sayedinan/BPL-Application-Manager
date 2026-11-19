@@ -183,6 +183,7 @@ export function ApplicationsPage(): JSX.Element {
       await api.put(API.APPLICATIONS.UPDATE(editingId), {
         name: form.name, serverIp: form.serverIp, sshUsername: form.sshUsername,
         sshPassword: form.sshPassword || undefined,
+        sshHostKeyFingerprint: form.sshHostKeyFingerprint || undefined,
         startScript: form.startScript, stopScript: form.stopScript, logScript: form.logScript,
         emailStartMessage: form.emailStartMessage, emailStopMessage: form.emailStopMessage,
         emailExternalOnlineMessage: form.emailExternalOnlineMessage, emailExternalOfflineMessage: form.emailExternalOfflineMessage,

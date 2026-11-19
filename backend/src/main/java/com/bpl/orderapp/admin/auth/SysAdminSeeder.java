@@ -1,5 +1,7 @@
 package com.bpl.orderapp.admin.auth;
 
+import com.bpl.orderapp.admin.user.User;
+import com.bpl.orderapp.admin.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -64,24 +66,23 @@ public class SysAdminSeeder implements ApplicationRunner {
     private final JdbcTemplate jdbc;
     private final BCryptPasswordEncoder encoder;
     private final String username;
+    private final UserRepository userRepository;
 
     public SysAdminSeeder(
         JdbcTemplate jdbc,
         BCryptPasswordEncoder encoder,
-        @Value("${app.bootstrap.sysadmin.username:admin}") String username
+        @Value("${app.bootstrap.sysadmin.username:admin}") String username,
+        UserRepository userRepository
     ) {
         this.jdbc = jdbc;
         this.encoder = encoder;
         this.username = username;
+        this.userRepository = userRepository;
     }
 
     @Override
     public void run(ApplicationArguments args) {
-        Integer existingCount = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM users WHERE role = 'SYS_ADMIN' AND deleted_at IS NULL",
-            Integer.class
-        );
-        if (existingCount != null && existingCount > 0) {
+        if (userRepository.countByRole("SYS_ADMIN") > 0) {
             log.info("SysAdmin seed skipped: user '{}' already exists.", username);
             return;
         }
@@ -97,12 +98,12 @@ public class SysAdminSeeder implements ApplicationRunner {
         String hash = encoder.encode(cleartext);
         Instant now = Instant.now();
 
-        jdbc.update(
-            "INSERT INTO users " +
-                "(username, password_hash, role, must_change_password, created_at, updated_at) " +
-                "VALUES (?, ?, 'SYS_ADMIN', true, ?, ?)",
-            username, hash, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now)
-        );
+        User admin = new User();
+        admin.setUsername(username);
+        admin.setPasswordHash(hash);
+        admin.setRole("SYS_ADMIN");
+        admin.setMustChangePassword(true);
+        userRepository.save(admin);
 
         // The ONE place the cleartext password is allowed to be
         // written. The banner is on multiple lines and clearly marked

@@ -3,6 +3,8 @@ package com.bpl.orderapp.admin.security;
 import com.bpl.orderapp.admin.common.AccessDeniedAppException;
 import com.bpl.orderapp.admin.common.InvalidCredentialsException;
 import com.bpl.orderapp.admin.common.Role;
+import com.bpl.orderapp.admin.user.User;
+import com.bpl.orderapp.admin.user.UserRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -36,12 +38,14 @@ import java.util.List;
 public class AccessGuard {
 
     /** The authenticated caller, as the database knows them. */
-    public record Caller(String username, Role role) {}
+    public record Caller(java.util.UUID userId, String username, Role role) {}
 
     private final JdbcTemplate jdbc;
+    private final UserRepository userRepository;
 
-    public AccessGuard(JdbcTemplate jdbc) {
+    public AccessGuard(JdbcTemplate jdbc, UserRepository userRepository) {
         this.jdbc = jdbc;
+        this.userRepository = userRepository;
     }
 
     public Caller currentCaller() {
@@ -50,12 +54,9 @@ public class AccessGuard {
             throw new InvalidCredentialsException();
         }
         String username = auth.getName();
-        List<String> roles = jdbc.queryForList(
-            "SELECT role FROM users WHERE username = ? AND deleted_at IS NULL", String.class, username);
-        if (roles.isEmpty()) {
-            throw new InvalidCredentialsException();
-        }
-        return new Caller(username, Role.valueOf(roles.get(0)));
+        User user = userRepository.findByUsername(username)
+            .orElseThrow(InvalidCredentialsException::new);
+        return new Caller(user.getId(), username, Role.valueOf(user.getRole()));
     }
 
     /** Coarse gate: may this caller's role perform the action at all? */

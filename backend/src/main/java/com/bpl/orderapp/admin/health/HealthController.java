@@ -1,6 +1,7 @@
 package com.bpl.orderapp.admin.health;
 
 import com.bpl.orderapp.admin.audit.AuditWriter;
+import com.bpl.orderapp.admin.application.ApplicationRepository;
 import com.bpl.orderapp.admin.common.AccessDeniedAppException;
 import com.bpl.orderapp.admin.common.InvalidCredentialsException;
 import com.bpl.orderapp.admin.common.NotFoundException;
@@ -8,6 +9,8 @@ import com.bpl.orderapp.admin.common.Role;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.security.Action;
 import com.bpl.orderapp.admin.security.Rbac;
+import com.bpl.orderapp.admin.user.User;
+import com.bpl.orderapp.admin.user.UserRepository;
 import com.bpl.orderapp.admin.status.StatusPollingOrchestrator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -83,10 +86,13 @@ public class HealthController {
     private final HealthReadService healthReadService;
     private final StatusPollingOrchestrator statusPolling;
     private final ObjectMapper compactMapper;
+    private final UserRepository userRepository;
+    private final ApplicationRepository applicationRepository;
 
     public HealthController(JdbcTemplate jdbc, SshCredentialCipher cipher, AuditWriter auditWriter,
             HealthCheckService healthCheckService, HealthReadService healthReadService,
-            StatusPollingOrchestrator statusPolling, ObjectMapper mapper) {
+            StatusPollingOrchestrator statusPolling, ObjectMapper mapper, UserRepository userRepository,
+            ApplicationRepository applicationRepository) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.auditWriter = auditWriter;
@@ -94,6 +100,8 @@ public class HealthController {
         this.healthReadService = healthReadService;
         this.statusPolling = statusPolling;
         this.compactMapper = mapper.copy().setSerializationInclusion(JsonInclude.Include.NON_NULL);
+        this.userRepository = userRepository;
+        this.applicationRepository = applicationRepository;
     }
 
     /**
@@ -501,12 +509,9 @@ public class HealthController {
             throw new InvalidCredentialsException();
         }
         String username = auth.getName();
-        List<String> roles = jdbc.queryForList(
-            "SELECT role FROM users WHERE username = ? AND deleted_at IS NULL", String.class, username);
-        if (roles.isEmpty()) {
-            throw new InvalidCredentialsException();
-        }
-        return new Caller(username, Role.valueOf(roles.get(0)));
+        User user = userRepository.findByUsername(username)
+            .orElseThrow(InvalidCredentialsException::new);
+        return new Caller(username, Role.valueOf(user.getRole()));
     }
 
     private void requireAction(Caller caller, Action action) {
@@ -520,11 +525,7 @@ public class HealthController {
     private void requireApplicationAccess(Caller caller, Long applicationId) {
         requireAction(caller, Action.LIST_APPLICATIONS);
         List<Long> assigned = caller.role() == Role.USER
-            ? jdbc.queryForList(
-                "SELECT uaa.application_id FROM user_application_assignments uaa "
-                    + "JOIN users u ON u.id = uaa.user_id "
-                    + "WHERE u.username = ? AND u.deleted_at IS NULL",
-                Long.class, caller.username())
+            ? userRepository.findAssignedApplicationIds(caller.username())
             : List.of();
         if (!Rbac.canAccessApplication(caller.role(), assigned, applicationId)) {
             throw new AccessDeniedAppException();
@@ -533,12 +534,8 @@ public class HealthController {
     }
 
     private String applicationName(Long applicationId) {
-        List<String> names = jdbc.queryForList(
-            "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
-        if (names.isEmpty()) {
-            throw new NotFoundException();
-        }
-        return names.get(0);
+        return applicationRepository.findNameById(applicationId)
+            .orElseThrow(NotFoundException::new);
     }
 
     // ------------------------------------------------------------------

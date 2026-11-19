@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
@@ -15,9 +15,12 @@ import org.mockito.invocation.InvocationOnMock;
 import com.bpl.orderapp.admin.common.AccessDeniedAppException;
 import com.bpl.orderapp.admin.common.InvalidCredentialsException;
 import com.bpl.orderapp.admin.common.Role;
+import com.bpl.orderapp.admin.user.User;
+import com.bpl.orderapp.admin.user.UserRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class AccessGuardTest {
 
@@ -27,17 +30,27 @@ class AccessGuardTest {
     private String role = "SYS_ADMIN";
     private List<Long> assignedApplications = List.of();
 
+    private final UserRepository userRepository = mock(UserRepository.class, this::fakeUsers);
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class, this::fakeDatabase);
-    private final AccessGuard guard = new AccessGuard(jdbc);
+    private final AccessGuard guard = new AccessGuard(jdbc, userRepository);
+
+    // Answers findByUsername from the same userExists / role fields the
+    // tests already toggle, so the individual tests don't change.
+    private Object fakeUsers(InvocationOnMock call) {
+        if (!call.getMethod().getName().equals("findByUsername")) {
+            return null;
+        }
+        if (!userExists) {
+            return Optional.empty();
+        }
+        User u = new User();
+        ReflectionTestUtils.setField(u, "id", USER_ID);
+        u.setRole(role);
+        return Optional.of(u);
+    }
 
     private Object fakeDatabase(InvocationOnMock call) {
         String sql = call.getArgument(0);
-        if (sql.startsWith("SELECT id, role FROM users")) {
-            if (!userExists) {
-                return List.of();
-            }
-            return List.of(Map.<String, Object>of("id", USER_ID, "role", role));
-        }
         if (sql.startsWith("SELECT uaa.application_id")) {
             return assignedApplications;
         }

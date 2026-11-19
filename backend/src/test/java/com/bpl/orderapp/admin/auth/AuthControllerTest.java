@@ -17,6 +17,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -33,11 +35,15 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.auth.dto.ChangePasswordRequest;
 import com.bpl.orderapp.admin.auth.dto.LoginRequest;
 import com.bpl.orderapp.admin.common.GlobalExceptionHandler;
+import com.bpl.orderapp.admin.user.User;
+import com.bpl.orderapp.admin.user.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
@@ -67,22 +73,30 @@ class AuthControllerTest {
     @MockBean private JdbcTemplate jdbc;
     @MockBean private BCryptPasswordEncoder encoder;
     @MockBean private SecurityContextRepository securityContextRepository;
+    @MockBean private UserRepository userRepository;
+    @MockBean private AuditWriter auditWriter;
 
     private static final String TEST_PASSWORD = "The-real-password1";
     private static final String TEST_HASH = new BCryptPasswordEncoder(10).encode(TEST_PASSWORD);
+    private static final UUID ADMIN_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID ALICE_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
+
+    private static User testUser(UUID id, String username, String role,
+                                 String hash, boolean mustChangePassword) {
+        User u = new User();
+        ReflectionTestUtils.setField(u, "id", id);
+        u.setUsername(username);
+        u.setRole(role);
+        u.setPasswordHash(hash);
+        u.setMustChangePassword(mustChangePassword);
+        return u;
+    }
 
     @Test
     void login_succeeds_withCorrectCredentials() throws Exception {
         // Arrange: a real-looking user row.
-        when(jdbc.queryForList(anyString(), eq("admin"))).thenReturn(List.of(
-            Map.of(
-                "id", 1L,
-                "username", "admin",
-                "role", "SYS_ADMIN",
-                "password_hash", TEST_HASH,
-                "must_change_password", true
-            )
-        ));
+        when(userRepository.findByUsername("admin")).thenReturn(
+            Optional.of(testUser(ADMIN_ID, "admin", "SYS_ADMIN", TEST_HASH, true)));
         when(encoder.matches(TEST_PASSWORD, TEST_HASH)).thenReturn(true);
 
         // Act + assert
@@ -91,17 +105,16 @@ class AuthControllerTest {
                 .content(json.writeValueAsString(new LoginRequest("admin", TEST_PASSWORD))))
             .andExpect(status().isOk())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-            .andExpect(jsonPath("$.id").value(1))
+            .andExpect(jsonPath("$.id").value(ADMIN_ID.toString()))
             .andExpect(jsonPath("$.username").value("admin"))
             .andExpect(jsonPath("$.role").value("SYS_ADMIN"))
             .andExpect(jsonPath("$.mustChangePassword").value(true));
 
-        // The cleartext password must never have been bound as a
-        // SQL parameter — only the username is.
-        ArgumentCaptor<Object> sqlArgs = ArgumentCaptor.forClass(Object.class);
-        verify(jdbc).queryForList(anyString(), sqlArgs.capture());
-        assertThat(sqlArgs.getAllValues())
-            .as("the SQL query must bind the username, never the password")
+        // The lookup must use the username, never the password
+        ArgumentCaptor<String> lookupArg = ArgumentCaptor.forClass(String.class);
+        verify(userRepository).findByUsername(lookupArg.capture());
+        assertThat(lookupArg.getAllValues())
+            .as("the lookup must use the username, never the password")
             .containsExactly("admin");
 
         // The encoder.matches was called exactly once with the
@@ -111,15 +124,8 @@ class AuthControllerTest {
 
     @Test
     void login_fails_withWrongPassword_returns401_withGenericEnvelope() throws Exception {
-        when(jdbc.queryForList(anyString(), eq("admin"))).thenReturn(List.of(
-            Map.of(
-                "id", 1L,
-                "username", "admin",
-                "role", "SYS_ADMIN",
-                "password_hash", TEST_HASH,
-                "must_change_password", false
-            )
-        ));
+        when(userRepository.findByUsername("admin")).thenReturn(
+            Optional.of(testUser(ADMIN_ID, "admin", "SYS_ADMIN", TEST_HASH, false)));
         when(encoder.matches("wrong-password", TEST_HASH)).thenReturn(false);
 
         mvc.perform(post("/api/v1/auth/login")
@@ -135,7 +141,7 @@ class AuthControllerTest {
     @Test
     void login_fails_withUnknownUser_returns401_withSameEnvelope() throws Exception {
         // Empty result set — user doesn't exist (or is soft-deleted).
-        when(jdbc.queryForList(anyString(), eq("nobody"))).thenReturn(List.of());
+        when(userRepository.findByUsername("nobody")).thenReturn(Optional.empty());
 
         mvc.perform(post("/api/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -158,7 +164,7 @@ class AuthControllerTest {
         // Soft-deleted users have deleted_at IS NOT NULL, so the
         // query filter excludes them. The controller's response
         // is the same 401 envelope as a never-existed user.
-        when(jdbc.queryForList(anyString(), eq("soft-deleted"))).thenReturn(List.of());
+        when(userRepository.findByUsername("soft-deleted")).thenReturn(Optional.empty());
 
         mvc.perform(post("/api/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -176,9 +182,9 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
             .andExpect(jsonPath("$.details.username").exists());
 
-        // The JdbcTemplate must not be touched on a validation
+        // The UserRepository must not be touched on a validation
         // failure — bean validation runs first.
-        verify(jdbc, never()).queryForList(anyString(), any(Object[].class));
+        verify(userRepository, never()).findByUsername(anyString());
     }
 
     @Test
@@ -190,7 +196,7 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
             .andExpect(jsonPath("$.details.password").exists());
 
-        verify(jdbc, never()).queryForList(anyString(), any(Object[].class));
+        verify(userRepository, never()).findByUsername(anyString());
     }
 
     @Test
@@ -210,24 +216,17 @@ class AuthControllerTest {
     @Test
     void changePassword_succeeds_flipsMustChangePasswordToFalse() throws Exception {
         // User is currently in the "must change" state.
-        when(jdbc.queryForList(anyString(), eq("admin"))).thenReturn(List.of(
-            Map.of(
-                "id", 1L,
-                "username", "admin",
-                "role", "SYS_ADMIN",
-                "password_hash", TEST_HASH
-            )
-        ));
+        when(userRepository.findByUsername("admin")).thenReturn(
+            Optional.of(testUser(ADMIN_ID, "admin", "SYS_ADMIN", TEST_HASH, true)));
         when(encoder.matches(TEST_PASSWORD, TEST_HASH)).thenReturn(true);
         when(encoder.encode(NEW_PASSWORD)).thenReturn("new-bcrypt-hash");
-        when(jdbc.update(anyString(), any(), any(), any())).thenReturn(1);
 
         mvc.perform(post("/api/v1/auth/change-password")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(
                     new ChangePasswordRequest("admin", TEST_PASSWORD, NEW_PASSWORD))))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.id").value(1))
+            .andExpect(jsonPath("$.id").value(ADMIN_ID.toString()))
             .andExpect(jsonPath("$.username").value("admin"))
             .andExpect(jsonPath("$.role").value("SYS_ADMIN"))
             .andExpect(jsonPath("$.mustChangePassword").value(false));
@@ -237,31 +236,17 @@ class AuthControllerTest {
         // care about is the cleartext input).
         verify(encoder, times(1)).encode(NEW_PASSWORD);
 
-        // The SQL update must bind the new hash + the user id. The
-        // cleartext password is never bound as a SQL parameter.
-        ArgumentCaptor<String> hashCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<Object> tsCaptor = ArgumentCaptor.forClass(Object.class);
-        ArgumentCaptor<Long> idCaptor = ArgumentCaptor.forClass(Long.class);
-        verify(jdbc).update(
-            anyString(),
-            hashCaptor.capture(),
-            tsCaptor.capture(),
-            idCaptor.capture()
-        );
-        assertThat(hashCaptor.getValue()).isEqualTo("new-bcrypt-hash");
-        assertThat(idCaptor.getValue()).isEqualTo(1L);
+        // The repository save must capture the updated user with new hash and mustChangePassword=false
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertThat(saved.getValue().getPasswordHash()).isEqualTo("new-bcrypt-hash");
+        assertThat(saved.getValue().isMustChangePassword()).isFalse();
     }
 
     @Test
     void changePassword_wrongOldPassword_returns401() throws Exception {
-        when(jdbc.queryForList(anyString(), eq("admin"))).thenReturn(List.of(
-            Map.of(
-                "id", 1L,
-                "username", "admin",
-                "role", "SYS_ADMIN",
-                "password_hash", TEST_HASH
-            )
-        ));
+        when(userRepository.findByUsername("admin")).thenReturn(
+            Optional.of(testUser(ADMIN_ID, "admin", "SYS_ADMIN", TEST_HASH, true)));
         when(encoder.matches("not-the-old-password", TEST_HASH)).thenReturn(false);
 
         mvc.perform(post("/api/v1/auth/change-password")
@@ -271,14 +256,14 @@ class AuthControllerTest {
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
 
-        // No UPDATE must have run — wrong old password is a hard
+        // No save must have run — wrong old password is a hard
         // reject.
-        verify(jdbc, never()).update(anyString(), any(), any(), any());
+        verify(userRepository, never()).save(any());
     }
 
     @Test
     void changePassword_unknownUser_returns401_withSameEnvelope() throws Exception {
-        when(jdbc.queryForList(anyString(), eq("nobody"))).thenReturn(List.of());
+        when(userRepository.findByUsername("nobody")).thenReturn(Optional.empty());
 
         mvc.perform(post("/api/v1/auth/change-password")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -291,11 +276,12 @@ class AuthControllerTest {
         // be called even on "no such user" — same shape as login.
         verify(encoder, times(1)).matches(eq(TEST_PASSWORD), anyString());
         verify(encoder, never()).matches(eq(TEST_PASSWORD), eq(TEST_HASH));
+        verify(userRepository, never()).save(any());
     }
 
     @Test
     void changePassword_softDeletedUser_treatedAsUnknown() throws Exception {
-        when(jdbc.queryForList(anyString(), eq("soft-deleted"))).thenReturn(List.of());
+        when(userRepository.findByUsername("soft-deleted")).thenReturn(Optional.empty());
 
         mvc.perform(post("/api/v1/auth/change-password")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -315,21 +301,15 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
             .andExpect(jsonPath("$.details.newPassword").exists());
 
-        verify(jdbc, never()).queryForList(anyString(), any(Object[].class));
+        verify(userRepository, never()).findByUsername(anyString());
     }
 
     @Test
     void changePassword_sameAsOld_returns400_validationFailed() throws Exception {
         // 12+ characters to pass length validation, but equal to
         // the old password.
-        when(jdbc.queryForList(anyString(), eq("admin"))).thenReturn(List.of(
-            Map.of(
-                "id", 1L,
-                "username", "admin",
-                "role", "SYS_ADMIN",
-                "password_hash", TEST_HASH
-            )
-        ));
+        when(userRepository.findByUsername("admin")).thenReturn(
+            Optional.of(testUser(ADMIN_ID, "admin", "SYS_ADMIN", TEST_HASH, true)));
         when(encoder.matches(TEST_PASSWORD, TEST_HASH)).thenReturn(true);
 
         mvc.perform(post("/api/v1/auth/change-password")
@@ -341,8 +321,8 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.detail").value(
                 org.hamcrest.Matchers.containsString("must differ")));
 
-        // No UPDATE was issued for a same-as-old rejection.
-        verify(jdbc, never()).update(anyString(), any(), any(), any());
+        // No save was issued for a same-as-old rejection.
+        verify(userRepository, never()).save(any());
     }
 
     @Test
@@ -354,7 +334,7 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
             .andExpect(jsonPath("$.details.oldPassword").exists());
 
-        verify(jdbc, never()).queryForList(anyString(), any(Object[].class));
+        verify(userRepository, never()).findByUsername(anyString());
     }
 
     // -----------------------------------------------------------------
@@ -376,16 +356,11 @@ class AuthControllerTest {
     @Test
     void me_returnsUserAndAssignedApplicationIds() throws Exception {
         setAuthenticatedUser("admin");
-        when(jdbc.queryForList(anyString(), eq("admin"))).thenReturn(List.of(
-            Map.of(
-                "id", 1L,
-                "role", "SYS_ADMIN",
-                "must_change_password", false
-            )
-        ));
+        when(userRepository.findByUsername("admin")).thenReturn(
+            Optional.of(testUser(ADMIN_ID, "admin", "SYS_ADMIN", TEST_HASH, false)));
         // The assignment query uses a different SQL form (no
         // username — uses user_id). Stub it explicitly.
-        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(
+        when(jdbc.queryForList(anyString(), eq(ADMIN_ID))).thenReturn(List.of(
             Map.of("application_id", 1L),
             Map.of("application_id", 2L),
             Map.of("application_id", 5L)
@@ -393,7 +368,7 @@ class AuthControllerTest {
 
         mvc.perform(get("/api/v1/auth/me"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.id").value(1))
+            .andExpect(jsonPath("$.id").value(ADMIN_ID.toString()))
             .andExpect(jsonPath("$.username").value("admin"))
             .andExpect(jsonPath("$.role").value("SYS_ADMIN"))
             .andExpect(jsonPath("$.mustChangePassword").value(false))
@@ -414,7 +389,7 @@ class AuthControllerTest {
         // The DB must not be touched on an unauthenticated /me
         // — the controller rejects at the principal check, before
         // any query runs.
-        verify(jdbc, never()).queryForList(anyString(), any(Object[].class));
+        verify(userRepository, never()).findByUsername(anyString());
     }
 
     @Test
@@ -424,7 +399,7 @@ class AuthControllerTest {
         // SELECT returns an empty result. The controller must
         // treat this as "no valid session" — same envelope as no
         // auth at all.
-        when(jdbc.queryForList(anyString(), eq("ghost"))).thenReturn(List.of());
+        when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
 
         mvc.perform(get("/api/v1/auth/me"))
             .andExpect(status().isUnauthorized())
@@ -436,18 +411,13 @@ class AuthControllerTest {
         // A user with zero assignments is valid — they just see an
         // empty list. The endpoint must not 500 or omit the field.
         setAuthenticatedUser("alice");
-        when(jdbc.queryForList(anyString(), eq("alice"))).thenReturn(List.of(
-            Map.of(
-                "id", 2L,
-                "role", "USER",
-                "must_change_password", true
-            )
-        ));
-        when(jdbc.queryForList(anyString(), eq(2L))).thenReturn(List.of());
+        when(userRepository.findByUsername("alice")).thenReturn(
+            Optional.of(testUser(ALICE_ID, "alice", "USER", TEST_HASH, true)));
+        when(jdbc.queryForList(anyString(), eq(ALICE_ID))).thenReturn(List.of());
 
         mvc.perform(get("/api/v1/auth/me"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.id").value(2))
+            .andExpect(jsonPath("$.id").value(ALICE_ID.toString()))
             .andExpect(jsonPath("$.role").value("USER"))
             .andExpect(jsonPath("$.mustChangePassword").value(true))
             .andExpect(jsonPath("$.assignedApplicationIds").isArray())

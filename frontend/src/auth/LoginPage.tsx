@@ -22,6 +22,7 @@ interface MeResponse extends LoginResponse {
 export function LoginPage(): JSX.Element {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { setUser, setStatus } = useAuth();
@@ -40,7 +41,7 @@ export function LoginPage(): JSX.Element {
     try {
       const loginResult = await apiFetch<LoginResponse>(API.AUTH.LOGIN, {
         method: 'POST',
-        body: { username: username.trim(), password },
+        body: { username: username.trim(), password, rememberMe },
         skipAuthRedirect: true,
       });
 
@@ -107,6 +108,17 @@ export function LoginPage(): JSX.Element {
               className="mt-1 block w-full rounded-xl border border-slate-200 bg-white shadow-sm px-3 py-2 text-sm text-slate-900 transition-theme placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gh-border dark:bg-gh-inset dark:text-gh-fg"
             />
           </div>
+
+          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-gh-fg">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              disabled={submitting}
+              className="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500"
+            />
+            Remember me
+          </label>
 
           {error && <Alert>{error}</Alert>}
 

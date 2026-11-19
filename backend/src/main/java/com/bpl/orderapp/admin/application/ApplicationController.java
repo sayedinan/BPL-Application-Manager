@@ -2,6 +2,7 @@ package com.bpl.orderapp.admin.application;
 
 import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.common.IdempotencyService;
+import com.bpl.orderapp.admin.common.NotFoundException;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
 import com.bpl.orderapp.admin.security.AccessGuard;
@@ -9,6 +10,7 @@ import com.bpl.orderapp.admin.security.Action;
 import com.bpl.orderapp.admin.ssh.SshConnection;
 import com.bpl.orderapp.admin.status.StatusConfirmationTimeoutException;
 import com.bpl.orderapp.admin.status.StatusPollingOrchestrator;
+import com.bpl.orderapp.admin.user.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -49,13 +51,16 @@ public class ApplicationController {
     private final StatusPollingOrchestrator statusPollingOrchestrator;
     private final java.util.List<com.bpl.orderapp.admin.notification.Notifier> notifiers;
     private final AccessGuard accessGuard;
+    private final UserRepository userRepository;
+    private final ApplicationRepository applicationRepository;
 
     public ApplicationController(JdbcTemplate jdbc, SshCredentialCipher cipher,
             IdempotencyService idempotencyService, SshConnection sshConnection,
             AuditWriter auditWriter, LogPollingOrchestrator logPollingOrchestrator,
             StatusPollingOrchestrator statusPollingOrchestrator,
             java.util.List<com.bpl.orderapp.admin.notification.Notifier> notifiers,
-            AccessGuard accessGuard) {
+            AccessGuard accessGuard, UserRepository userRepository,
+            ApplicationRepository applicationRepository) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.idempotencyService = idempotencyService;
@@ -65,6 +70,8 @@ public class ApplicationController {
         this.statusPollingOrchestrator = statusPollingOrchestrator;
         this.notifiers = notifiers;
         this.accessGuard = accessGuard;
+        this.userRepository = userRepository;
+        this.applicationRepository = applicationRepository;
     }
 
     @GetMapping
@@ -75,13 +82,10 @@ public class ApplicationController {
             throw new com.bpl.orderapp.admin.common.InvalidCredentialsException();
         }
         String username = auth.getPrincipal().toString();
-        List<Map<String, Object>> userRows = jdbc.queryForList(
-            "SELECT id, role FROM users WHERE username = ? AND deleted_at IS NULL", username);
-        if (userRows.isEmpty()) {
-            throw new com.bpl.orderapp.admin.common.InvalidCredentialsException();
-        }
-        java.util.UUID userId = (java.util.UUID) userRows.get(0).get("id");
-        String role = (String) userRows.get(0).get("role");
+        com.bpl.orderapp.admin.user.User user = userRepository.findByUsername(username)
+            .orElseThrow(com.bpl.orderapp.admin.common.InvalidCredentialsException::new);
+        java.util.UUID userId = user.getId();
+        String role = user.getRole();
 
         // online/streak_started_at come from application_status_streak
         // (STATUS-REDESIGN.md §4) via LEFT JOIN — a just-created
@@ -130,28 +134,25 @@ public class ApplicationController {
     @GetMapping("/{id}")
     public ResponseEntity<Map<String, Object>> getApplication(@PathVariable Long id) {
         accessGuard.require(Action.ACCESS_APPLICATION);
-        Map<String, Object> app = jdbc.queryForMap(
-            "SELECT id, name, server_ip, ssh_username, ssh_host_key_fingerprint, start_script, stop_script, log_script, " +
-            "email_start_message, email_stop_message, email_external_online_message, email_external_offline_message, " +
-            "sms_start_message, sms_stop_message, sms_external_online_message, sms_external_offline_message FROM applications WHERE id = ?",            id
-        );
+        Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("id", ((Number) app.get("id")).longValue());
-        body.put("name", app.get("name"));
-        body.put("serverIp", app.get("server_ip").toString());
-        body.put("sshUsername", app.get("ssh_username"));
-        body.put("sshHostKeyFingerprint", app.get("ssh_host_key_fingerprint"));
-        body.put("startScript", app.get("start_script"));
-        body.put("emailStartMessage", app.get("email_start_message"));
-        body.put("emailStopMessage", app.get("email_stop_message"));
-        body.put("emailExternalOnlineMessage", app.get("email_external_online_message"));
-        body.put("emailExternalOfflineMessage", app.get("email_external_offline_message"));
-        body.put("smsStartMessage", app.get("sms_start_message"));
-        body.put("smsStopMessage", app.get("sms_stop_message"));
-        body.put("smsExternalOnlineMessage", app.get("sms_external_online_message"));
-        body.put("smsExternalOfflineMessage", app.get("sms_external_offline_message"));
-        body.put("stopScript", app.get("stop_script"));
-        body.put("logScript", app.get("log_script"));
+        body.put("id", app.getId());
+        body.put("name", app.getName());
+        // getHostAddress(), not toString(): InetAddress.toString() adds a leading "/".
+        body.put("serverIp", app.getServerIp().getHostAddress());
+        body.put("sshUsername", app.getSshUsername());
+        body.put("sshHostKeyFingerprint", app.getSshHostKeyFingerprint());
+        body.put("startScript", app.getStartScript());
+        body.put("emailStartMessage", app.getEmailStartMessage());
+        body.put("emailStopMessage", app.getEmailStopMessage());
+        body.put("emailExternalOnlineMessage", app.getEmailExternalOnlineMessage());
+        body.put("emailExternalOfflineMessage", app.getEmailExternalOfflineMessage());
+        body.put("smsStartMessage", app.getSmsStartMessage());
+        body.put("smsStopMessage", app.getSmsStopMessage());
+        body.put("smsExternalOnlineMessage", app.getSmsExternalOnlineMessage());
+        body.put("smsExternalOfflineMessage", app.getSmsExternalOfflineMessage());
+        body.put("stopScript", app.getStopScript());
+        body.put("logScript", app.getLogScript());
         body.put("online", statusPollingOrchestrator.isOnline(id));
         return ResponseEntity.ok(body);
     }
@@ -159,8 +160,8 @@ public class ApplicationController {
     @GetMapping("/{id}/stats")
     public ResponseEntity<Map<String, Object>> getStats(@PathVariable Long id) {
         accessGuard.requireApplication(Action.LIST_APPLICATIONS, id);
-        java.sql.Timestamp createdAt = jdbc.queryForObject(
-            "SELECT created_at FROM applications WHERE id = ?", java.sql.Timestamp.class, id);
+        java.sql.Timestamp createdAt = java.sql.Timestamp.from(
+            applicationRepository.findCreatedAtById(id).orElseThrow(NotFoundException::new));
 
         // Walk every recorded flip chronologically and sum the duration
         // spent in each state. A brand-new app with zero transitions yet
@@ -261,9 +262,9 @@ public class ApplicationController {
         accessGuard.require(Action.CREATE_APPLICATION);
         String name = (String) req.get("name");
         String serverIp = (String) req.get("serverIp");
-        if (serverIp == null || !serverIp.matches("^(\\d{1,3}\\.){3}\\d{1,3}$")) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.BAD_REQUEST, "serverIp must be a valid IPv4 address");
+        java.net.InetAddress serverAddress = IpAddresses.parseIpv4(serverIp);
+        if (name != null && applicationRepository.existsByNameIgnoreCase(name)) {
+            throw new com.bpl.orderapp.admin.common.DuplicateNameException(name);
         }
         String sshUsername = (String) req.get("sshUsername");
         String sshPassword = (String) req.get("sshPassword");
@@ -287,16 +288,24 @@ public class ApplicationController {
             validator.validate(logScript);
         } catch (Exception e) { /* fail-open per §12.3, unchanged */ }
 
-        Long newId = jdbc.queryForObject(
-            "INSERT INTO applications (name, server_ip, ssh_username, ssh_password_enc, ssh_host_key_fingerprint, start_script, stop_script, log_script, " +
-            "email_start_message, email_stop_message, email_external_online_message, email_external_offline_message, " +
-            "sms_start_message, sms_stop_message, sms_external_online_message, sms_external_offline_message) " +
-                "VALUES (?, ?::inet, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
-            Long.class,
-            name, serverIp, sshUsername, encPassword, (String) req.get("sshHostKeyFingerprint"),
-            startScript, stopScript, logScript,
-            emailStartMessage, emailStopMessage, emailExternalOnlineMessage, emailExternalOfflineMessage,
-            smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage);
+        Application newApp = new Application();
+        newApp.setName(name);
+        newApp.setServerIp(serverAddress);
+        newApp.setSshUsername(sshUsername);
+        newApp.setSshPasswordEnc(encPassword);
+        newApp.setSshHostKeyFingerprint((String) req.get("sshHostKeyFingerprint"));
+        newApp.setStartScript(startScript);
+        newApp.setStopScript(stopScript);
+        newApp.setLogScript(logScript);
+        newApp.setEmailStartMessage(emailStartMessage);
+        newApp.setEmailStopMessage(emailStopMessage);
+        newApp.setEmailExternalOnlineMessage(emailExternalOnlineMessage);
+        newApp.setEmailExternalOfflineMessage(emailExternalOfflineMessage);
+        newApp.setSmsStartMessage(smsStartMessage);
+        newApp.setSmsStopMessage(smsStopMessage);
+        newApp.setSmsExternalOnlineMessage(smsExternalOnlineMessage);
+        newApp.setSmsExternalOfflineMessage(smsExternalOfflineMessage);
+        Long newId = applicationRepository.save(newApp).getId();
 
         // Immediate first reading (STATUS-REDESIGN.md §4) rather than
         // sitting offline until the next scheduled tick.
@@ -320,26 +329,15 @@ public class ApplicationController {
             @RequestParam java.util.UUID userId, HttpServletRequest httpRequest) {
         accessGuard.requireApplication(Action.CONTROL_APPLICATION, id);
         requireHealthMonitoring(id);
-        try {
-            idempotencyService.checkAndStore(idempotencyKey != null ? idempotencyKey : "", userId, id);
-        } catch (RuntimeException e) {
-            if (e.getMessage() != null && e.getMessage().contains("IDEMPOTENCY_CONFLICT")) {
-                Map<String, Object> conflictBody = new HashMap<>();
-                conflictBody.put("code", "IDEMPOTENCY_CONFLICT");
-                return ResponseEntity.status(409).body(conflictBody);
-            }
-            throw e;
-        }
+        idempotencyService.checkAndStore(idempotencyKey, userId, id);
 
-        Map<String, Object> app = jdbc.queryForMap(
-            "SELECT server_ip, ssh_username, ssh_password_enc, ssh_host_key_fingerprint, start_script FROM applications WHERE id = ?",
-            id
-        );
-        String host = app.get("server_ip").toString();
-        String user = (String) app.get("ssh_username");
-        String encPass = (String) app.get("ssh_password_enc");
-        String fingerprint = (String) app.get("ssh_host_key_fingerprint");
-        String startScript = (String) app.get("start_script");
+        Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
+        // getHostAddress(), not toString(): toString() would give "/10.0.0.5" and SSH would fail.
+        String host = app.getServerIp().getHostAddress();
+        String user = app.getSshUsername();
+        String encPass = app.getSshPasswordEnc();
+        String fingerprint = app.getSshHostKeyFingerprint();
+        String startScript = app.getStartScript();
 
         try {
             var startActor = currentActor();
@@ -402,15 +400,12 @@ public class ApplicationController {
         requireHealthMonitoring(id);
         idempotencyService.checkAndStore(idempotencyKey, userId, id);
 
-        Map<String, Object> app = jdbc.queryForMap(
-            "SELECT server_ip, ssh_username, ssh_password_enc, ssh_host_key_fingerprint, stop_script FROM applications WHERE id = ?",
-            id
-        );
-        String host = app.get("server_ip").toString();
-        String user = (String) app.get("ssh_username");
-        String encPass = (String) app.get("ssh_password_enc");
-        String fingerprint = (String) app.get("ssh_host_key_fingerprint");
-        String stopScript = (String) app.get("stop_script");
+        Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
+        String host = app.getServerIp().getHostAddress();
+        String user = app.getSshUsername();
+        String encPass = app.getSshPasswordEnc();
+        String fingerprint = app.getSshHostKeyFingerprint();
+        String stopScript = app.getStopScript();
 
         try {
             var stopActor = currentActor();
@@ -478,17 +473,18 @@ public class ApplicationController {
         }
         try {
             var actor = currentActor();
-            String appName = jdbc.queryForObject(
-                "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
-            for (com.bpl.orderapp.admin.notification.Notifier notifier : notifiers) {
-                try {
-                    notifier.notifyLifecycleEvent(
-                        applicationId, appName, eventType, actor.get("username"), actor.get("role"), null);
-                } catch (Exception e) {
-                    log.warn("Notification dispatch failed ({}) for application id={}",
-                        notifier.getClass().getSimpleName(), applicationId, e);
-                }
-            }
+            applicationRepository.findNameById(applicationId)
+                .ifPresent(appName -> {
+                    for (com.bpl.orderapp.admin.notification.Notifier notifier : notifiers) {
+                        try {
+                            notifier.notifyLifecycleEvent(
+                                applicationId, appName, eventType, actor.get("username"), actor.get("role"), null);
+                        } catch (Exception e) {
+                            log.warn("Notification dispatch failed ({}) for application id={}",
+                                notifier.getClass().getSimpleName(), applicationId, e);
+                        }
+                    }
+                });
         } catch (Exception e) {
             log.warn("Notification dispatch failed for application id={}", applicationId, e);
         }
@@ -533,26 +529,36 @@ public class ApplicationController {
         String smsExternalOnlineMessage = (String) req.get("smsExternalOnlineMessage");
         String smsExternalOfflineMessage = (String) req.get("smsExternalOfflineMessage");
         rejectIfAnySmsTooLong(smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage);
+        java.net.InetAddress serverAddress = IpAddresses.parseIpv4(serverIp);
+        if (name != null && applicationRepository.existsByNameIgnoreCaseAndIdNot(name, id)) {
+            throw new com.bpl.orderapp.admin.common.DuplicateNameException(name);
+        }
+        Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
 
         String sshPassword = (String) req.get("sshPassword");
-        if (sshPassword != null && !sshPassword.isBlank()) {
-            String encPassword = cipher.encrypt(sshPassword);
-            jdbc.update(
-                "UPDATE applications SET name=?, server_ip=?::inet, ssh_username=?, ssh_password_enc=?, start_script=?, stop_script=?, log_script=?, " +
-                "email_start_message=?, email_stop_message=?, email_external_online_message=?, email_external_offline_message=?, " +
-                "sms_start_message=?, sms_stop_message=?, sms_external_online_message=?, sms_external_offline_message=?, updated_at=NOW() WHERE id=?",
-                name, serverIp, sshUsername, encPassword, startScript, stopScript, logScript,
-                emailStartMessage, emailStopMessage, emailExternalOnlineMessage, emailExternalOfflineMessage,
-                smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage, id);
-        } else {
-            jdbc.update(
-                "UPDATE applications SET name=?, server_ip=?::inet, ssh_username=?, start_script=?, stop_script=?, log_script=?, " +
-                "email_start_message=?, email_stop_message=?, email_external_online_message=?, email_external_offline_message=?, " +
-                "sms_start_message=?, sms_stop_message=?, sms_external_online_message=?, sms_external_offline_message=?, updated_at=NOW() WHERE id=?",
-                name, serverIp, sshUsername, startScript, stopScript, logScript,
-                emailStartMessage, emailStopMessage, emailExternalOnlineMessage, emailExternalOfflineMessage,
-                smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage, id);
+        app.setName(name);
+        app.setServerIp(serverAddress);
+        app.setSshUsername(sshUsername);
+        String newFingerprint = (String) req.get("sshHostKeyFingerprint");
+        if (newFingerprint != null && !newFingerprint.isBlank()) {
+            app.setSshHostKeyFingerprint(newFingerprint.trim());
         }
+        // A blank password means "keep the stored one".
+        if (sshPassword != null && !sshPassword.isBlank()) {
+            app.setSshPasswordEnc(cipher.encrypt(sshPassword));
+        }
+        app.setStartScript(startScript);
+        app.setStopScript(stopScript);
+        app.setLogScript(logScript);
+        app.setEmailStartMessage(emailStartMessage);
+        app.setEmailStopMessage(emailStopMessage);
+        app.setEmailExternalOnlineMessage(emailExternalOnlineMessage);
+        app.setEmailExternalOfflineMessage(emailExternalOfflineMessage);
+        app.setSmsStartMessage(smsStartMessage);
+        app.setSmsStopMessage(smsStopMessage);
+        app.setSmsExternalOnlineMessage(smsExternalOnlineMessage);
+        app.setSmsExternalOfflineMessage(smsExternalOfflineMessage);
+        applicationRepository.save(app);
 
         try {
             var actor = currentActor();
@@ -572,11 +578,10 @@ public class ApplicationController {
             return ResponseEntity.status(409).build();
         }
 
-        Map<String, Object> app = jdbc.queryForMap(
-            "SELECT server_ip, ssh_username, ssh_host_key_fingerprint FROM applications WHERE id = ?", id);
-        String host = app.get("server_ip").toString();
-        String user = (String) app.get("ssh_username");
-        String fingerprint = (String) app.get("ssh_host_key_fingerprint");
+        Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
+        String host = app.getServerIp().getHostAddress();
+        String user = app.getSshUsername();
+        String fingerprint = app.getSshHostKeyFingerprint();
 
         statusPollingOrchestrator.stopPolling(id);
         logPollingOrchestrator.stopPolling(id);
@@ -587,8 +592,8 @@ public class ApplicationController {
         sshConnection.closeConnection(host, user, fingerprint, "status");
         sshConnection.closeConnection(host, user, fingerprint);
 
-        String deletedName = jdbc.queryForObject("SELECT name FROM applications WHERE id = ?", String.class, id);
-        jdbc.update("DELETE FROM applications WHERE id = ?", id);
+        String deletedName = app.getName();
+        applicationRepository.deleteById(id);
 
         try {
             var actor = currentActor();
@@ -644,10 +649,7 @@ public class ApplicationController {
     }
 
     private Map<String, String> currentActor() {
-        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        String username = auth.getName();
-        String role = jdbc.queryForObject(
-            "SELECT role FROM users WHERE username = ? AND deleted_at IS NULL", String.class, username);
-        return Map.of("username", username, "role", role);
+        AccessGuard.Caller caller = accessGuard.currentCaller();
+        return Map.of("username", caller.username(), "role", caller.role().name());
     }
 }

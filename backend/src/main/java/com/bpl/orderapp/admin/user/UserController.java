@@ -1,6 +1,7 @@
 package com.bpl.orderapp.admin.user;
 
 import com.bpl.orderapp.admin.audit.AuditWriter;
+import com.bpl.orderapp.admin.application.ApplicationRepository;
 import com.bpl.orderapp.admin.common.NotFoundException;
 import com.bpl.orderapp.admin.user.dto.ResetPasswordResponse;
 import com.bpl.orderapp.admin.user.dto.UpdateUserRequest;
@@ -23,7 +24,6 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.SecureRandom;
-import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -96,29 +96,43 @@ public class UserController {
     private final JdbcTemplate jdbc;
     private final AuditWriter auditWriter;
     private final BCryptPasswordEncoder encoder;
+    private final UserRepository userRepository;
+    private final ApplicationRepository applicationRepository;
 
-    public UserController(JdbcTemplate jdbc, BCryptPasswordEncoder encoder, AuditWriter auditWriter) {
+    public UserController(JdbcTemplate jdbc, BCryptPasswordEncoder encoder, AuditWriter auditWriter,
+                          UserRepository userRepository, ApplicationRepository applicationRepository) {
         this.jdbc = jdbc;
         this.encoder = encoder;
         this.auditWriter = auditWriter;
+        this.userRepository = userRepository;
+        this.applicationRepository = applicationRepository;
     }
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
     public ResponseEntity<List<Map<String, Object>>> listUsers() {
-        List<Map<String, Object>> users = jdbc.queryForList(
-            "SELECT id, username, full_name, role, email, phone_number, must_change_password, created_at FROM users WHERE deleted_at IS NULL ORDER BY username"
-        );
-        for (Map<String,Object> row : users) {
-            java.util.UUID userRowId = (java.util.UUID) row.get("id");
+        List<User> found = userRepository.findAll(org.springframework.data.domain.Sort.by("username"));
+        List<Map<String, Object>> users = new java.util.ArrayList<>();
+        for (User u : found) {
+            // Same keys as the old SELECT so the frontend JSON doesn't change.
+            Map<String, Object> row = new java.util.LinkedHashMap<>();
+            row.put("id", u.getId());
+            row.put("username", u.getUsername());
+            row.put("full_name", u.getFullName());
+            row.put("role", u.getRole());
+            row.put("email", u.getEmail());
+            row.put("phone_number", u.getPhoneNumber());
+            row.put("must_change_password", u.isMustChangePassword());
+            row.put("created_at", u.getCreatedAt());
             java.util.List<Long> assigned = jdbc.queryForList(
                 "SELECT application_id FROM user_application_assignments WHERE user_id = ?",
-                Long.class, userRowId);
+                Long.class, u.getId());
             row.put("assignedApplicationIds", assigned);
             Integer liveConnections = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM websocket_connections WHERE username = ?",
-                Integer.class, row.get("username"));
+                Integer.class, u.getUsername());
             row.put("online", liveConnections != null && liveConnections > 0);
+            users.add(row);
         }
         return ResponseEntity.ok(users);
     }
@@ -144,9 +158,7 @@ public class UserController {
         if (!"USER".equals(role) && !callerIsSysAdmin) {
             throw new com.bpl.orderapp.admin.common.AdminCeilingException();
         }
-        java.util.List<Map<String, Object>> existing = jdbc.queryForList(
-            "SELECT id FROM users WHERE username = ? AND deleted_at IS NULL", username);
-        if (!existing.isEmpty()) {
+        if (userRepository.existsByUsername(username)) {
             throw new com.bpl.orderapp.admin.common.DuplicateNameException(username);
         }
         java.security.SecureRandom rng = new java.security.SecureRandom();
@@ -154,18 +166,17 @@ public class UserController {
         rng.nextBytes(bytes);
         String cleartext = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         String hash = encoder.encode(cleartext);
-        java.time.Instant now = java.time.Instant.now();
-        // Get the new row's id directly from the INSERT via RETURNING,
-        // rather than a follow-up SELECT by username. A follow-up
-        // SELECT WHERE username = ? (with no deleted_at filter) can
-        // match more than one row once a username has been deleted
-        // and recreated — soft-deleted rows are kept forever by
-        // design — which throws IncorrectResultSizeDataAccessException
-        // and previously surfaced as an uncaught 500 AFTER the insert
-        // had already committed, silently losing the one-time password.
-        java.util.UUID newId = jdbc.queryForObject(
-            "INSERT INTO users (username, full_name, password_hash, role, email, phone_number, must_change_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, true, ?, ?) RETURNING id",
-            java.util.UUID.class, username, fullName.trim(), hash, role, email, phoneNumber, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
+        // save() generates the UUID in Java and sets created_at/updated_at
+        // via the entity's @PrePersist hook, so no RETURNING is needed.
+        User newUser = new User();
+        newUser.setUsername(username);
+        newUser.setFullName(fullName.trim());
+        newUser.setPasswordHash(hash);
+        newUser.setRole(role);
+        newUser.setEmail(email);
+        newUser.setPhoneNumber(phoneNumber);
+        newUser.setMustChangePassword(true);
+        java.util.UUID newId = userRepository.save(newUser).getId();
         // Admin/Sys.Admin see all applications regardless of
         // assignment rows (RBAC checks role first everywhere else in
         // the app) — so assignments are only meaningful, and only
@@ -204,27 +215,18 @@ public class UserController {
         var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         boolean callerIsSysAdmin = auth.getAuthorities().stream()
             .anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN"));
-        List<Map<String, Object>> callerRows = jdbc.queryForList(
-            "SELECT id FROM users WHERE username = ? AND deleted_at IS NULL", auth.getName());
-        if (callerRows.isEmpty()) {
-            throw new com.bpl.orderapp.admin.common.InvalidCredentialsException();
-        }
-        java.util.UUID callerId = (java.util.UUID) callerRows.get(0).get("id");
+        User caller = userRepository.findByUsername(auth.getName())
+            .orElseThrow(com.bpl.orderapp.admin.common.InvalidCredentialsException::new);
+        java.util.UUID callerId = caller.getId();
         com.bpl.orderapp.admin.accountDeletion.AccountDeletionGuard.assertCanDelete(callerId, id);
-        List<Map<String, Object>> targetRows = jdbc.queryForList(
-            "SELECT role FROM users WHERE id = ? AND deleted_at IS NULL", id);
-        if (targetRows.isEmpty()) {
-            throw new NotFoundException();
-        }
-        String targetRole = (String) targetRows.get(0).get("role");
+        User target = userRepository.findById(id).orElseThrow(NotFoundException::new);
+        String targetRole = target.getRole();
         if ("SYS_ADMIN".equals(targetRole) && !callerIsSysAdmin) {
             throw new com.bpl.orderapp.admin.common.AdminCeilingException();
         }
-        List<Map<String, Object>> deletedUserRows = jdbc.queryForList(
-            "SELECT username FROM users WHERE id = ?", id);
-        String deletedUsername = deletedUserRows.isEmpty() ? null : (String) deletedUserRows.get(0).get("username");
+        String deletedUsername = target.getUsername();
 
-        jdbc.update("DELETE FROM users WHERE id = ?", id);
+        userRepository.deleteById(id);
         if (deletedUsername != null) {
             // Kill live sessions so a deleted user's cookie can't authenticate as a
             // new user later created with the same username.
@@ -254,27 +256,18 @@ public class UserController {
         String resetActorRole = resetAuth.getAuthorities().stream()
             .anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN")) ? "SYS_ADMIN" : "ADMIN";
 
-        // 1. Look up the user. Soft-deleted users are filtered
-        //    out — a Sys.Admin resetting a soft-deleted user's
-        //    password would resurrect them by accident, and the
-        //    §12.2 "deliver out-of-band" step would fail because
-        //    the user can't log in.
-        List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT id, username, role FROM users WHERE id = ? AND deleted_at IS NULL",
-            id
-        );
-        if (rows.isEmpty()) {
-            log.info("Reset-password rejected: user id={} not found or soft-deleted", id);
-            throw new NotFoundException();
-        }
-
-        String username = (String) rows.get(0).get("username");
+        // 1. Look up the user through the repository.
+        User user = userRepository.findById(id).orElseThrow(() -> {
+            log.info("Reset-password rejected: user id={} not found", id);
+            return new NotFoundException();
+        });
+        String username = user.getUsername();
 
         // Admin ceiling (SPEC §1): an ADMIN must not be able to reset a
         // SYS_ADMIN's password, since they would receive the temporary
         // password and could sign in as that account. Same rule as the
         // delete and update endpoints.
-        if ("SYS_ADMIN".equals(rows.get(0).get("role")) && !"SYS_ADMIN".equals(resetActorRole)) {
+        if ("SYS_ADMIN".equals(user.getRole()) && !"SYS_ADMIN".equals(resetActorRole)) {
             throw new com.bpl.orderapp.admin.common.AdminCeilingException();
         }
 
@@ -294,21 +287,14 @@ public class UserController {
         //    must_change_password=true. Atomic; either both apply
         //    or neither does.
         String newHash = encoder.encode(cleartext);
-        Instant now = Instant.now();
+        user.setPasswordHash(newHash);
+        user.setMustChangePassword(true);
+        userRepository.save(user);
 
-        int updated = jdbc.update(
-            "UPDATE users SET password_hash = ?, must_change_password = true, "
-                + "updated_at = ? WHERE id = ?",
-            newHash, java.sql.Timestamp.from(now), id
-        );
-        if (updated != 1) {
-            // Defensive: a concurrent delete between SELECT and
-            // UPDATE would land here. Should be impossible given
-            // the SELECT filter, but make the impossible visible
-            // rather than silently no-op.
-            throw new IllegalStateException(
-                "Expected to update exactly 1 user row, got " + updated);
-        }
+        // Both columns still change in one UPDATE, so the "both apply or neither"
+        // rule holds. updated_at comes from @PreUpdate. The updated != 1 check is
+        // gone because save() has no row count, and the 404 above already covers
+        // a missing user.
 
         // 4. Log WITHOUT the cleartext. The username is fine; the
         //    temp password is not.
@@ -341,11 +327,12 @@ public class UserController {
         // Snapshot BEFORE state so the audit row can show a diff,
         // not just the new values. Must happen before either the
         // role UPDATE or the assignment DELETE below.
-        String oldRole = jdbc.queryForObject("SELECT role FROM users WHERE id = ?", String.class, id);
-        String oldEmail = jdbc.queryForObject("SELECT email FROM users WHERE id = ?", String.class, id);
-        String oldPhoneNumber = jdbc.queryForObject("SELECT phone_number FROM users WHERE id = ?", String.class, id);
-        String oldUsername = jdbc.queryForObject("SELECT username FROM users WHERE id = ?", String.class, id);
-        String oldFullName = jdbc.queryForObject("SELECT full_name FROM users WHERE id = ?", String.class, id);
+        User user = userRepository.findById(id).orElseThrow(NotFoundException::new);
+        String oldRole = user.getRole();
+        String oldEmail = user.getEmail();
+        String oldPhoneNumber = user.getPhoneNumber();
+        String oldUsername = user.getUsername();
+        String oldFullName = user.getFullName();
         java.util.List<Long> oldAssignedIds = jdbc.queryForList(
             "SELECT application_id FROM user_application_assignments WHERE user_id = ?", Long.class, id);
 
@@ -366,10 +353,7 @@ public class UserController {
                 throw new org.springframework.web.server.ResponseStatusException(
                     org.springframework.http.HttpStatus.BAD_REQUEST, "username cannot be blank");
             }
-            java.util.List<Map<String, Object>> existing = jdbc.queryForList(
-                "SELECT id FROM users WHERE username = ? AND deleted_at IS NULL AND id != ?",
-                req.username(), id);
-            if (!existing.isEmpty()) {
+            if (userRepository.existsByUsernameAndIdNot(req.username(), id)) {
                 throw new com.bpl.orderapp.admin.common.DuplicateNameException(req.username());
             }
         }
@@ -402,8 +386,7 @@ public class UserController {
             if (!"USER".equals(req.role()) && !callerIsSysAdmin) {
                 throw new com.bpl.orderapp.admin.common.AdminCeilingException();
             }
-            jdbc.update("UPDATE users SET role = ?, updated_at = NOW() WHERE id = ?",
-                req.role(), id);
+            user.setRole(req.role());
         }
         // Effective role after this update: either the new one being
         // set, or the existing one if role isn't being changed.
@@ -426,20 +409,18 @@ public class UserController {
             jdbc.update("DELETE FROM user_application_assignments WHERE user_id = ?", id);
         }
         if (req.phoneNumber() != null) {
-            String newPhoneNumber = req.phoneNumber().isBlank() ? null : req.phoneNumber();
-            jdbc.update("UPDATE users SET phone_number = ?, updated_at = NOW() WHERE id = ?",
-                newPhoneNumber, id);
+            user.setPhoneNumber(req.phoneNumber().isBlank() ? null : req.phoneNumber());
         }
         if (req.email() != null) {
-            jdbc.update("UPDATE users SET email = ?, updated_at = NOW() WHERE id = ?",
-                req.email(), id);
+            user.setEmail(req.email());
         }
         if (req.username() != null) {
-            jdbc.update("UPDATE users SET username = ?, updated_at = NOW() WHERE id = ?", req.username(), id);
+            user.setUsername(req.username());
         }
         if (req.fullName() != null) {
-            jdbc.update("UPDATE users SET full_name = ?, updated_at = NOW() WHERE id = ?", req.fullName().trim(), id);
+            user.setFullName(req.fullName().trim());
         }
+        userRepository.save(user);
 
         try {
             java.util.Map<String, Object> detail = new java.util.HashMap<>();
@@ -501,9 +482,7 @@ public class UserController {
     private java.util.List<String> resolveAppNames(java.util.Set<Long> ids) {
         java.util.List<String> result = new java.util.ArrayList<>();
         for (Long appId : ids) {
-            java.util.List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT name FROM applications WHERE id = ?", appId);
-            String name = rows.isEmpty() ? "unknown" : (String) rows.get(0).get("name");
+            String name = applicationRepository.findNameById(appId).orElse("unknown");
             result.add(appId + ":" + name);
         }
         return result;

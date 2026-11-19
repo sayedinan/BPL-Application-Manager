@@ -1,9 +1,8 @@
 package com.bpl.orderapp.admin.notification;
 
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.bpl.orderapp.admin.user.UserRepository;
 
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -25,78 +24,41 @@ import java.util.Set;
  * would otherwise be pulled in by both branches (not possible today
  * since a user has exactly one role, but harmless to guard against
  * if that ever changes) and keeps a stable, predictable order.
- *
- * <p>Soft-deleted users ({@code deleted_at IS NOT NULL}) are always
- * excluded — same filter every other query in this codebase uses.
  */
 public class NotificationRecipientResolver {
 
-    private final JdbcTemplate jdbc;
+    private final UserRepository userRepository;
 
-    public NotificationRecipientResolver(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    public NotificationRecipientResolver(UserRepository userRepository) {
+        this.userRepository = userRepository;
     }
 
     public Set<String> resolveForApplication(Long applicationId) {
         Set<String> recipients = new LinkedHashSet<>();
-
-        List<String> adminEmails = jdbc.queryForList(
-            "SELECT email FROM users WHERE role IN ('SYS_ADMIN','ADMIN') "
-                + "AND email IS NOT NULL AND deleted_at IS NULL",
-            String.class);
-        recipients.addAll(adminEmails);
-
-        List<String> assignedUserEmails = jdbc.queryForList(
-            "SELECT u.email FROM users u "
-                + "JOIN user_application_assignments a ON a.user_id = u.id "
-                + "WHERE a.application_id = ? AND u.role = 'USER' "
-                + "AND u.email IS NOT NULL AND u.deleted_at IS NULL",
-            String.class, applicationId);
-        recipients.addAll(assignedUserEmails);
-
+        recipients.addAll(userRepository.findAdminEmails());
+        recipients.addAll(userRepository.findAssignedUserEmails(applicationId));
         return recipients;
     }
 
     /**
      * Same recipient rule as {@link #resolveForApplication}, but
      * returns phone numbers (for {@code SmsNotificationService})
-     * instead of email addresses. A separate method rather than a
-     * shared/parameterized query — the two channels' recipient
-     * columns and null-filtering are similar enough today that a
-     * shared helper is tempting, but keeping them independent means
-     * a future divergence (e.g. SMS restricted to SYS_ADMIN only)
-     * doesn't require unwinding a shared implementation.
+     * instead of email addresses. Kept as a separate method so the
+     * two channels can diverge later without unwinding shared code.
      */
     public Set<String> resolvePhoneNumbersForApplication(Long applicationId) {
         Set<String> recipients = new LinkedHashSet<>();
-
-        List<String> adminPhoneNumbers = jdbc.queryForList(
-            "SELECT phone_number FROM users WHERE role IN ('SYS_ADMIN','ADMIN') "
-                + "AND phone_number IS NOT NULL AND deleted_at IS NULL",
-            String.class);
-        recipients.addAll(adminPhoneNumbers);
-
-        List<String> assignedUserPhoneNumbers = jdbc.queryForList(
-            "SELECT u.phone_number FROM users u "
-                + "JOIN user_application_assignments a ON a.user_id = u.id "
-                + "WHERE a.application_id = ? AND u.role = 'USER' "
-                + "AND u.phone_number IS NOT NULL AND u.deleted_at IS NULL",
-            String.class, applicationId);
-        recipients.addAll(assignedUserPhoneNumbers);
-
+        recipients.addAll(userRepository.findAdminPhoneNumbers());
+        recipients.addAll(userRepository.findAssignedUserPhoneNumbers(applicationId));
         return recipients;
     }
 
     /**
      * SYS_ADMIN/ADMIN emails only, with no application scoping — used
      * by {@link EmailNotificationService#sendAdminAlert} for
-     * operational alerts (e.g. "SMS gateway failed") that aren't tied
-     * to a specific application's assigned users.
+     * operational alerts that aren't tied to a specific application.
      */
     public Set<String> resolveAdminEmails() {
-        return new LinkedHashSet<>(jdbc.queryForList(
-            "SELECT email FROM users WHERE role IN ('SYS_ADMIN','ADMIN') "
-                + "AND email IS NOT NULL AND deleted_at IS NULL",
-            String.class));
+        return new LinkedHashSet<>(userRepository.findAdminEmails());
     }
 }

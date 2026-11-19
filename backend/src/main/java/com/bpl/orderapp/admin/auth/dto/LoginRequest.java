@@ -20,6 +20,16 @@ public record LoginRequest(
 
     @NotBlank(message = "password must not be blank")
     @Size(max = 256, message = "password must be at most 256 characters")
-    String password
+    String password,
+
+    Boolean rememberMe
 ) {
+    // Keeps existing 2-arg callers (AuthControllerTest) compiling.
+    public LoginRequest(String username, String password) {
+        this(username, password, null);
+    }
+
+    public boolean remember() {
+        return Boolean.TRUE.equals(rememberMe);
+    }
 }

@@ -1,6 +1,7 @@
 package com.bpl.orderapp.admin.maintenance;
 
 import com.bpl.orderapp.admin.audit.AuditWriter;
+import com.bpl.orderapp.admin.application.ApplicationRepository;
 import com.bpl.orderapp.admin.common.NotFoundException;
 import com.bpl.orderapp.admin.security.AccessGuard;
 import com.bpl.orderapp.admin.security.Action;
@@ -21,7 +22,6 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -36,13 +36,15 @@ public class MaintenanceController {
     private final AccessGuard accessGuard;
     private final AuditWriter auditWriter;
     private final MaintenanceService maintenanceService;
+    private final ApplicationRepository applicationRepository;
 
     public MaintenanceController(JdbcTemplate jdbc, AccessGuard accessGuard, AuditWriter auditWriter,
-            MaintenanceService maintenanceService) {
+            MaintenanceService maintenanceService, ApplicationRepository applicationRepository) {
         this.jdbc = jdbc;
         this.accessGuard = accessGuard;
         this.auditWriter = auditWriter;
         this.maintenanceService = maintenanceService;
+        this.applicationRepository = applicationRepository;
     }
 
     public record StartRequest(Instant startsAt, Instant endsAt, String note) {}
@@ -112,12 +114,8 @@ public class MaintenanceController {
     }
 
     private String applicationName(Long applicationId) {
-        List<String> names = jdbc.queryForList(
-            "SELECT name FROM applications WHERE id = ?", String.class, applicationId);
-        if (names.isEmpty()) {
-            throw new NotFoundException();
-        }
-        return names.get(0);
+        return applicationRepository.findNameById(applicationId)
+            .orElseThrow(NotFoundException::new);
     }
 
     private static String cleanNote(String raw) {

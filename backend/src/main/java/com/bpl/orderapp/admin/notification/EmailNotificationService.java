@@ -1,10 +1,11 @@
 package com.bpl.orderapp.admin.notification;
 
+import com.bpl.orderapp.admin.application.Application;
+import com.bpl.orderapp.admin.application.ApplicationRepository;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
@@ -47,14 +48,15 @@ public class EmailNotificationService implements Notifier {
     private final JavaMailSender mailSender;
     private final String fromAddress;
     private final NotificationRecipientResolver recipientResolver;
-    private final JdbcTemplate jdbc;
+    private final ApplicationRepository applicationRepository;
 
     public EmailNotificationService(JavaMailSender mailSender, String fromAddress,
-            NotificationRecipientResolver recipientResolver, JdbcTemplate jdbc) {
+            NotificationRecipientResolver recipientResolver,
+            ApplicationRepository applicationRepository) {
         this.mailSender = mailSender;
         this.fromAddress = fromAddress;
         this.recipientResolver = recipientResolver;
-        this.jdbc = jdbc;
+        this.applicationRepository = applicationRepository;
     }
 
     /**
@@ -136,18 +138,21 @@ public class EmailNotificationService implements Notifier {
     // application row can't be found for any reason — a missing
     // custom message must never block the default email from sending.
     private String fetchCustomMessage(Long applicationId, LifecycleEventType eventType) {
-        String column = switch (eventType) {
-            case STARTED_VIA_DASHBOARD -> "email_start_message";
-            case STOPPED_VIA_DASHBOARD -> "email_stop_message";
-            case EXTERNAL_ONLINE -> "email_external_online_message";
-            case EXTERNAL_OFFLINE -> "email_external_offline_message";
-        };
         try {
-            String value = jdbc.queryForObject(
-                "SELECT " + column + " FROM applications WHERE id = ?", String.class, applicationId);
+            Application app = applicationRepository.findById(applicationId).orElse(null);
+            if (app == null) {
+                return null;
+            }
+            String value = switch (eventType) {
+                case STARTED_VIA_DASHBOARD -> app.getEmailStartMessage();
+                case STOPPED_VIA_DASHBOARD -> app.getEmailStopMessage();
+                case EXTERNAL_ONLINE -> app.getEmailExternalOnlineMessage();
+                case EXTERNAL_OFFLINE -> app.getEmailExternalOfflineMessage();
+            };
             return (value == null || value.isBlank()) ? null : value;
         } catch (Exception e) {
-            log.warn("Failed to look up custom {} for application id={}: {}", column, applicationId, e.getMessage());
+            log.warn("Failed to look up custom message for application id={} event={}: {}",
+                applicationId, eventType, e.getMessage());
             return null;
         }
     }

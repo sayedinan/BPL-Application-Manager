@@ -1,7 +1,7 @@
 plugins {
     java
-    id("org.springframework.boot") version "3.3.5"
-    id("io.spring.dependency-management") version "1.1.6"
+    id("org.springframework.boot") version "3.5.7"
+    id("io.spring.dependency-management") version "1.1.7"
 }
 
 group = "com.bpl.orderapp"
@@ -9,12 +9,12 @@ version = "0.1.0-SNAPSHOT"
 
 java {
     toolchain {
-        // SPEC §10 pins Java 21. System currently has only 17 and 25
-        // available, so the build will download a 21 toolchain on the
+        // SPEC §10 pins Java 25. System currently has 25 available,
+        // so the build will download a 25 toolchain on the
         // first run (requires internet access). To skip the download
         // and use an existing JDK, override on the command line:
         //   ./gradlew -Dorg.gradle.java.installations.auto-download=false
-        languageVersion.set(JavaLanguageVersion.of(21))
+        languageVersion.set(JavaLanguageVersion.of(25))
     }
 }
 
@@ -54,7 +54,9 @@ dependencies {
     implementation("org.springframework.security:spring-security-crypto")
 
     // SSH for application start/stop/log execution (SPEC §3, §6, §7)
-    implementation("com.jcraft:jsch:0.1.55")
+    // Using maintained fork (com.github.mwiede:jsch) for modern SSH key/cipher support.
+    // Package names stay the same (com.jcraft.jsch) so no code changes needed.
+    implementation("com.github.mwiede:jsch:2.28.8")
 
     // Rate limiting (SPEC §8.6)
     implementation("com.bucket4j:bucket4j-core:8.10.1")
@@ -67,6 +69,7 @@ dependencies {
     testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.testcontainers:postgresql")
     testImplementation("org.testcontainers:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.withType<JavaCompile> {

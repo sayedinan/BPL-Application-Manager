@@ -1,11 +1,14 @@
 package com.bpl.orderapp.admin.auth;
 
+import com.bpl.orderapp.admin.user.User;
+import com.bpl.orderapp.admin.user.UserRepository;
 import com.bpl.orderapp.admin.auth.dto.ChangePasswordRequest;
 import com.bpl.orderapp.admin.auth.dto.LoginRequest;
 import com.bpl.orderapp.admin.auth.dto.LoginResponse;
 import com.bpl.orderapp.admin.auth.dto.MeResponse;
 import com.bpl.orderapp.admin.common.InvalidCredentialsException;
 import com.bpl.orderapp.admin.audit.AuditWriter;
+import com.bpl.orderapp.admin.security.SessionConfig;
 import jakarta.servlet.http.HttpSession;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -28,9 +31,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Auth endpoints (SPEC §4.3 "Auth" group).
@@ -103,22 +104,26 @@ public class AuthController {
      */
     private static final String DUMMY_BCRYPT_HASH =
         "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+    private static final int REMEMBER_ME_DAYS = 30;
 
     private final JdbcTemplate jdbc;
     private final BCryptPasswordEncoder encoder;
     private final SecurityContextRepository securityContextRepository;
     private final AuditWriter auditWriter;
+    private final UserRepository userRepository;
 
     public AuthController(
         JdbcTemplate jdbc,
         BCryptPasswordEncoder encoder,
         SecurityContextRepository securityContextRepository,
-        AuditWriter auditWriter
+        AuditWriter auditWriter,
+        UserRepository userRepository
     ) {
         this.jdbc = jdbc;
         this.encoder = encoder;
         this.securityContextRepository = securityContextRepository;
         this.auditWriter = auditWriter;
+        this.userRepository = userRepository;
     }
 
     @PostMapping("/login")
@@ -126,16 +131,8 @@ public class AuthController {
             @Valid @RequestBody LoginRequest request,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
-        // 1. Look up the user. Soft-deleted users are filtered out —
-        //    a soft-deleted user with a matching username should NOT
-        //    be able to authenticate, even if their password hash
-        //    is still in the table.
-        List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT id, username, role, password_hash, must_change_password " +
-                "FROM users " +
-                "WHERE username = ? AND deleted_at IS NULL",
-            request.username()
-        );
+        // 1. Look up the user through the repository.
+        java.util.Optional<User> found = userRepository.findByUsername(request.username());
 
         String passwordHash;
         java.util.UUID id;
@@ -143,12 +140,11 @@ public class AuthController {
         String role;
         boolean mustChangePassword;
 
-        if (rows.isEmpty()) {
-            // No such user (or soft-deleted). To avoid leaking
-            // which usernames exist, run a real bcrypt comparison
-            // against a dummy hash so the timing matches the
-            // "user exists, wrong password" path.
-            log.info("Login attempt for unknown or soft-deleted user: '{}'", request.username());
+        if (found.isEmpty()) {
+            // No such user. To avoid leaking which usernames exist,
+            // run a real bcrypt comparison against a dummy hash so the
+            // timing matches the "user exists, wrong password" path.
+            log.info("Login attempt for unknown user: '{}'", request.username());
             encoder.matches(request.password(), DUMMY_BCRYPT_HASH);
             try {
                 auditWriter.write("LOGIN", request.username(), "UNKNOWN", null, null, null,
@@ -159,12 +155,12 @@ public class AuthController {
             throw new InvalidCredentialsException();
         }
 
-        Map<String, Object> row = rows.get(0);
-        id = (java.util.UUID) row.get("id");
-        username = (String) row.get("username");
-        role = (String) row.get("role");
-        passwordHash = (String) row.get("password_hash");
-        mustChangePassword = (Boolean) row.get("must_change_password");
+        User user = found.get();
+        id = user.getId();
+        username = user.getUsername();
+        role = user.getRole();
+        passwordHash = user.getPasswordHash();
+        mustChangePassword = user.isMustChangePassword();
 
         // 2. Constant-time password check. BCryptPasswordEncoder.matches
         //    uses the underlying bcrypt constant-time compare.
@@ -204,6 +200,25 @@ public class AuthController {
         //       (HttpOnly, SameSite=Strict, Path=/, 8h TTL,
         //       Secure in prod) come from the spring.session.cookie
         //       block in application-prod.yml / application-dev.yml.
+        //    d) If "remember me" is ticked, the cookie becomes
+        //       persistent (30 days from last use) instead of a
+        //       browser-session cookie. This is driven by the
+        //       BPL_REMEMBER_ME request attribute that
+        //       DefaultCookieSerializer reads (see SessionConfig).
+
+        // Drop any pre-existing session so a fresh one (and a fresh cookie)
+        // is always issued. Also prevents session fixation.
+        HttpSession oldSession = httpRequest.getSession(false);
+        if (oldSession != null) {
+            oldSession.invalidate();
+        }
+
+        // Must be set BEFORE the session is created below: the cookie
+        // is written when the session is created.
+        if (request.remember()) {
+            httpRequest.setAttribute(SessionConfig.REMEMBER_ME_ATTR, Boolean.TRUE);
+        }
+
         UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
             username,                // principal: the username
             null,                    // credentials: not stored in the session
@@ -213,6 +228,10 @@ public class AuthController {
         context.setAuthentication(auth);
         SecurityContextHolder.setContext(context);
         securityContextRepository.saveContext(context, httpRequest, httpResponse);
+
+        if (request.remember()) {
+            httpRequest.getSession().setMaxInactiveInterval(REMEMBER_ME_DAYS * 24 * 60 * 60);
+        }
 
         log.info("Login succeeded for user '{}' (role={}); session established", username, role);
         try {
@@ -266,19 +285,11 @@ public class AuthController {
             @Valid @RequestBody ChangePasswordRequest request,
             HttpServletRequest httpRequest) {
 
-        // 1. Look up the user. Same soft-delete filter as login —
-        //    a soft-deleted user must not be able to change their
-        //    password (and they should not be able to authenticate
-        //    either, per login's filter).
-        List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT id, username, role, password_hash FROM users " +
-                "WHERE username = ? AND deleted_at IS NULL",
-            request.username()
-        );
+        // 1. Look up the user through the repository.
+        java.util.Optional<User> found = userRepository.findByUsername(request.username());
 
-        if (rows.isEmpty()) {
-            log.info("Change-password attempt for unknown or soft-deleted user: '{}'",
-                request.username());
+        if (found.isEmpty()) {
+            log.info("Change-password attempt for unknown user: '{}'", request.username());
             // Constant-time: run a real bcrypt matches against the
             // dummy hash so timing matches the "user exists, wrong
             // old password" path.
@@ -286,11 +297,11 @@ public class AuthController {
             throw new InvalidCredentialsException();
         }
 
-        Map<String, Object> row = rows.get(0);
-        java.util.UUID id = (java.util.UUID) row.get("id");
-        String username = (String) row.get("username");
-        String role = (String) row.get("role");
-        String currentHash = (String) row.get("password_hash");
+        User user = found.get();
+        java.util.UUID id = user.getId();
+        String username = user.getUsername();
+        String role = user.getRole();
+        String currentHash = user.getPasswordHash();
 
         // 2. Re-validate the current password. This is the
         //    no-session identity check; the SPA also enforces it
@@ -314,26 +325,12 @@ public class AuthController {
             );
         }
 
-        // 4. Hash the new password and update the row in one
-        //    statement. The trigger that updates `updated_at` is
-        //    not installed (V2 deliberately did not include it
-        //    per the SPEC), so we set it explicitly. The
-        //    `must_change_password` flip and the new hash are
-        //    applied atomically.
+        // 4. Hash the new password and save. updated_at is set by the
+        //    entity's @PreUpdate hook, so there is no explicit timestamp here.
         String newHash = encoder.encode(request.newPassword());
-        Instant now = Instant.now();
-
-        int updated = jdbc.update(
-            "UPDATE users SET password_hash = ?, must_change_password = false, "
-                + "updated_at = ? WHERE id = ?",
-            newHash, java.sql.Timestamp.from(now), id
-        );
-        if (updated != 1) {
-            // Defensive: should be impossible given the SELECT
-            // above, but a concurrent delete would land here.
-            throw new IllegalStateException(
-                "Expected to update exactly 1 user row, got " + updated);
-        }
+        user.setPasswordHash(newHash);
+        user.setMustChangePassword(false);
+        userRepository.save(user);
 
         log.info("Change-password succeeded for user '{}'", username);
 
@@ -407,27 +404,19 @@ public class AuthController {
         }
         String username = auth.getPrincipal().toString();
 
-        // 2. Look up the user. Same soft-delete filter as login
-        //    and change-password — a soft-deleted user with a
-        //    still-valid session is treated as "no such user",
-        //    and the SPA should re-login. (The 401 response
-        //    above will trigger that re-login.)
-        List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT id, role, must_change_password, email, phone_number FROM users " +
-                "WHERE username = ? AND deleted_at IS NULL",
-            username
-        );
-        if (rows.isEmpty()) {
-            log.info("/auth/me rejected: user '{}' not found or soft-deleted", username);
+        // 2. Look up the user through the repository.
+        java.util.Optional<User> found = userRepository.findByUsername(username);
+        if (found.isEmpty()) {
+            log.info("/auth/me rejected: user '{}' not found", username);
             throw new InvalidCredentialsException();
         }
 
-        Map<String, Object> row = rows.get(0);
-        java.util.UUID id = (java.util.UUID) row.get("id");
-        String role = (String) row.get("role");
-        boolean mustChangePassword = (Boolean) row.get("must_change_password");
-        String email = (String) row.get("email");
-        String phoneNumber = (String) row.get("phone_number");
+        User user = found.get();
+        java.util.UUID id = user.getId();
+        String role = user.getRole();
+        boolean mustChangePassword = user.isMustChangePassword();
+        String email = user.getEmail();
+        String phoneNumber = user.getPhoneNumber();
 
         // 3. Read the assigned application IDs. The join table
         //    is filtered by the same deleted_at IS NULL on the
