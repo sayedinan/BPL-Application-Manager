@@ -103,6 +103,14 @@ public class GlobalExceptionHandler {
             .body(pd);
     }
 
+    @ExceptionHandler(IdempotencyConflictException.class)
+    public ResponseEntity<ProblemDetail> handleIdempotencyConflict(IdempotencyConflictException ex) {
+        ProblemDetail pd = baseProblem(ErrorCode.IDEMPOTENCY_CONFLICT, HttpStatus.CONFLICT,
+            "This request was already submitted");
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON).body(pd);
+    }
+
     @ExceptionHandler(AccessDeniedAppException.class)
     public ResponseEntity<ProblemDetail> handleAccessDenied(AccessDeniedAppException ex) {
         ProblemDetail pd = baseProblem(

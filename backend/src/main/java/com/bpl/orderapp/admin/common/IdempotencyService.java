@@ -1,29 +1,41 @@
-
 package com.bpl.orderapp.admin.common;
 
-import org.springframework.jdbc.core.JdbcTemplate;
-
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
-@Service
+import java.time.Duration;
+import java.time.Instant;
+import java.util.UUID;
 
+/**
+ * Deliberately NOT @Transactional: after a unique-index violation the
+ * transaction is unusable on PostgreSQL, so each repository call runs
+ * in its own short transaction. The unique index is the single source
+ * of truth, which also makes concurrent identical requests race-safe.
+ */
+@Service
 public class IdempotencyService {
 
-    private final JdbcTemplate jdbc;
+    private static final Duration TTL = Duration.ofHours(24);
 
-    public IdempotencyService(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    private final IdempotencyKeyRepository repo;
 
-    public void checkAndStore(String key, java.util.UUID userId, Long appId) {
+    public IdempotencyService(IdempotencyKeyRepository repo) { this.repo = repo; }
 
-    jdbc.update("DELETE FROM idempotency_keys WHERE expires_at < NOW()");
-
-    int dup = jdbc.queryForObject("SELECT COUNT(*) FROM idempotency_keys WHERE user_id=? AND application_id=? AND idempotency_key=? AND expires_at>NOW()", Integer.class, userId, appId, key);
-
-    if (dup > 0) throw new RuntimeException("IDEMPOTENCY_CONFLICT");
-
-    jdbc.update("INSERT INTO idempotency_keys (idempotency_key,user_id,application_id,created_at,expires_at) VALUES (?,?,?,NOW(),NOW()+INTERVAL '24 hours')", key, userId, appId);
-
+    public void checkAndStore(String key, UUID userId, Long appId) {
+        if (key == null || key.isBlank()) {
+            return; // no key supplied -> no idempotency protection (decision A)
+        }
+        Instant now = Instant.now();
+        repo.deleteExpired(now);
+        try {
+            repo.saveAndFlush(new IdempotencyKey(key, userId, appId, now, now.plus(TTL)));
+        } catch (DataIntegrityViolationException e) {
+            // Only a real duplicate is a conflict; an FK failure is not.
+            if (repo.existsByUserIdAndApplicationIdAndIdempotencyKey(userId, appId, key)) {
+                throw new IdempotencyConflictException();
+            }
+            throw e;
+        }
     }
-
 }
-

@@ -329,16 +329,7 @@ public class ApplicationController {
             @RequestParam java.util.UUID userId, HttpServletRequest httpRequest) {
         accessGuard.requireApplication(Action.CONTROL_APPLICATION, id);
         requireHealthMonitoring(id);
-        try {
-            idempotencyService.checkAndStore(idempotencyKey != null ? idempotencyKey : "", userId, id);
-        } catch (RuntimeException e) {
-            if (e.getMessage() != null && e.getMessage().contains("IDEMPOTENCY_CONFLICT")) {
-                Map<String, Object> conflictBody = new HashMap<>();
-                conflictBody.put("code", "IDEMPOTENCY_CONFLICT");
-                return ResponseEntity.status(409).body(conflictBody);
-            }
-            throw e;
-        }
+        idempotencyService.checkAndStore(idempotencyKey, userId, id);
 
         Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
         // getHostAddress(), not toString(): toString() would give "/10.0.0.5" and SSH would fail.
