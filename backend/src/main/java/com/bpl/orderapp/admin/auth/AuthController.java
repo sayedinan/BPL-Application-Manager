@@ -8,6 +8,7 @@ import com.bpl.orderapp.admin.auth.dto.LoginResponse;
 import com.bpl.orderapp.admin.auth.dto.MeResponse;
 import com.bpl.orderapp.admin.common.InvalidCredentialsException;
 import com.bpl.orderapp.admin.audit.AuditWriter;
+import com.bpl.orderapp.admin.security.SessionConfig;
 import jakarta.servlet.http.HttpSession;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -103,6 +104,7 @@ public class AuthController {
      */
     private static final String DUMMY_BCRYPT_HASH =
         "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+    private static final int REMEMBER_ME_DAYS = 30;
 
     private final JdbcTemplate jdbc;
     private final BCryptPasswordEncoder encoder;
@@ -198,6 +200,25 @@ public class AuthController {
         //       (HttpOnly, SameSite=Strict, Path=/, 8h TTL,
         //       Secure in prod) come from the spring.session.cookie
         //       block in application-prod.yml / application-dev.yml.
+        //    d) If "remember me" is ticked, the cookie becomes
+        //       persistent (30 days from last use) instead of a
+        //       browser-session cookie. This is driven by the
+        //       BPL_REMEMBER_ME request attribute that
+        //       DefaultCookieSerializer reads (see SessionConfig).
+
+        // Drop any pre-existing session so a fresh one (and a fresh cookie)
+        // is always issued. Also prevents session fixation.
+        HttpSession oldSession = httpRequest.getSession(false);
+        if (oldSession != null) {
+            oldSession.invalidate();
+        }
+
+        // Must be set BEFORE the session is created below: the cookie
+        // is written when the session is created.
+        if (request.remember()) {
+            httpRequest.setAttribute(SessionConfig.REMEMBER_ME_ATTR, Boolean.TRUE);
+        }
+
         UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
             username,                // principal: the username
             null,                    // credentials: not stored in the session
@@ -207,6 +228,10 @@ public class AuthController {
         context.setAuthentication(auth);
         SecurityContextHolder.setContext(context);
         securityContextRepository.saveContext(context, httpRequest, httpResponse);
+
+        if (request.remember()) {
+            httpRequest.getSession().setMaxInactiveInterval(REMEMBER_ME_DAYS * 24 * 60 * 60);
+        }
 
         log.info("Login succeeded for user '{}' (role={}); session established", username, role);
         try {
