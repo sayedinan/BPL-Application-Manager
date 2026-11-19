@@ -98,14 +98,17 @@ public class UserController {
     private final BCryptPasswordEncoder encoder;
     private final UserRepository userRepository;
     private final ApplicationRepository applicationRepository;
+    private final UserApplicationAssignmentRepository assignmentRepository;
 
     public UserController(JdbcTemplate jdbc, BCryptPasswordEncoder encoder, AuditWriter auditWriter,
-                          UserRepository userRepository, ApplicationRepository applicationRepository) {
+                          UserRepository userRepository, ApplicationRepository applicationRepository,
+                          UserApplicationAssignmentRepository assignmentRepository) {
         this.jdbc = jdbc;
         this.encoder = encoder;
         this.auditWriter = auditWriter;
         this.userRepository = userRepository;
         this.applicationRepository = applicationRepository;
+        this.assignmentRepository = assignmentRepository;
     }
 
     @GetMapping
@@ -124,9 +127,7 @@ public class UserController {
             row.put("phone_number", u.getPhoneNumber());
             row.put("must_change_password", u.isMustChangePassword());
             row.put("created_at", u.getCreatedAt());
-            java.util.List<Long> assigned = jdbc.queryForList(
-                "SELECT application_id FROM user_application_assignments WHERE user_id = ?",
-                Long.class, u.getId());
+            java.util.List<Long> assigned = assignmentRepository.findApplicationIdsByUserId(u.getId());
             row.put("assignedApplicationIds", assigned);
             Integer liveConnections = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM websocket_connections WHERE username = ?",
@@ -185,9 +186,7 @@ public class UserController {
         // rows that would otherwise be dead data from day one.
         if (assignedIds != null && "USER".equals(role)) {
             for (Long appId : assignedIds) {
-                jdbc.update(
-                    "INSERT INTO user_application_assignments (user_id, application_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
-                    newId, appId);
+                assignmentRepository.save(new UserApplicationAssignment(newId, appId));
             }
         }
         log.info("Created user '{}' (id={}, role={})", username, newId, role);
@@ -333,8 +332,7 @@ public class UserController {
         String oldPhoneNumber = user.getPhoneNumber();
         String oldUsername = user.getUsername();
         String oldFullName = user.getFullName();
-        java.util.List<Long> oldAssignedIds = jdbc.queryForList(
-            "SELECT application_id FROM user_application_assignments WHERE user_id = ?", Long.class, id);
+        java.util.List<Long> oldAssignedIds = assignmentRepository.findApplicationIdsByUserId(id);
 
         // Row-level guard: only Sys.Admin may edit a Sys.Admin row at
         // all (any field). Mirrors deleteUser's existing check and
@@ -394,11 +392,9 @@ public class UserController {
 
         if ("USER".equals(effectiveRole)) {
             if (req.assignedApplicationIds() != null) {
-                jdbc.update("DELETE FROM user_application_assignments WHERE user_id = ?", id);
+                assignmentRepository.deleteAllByUserId(id);
                 for (Long appId : req.assignedApplicationIds()) {
-                    jdbc.update(
-                        "INSERT INTO user_application_assignments (user_id, application_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
-                        id, appId);
+                    assignmentRepository.save(new UserApplicationAssignment(id, appId));
                 }
             }
         } else if ("USER".equals(oldRole)) {
@@ -406,7 +402,7 @@ public class UserController {
             // account had, since Admin/Sys.Admin ignore them anyway —
             // leaving them behind is exactly the stale-data case
             // flagged in the frontend review above.
-            jdbc.update("DELETE FROM user_application_assignments WHERE user_id = ?", id);
+            assignmentRepository.deleteAllByUserId(id);
         }
         if (req.phoneNumber() != null) {
             user.setPhoneNumber(req.phoneNumber().isBlank() ? null : req.phoneNumber());
