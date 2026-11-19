@@ -41,7 +41,7 @@ spring:
 
 durbar:
   sms:
-    base-url: https://sms.durbar71.com
+    base-url: ${SMS_BASE_URL:https://sms.durbar.biz}
     user-id: ${SMS_USER_ID:}
     password: ${SMS_PASSWORD:}
 
