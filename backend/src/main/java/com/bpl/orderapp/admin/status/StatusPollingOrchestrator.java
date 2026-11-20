@@ -2,6 +2,10 @@ package com.bpl.orderapp.admin.status;
 
 import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.application.ApplicationRepository;
+import com.bpl.orderapp.admin.status.ApplicationStatusStreak;
+import com.bpl.orderapp.admin.status.ApplicationStatusStreakRepository;
+import com.bpl.orderapp.admin.status.ApplicationStatusTransition;
+import com.bpl.orderapp.admin.status.ApplicationStatusTransitionRepository;
 import com.bpl.orderapp.admin.health.HealthCheckService;
 import com.bpl.orderapp.admin.health.HealthDecision;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
@@ -15,7 +19,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Component;
 
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -63,6 +66,8 @@ public class StatusPollingOrchestrator {
     private final List<Notifier> notifiers;
     private final HealthCheckService healthCheckService;
     private final ApplicationRepository applicationRepository;
+    private final ApplicationStatusStreakRepository streakRepository;
+    private final ApplicationStatusTransitionRepository transitionRepository;
 
     // Flap detection for external transitions only (web-app-triggered
     // start/stop are deliberate one-off actions, never flapping).
@@ -91,7 +96,11 @@ public class StatusPollingOrchestrator {
             WebSocketBroadcast broadcast,
             LogPollingOrchestrator logPollingOrchestrator, AuditWriter auditWriter,
             List<Notifier> notifiers, HealthCheckService healthCheckService,
-            ApplicationRepository applicationRepository) {
+            ApplicationRepository applicationRepository,
+            ApplicationStatusStreakRepository streakRepository,
+            ApplicationStatusTransitionRepository transitionRepository) {
+        this.streakRepository = streakRepository;
+        this.transitionRepository = transitionRepository;
         this.auditWriter = auditWriter;
         this.jdbc = jdbc;
         this.broadcast = broadcast;
@@ -237,10 +246,7 @@ public class StatusPollingOrchestrator {
     // Cheap lookup — no SSH, just the streak pointer's last-known value.
     // This is what GET /applications reads for the dashboard badge.
     public boolean isOnline(Long applicationId) {
-        List<Boolean> rows = jdbc.queryForList(
-            "SELECT online FROM application_status_streak WHERE application_id = ?",
-            Boolean.class, applicationId);
-        return !rows.isEmpty() && rows.get(0);
+        return streakRepository.isOnline(applicationId);
     }
 
     private void pollOnce(Long applicationId) {
@@ -265,40 +271,29 @@ public class StatusPollingOrchestrator {
     }
 
     private void ensureStreakRow(Long applicationId) {
-        Integer count = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM application_status_streak WHERE application_id = ?",
-            Integer.class, applicationId);
-        if (count != null && count == 0) {
-            jdbc.update(
-                "INSERT INTO application_status_streak (application_id, online, streak_started_at) VALUES (?, false, NOW())",
-                applicationId);
+        if (!streakRepository.existsById(applicationId)) {
+            streakRepository.save(new ApplicationStatusStreak(applicationId, false, Instant.now()));
         }
     }
 
     private void reconcile(Long applicationId, boolean observedOnline, String detectedBy) {
-        List<Boolean> rows = jdbc.queryForList(
-            "SELECT online FROM application_status_streak WHERE application_id = ?",
-            Boolean.class, applicationId);
-        boolean hadStreakRow = !rows.isEmpty();
-        boolean previousOnline = hadStreakRow && rows.get(0);
+        java.util.Optional<ApplicationStatusStreak> existing = streakRepository.findById(applicationId);
+        boolean hadStreakRow = existing.isPresent();
+        boolean previousOnline = hadStreakRow && existing.get().isOnline();
 
         if (hadStreakRow && previousOnline == observedOnline) {
             return; // no change — nothing to record or broadcast
         }
 
         Instant now = Instant.now();
-        jdbc.update(
-            "INSERT INTO application_status_transitions (application_id, online, transitioned_at) VALUES (?, ?, ?)",
-            applicationId, observedOnline, Timestamp.from(now));
+        transitionRepository.save(new ApplicationStatusTransition(applicationId, observedOnline, now));
 
         if (hadStreakRow) {
-            jdbc.update(
-                "UPDATE application_status_streak SET online = ?, streak_started_at = ? WHERE application_id = ?",
-                observedOnline, Timestamp.from(now), applicationId);
+            ApplicationStatusStreak streak = existing.get();
+            streak.flipTo(observedOnline, now);
+            streakRepository.save(streak);
         } else {
-            jdbc.update(
-                "INSERT INTO application_status_streak (application_id, online, streak_started_at) VALUES (?, ?, ?)",
-                applicationId, observedOnline, Timestamp.from(now));
+            streakRepository.save(new ApplicationStatusStreak(applicationId, observedOnline, now));
         }
 
         broadcast.broadcastStatus(applicationId, observedOnline, now.toString());

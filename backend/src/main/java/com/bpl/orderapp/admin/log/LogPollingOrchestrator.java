@@ -4,6 +4,7 @@ import com.bpl.orderapp.admin.application.Application;
 import com.bpl.orderapp.admin.application.ApplicationRepository;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.ssh.SshConnection;
+import com.bpl.orderapp.admin.status.ApplicationStatusStreakRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -46,11 +47,14 @@ public class LogPollingOrchestrator {
     private final WebSocketBroadcast broadcast;
     private final ThreadPoolTaskScheduler scheduler;
     private final ApplicationRepository applicationRepository;
+    private final ApplicationStatusStreakRepository streakRepository;
 
     private final ConcurrentHashMap<Long, ScheduledFuture<?>> activePollers = new ConcurrentHashMap<>();
 
     public LogPollingOrchestrator(JdbcTemplate jdbc, SshCredentialCipher cipher,
-            SshConnection sshConnection, WebSocketBroadcast broadcast, ApplicationRepository applicationRepository) {
+            SshConnection sshConnection, WebSocketBroadcast broadcast, ApplicationRepository applicationRepository,
+            ApplicationStatusStreakRepository streakRepository) {
+        this.streakRepository = streakRepository;
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.sshConnection = sshConnection;
@@ -91,10 +95,7 @@ public class LogPollingOrchestrator {
     }
 
     private boolean isOnline(Long applicationId) {
-        List<Boolean> rows = jdbc.queryForList(
-            "SELECT online FROM application_status_streak WHERE application_id = ?",
-            Boolean.class, applicationId);
-        return !rows.isEmpty() && rows.get(0);
+        return streakRepository.isOnline(applicationId);
     }
 
     @EventListener
