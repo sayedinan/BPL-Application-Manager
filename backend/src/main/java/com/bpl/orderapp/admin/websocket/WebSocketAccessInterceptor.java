@@ -3,6 +3,7 @@ package com.bpl.orderapp.admin.websocket;
 import com.bpl.orderapp.admin.common.Role;
 import com.bpl.orderapp.admin.log.WebSocketLimits;
 import com.bpl.orderapp.admin.user.User;
+import com.bpl.orderapp.admin.user.UserApplicationAssignmentRepository;
 import com.bpl.orderapp.admin.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +34,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
     private static final Logger log = LoggerFactory.getLogger(WebSocketAccessInterceptor.class);
     private final JdbcTemplate jdbc;
     private final UserRepository userRepository;
+    private final UserApplicationAssignmentRepository assignmentRepository;
     private final AtomicInteger globalConnections = new AtomicInteger(0);
     private final ConcurrentHashMap<String, AtomicInteger> perUserConnections = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicInteger> perApplicationSubscribers = new ConcurrentHashMap<>();
@@ -50,11 +52,13 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
         });
 
     public WebSocketAccessInterceptor(JdbcTemplate jdbc, AuditWriter auditWriter,
-                                      ApplicationEventPublisher events, UserRepository userRepository) {
+                                      ApplicationEventPublisher events, UserRepository userRepository,
+                                      UserApplicationAssignmentRepository assignmentRepository) {
         this.jdbc = jdbc;
         this.auditWriter = auditWriter;
         this.events = events;
         this.userRepository = userRepository;
+        this.assignmentRepository = assignmentRepository;
     }
 
     @jakarta.annotation.PostConstruct
@@ -109,7 +113,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             Long applicationId; try { applicationId = Long.valueOf(idPart); } catch (NumberFormatException e) { throw new MessageDeliveryException("Invalid application id"); }
             if (role != Role.SYS_ADMIN && role != Role.ADMIN) {
                 java.util.UUID userId = lookupUserId(username);
-                List<Long> assigned = jdbc.queryForList("SELECT application_id FROM user_application_assignments WHERE user_id = ?", Long.class, userId);
+                List<Long> assigned = assignmentRepository.findApplicationIdsByUserId(userId);
                 if (!assigned.contains(applicationId)) throw new MessageDeliveryException("Not authorized for this application's logs");
             }
             Integer appCount = jdbc.queryForObject("SELECT COUNT(*) FROM websocket_subscriptions WHERE topic_key = ?", Integer.class, idPart);
@@ -219,7 +223,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             throw new MessageDeliveryException("Not authorized for application updates");
         }
         List<Long> assigned = role == Role.USER
-            ? jdbc.queryForList("SELECT application_id FROM user_application_assignments WHERE user_id = ?", Long.class, lookupUserId(username))
+            ? assignmentRepository.findApplicationIdsByUserId(lookupUserId(username))
             : List.of();
         if (!com.bpl.orderapp.admin.security.Rbac.canAccessApplication(role, assigned, applicationId)) {
             throw new MessageDeliveryException("Not authorized for this application");

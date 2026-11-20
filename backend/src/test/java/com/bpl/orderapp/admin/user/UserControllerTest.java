@@ -48,6 +48,7 @@ class UserControllerTest {
     @MockBean private UserRepository userRepository;
     @MockBean private AuditWriter auditWriter;
     @MockBean private ApplicationRepository applicationRepository;
+    @MockBean private UserApplicationAssignmentRepository assignmentRepository;
 
     private static final UUID TEST_USER_ID = UUID.fromString("12345678-1234-5678-1234-567812345678");
 

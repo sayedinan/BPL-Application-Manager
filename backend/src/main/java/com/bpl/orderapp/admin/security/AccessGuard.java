@@ -5,7 +5,7 @@ import com.bpl.orderapp.admin.common.InvalidCredentialsException;
 import com.bpl.orderapp.admin.common.Role;
 import com.bpl.orderapp.admin.user.User;
 import com.bpl.orderapp.admin.user.UserRepository;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.bpl.orderapp.admin.user.UserApplicationAssignmentRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -40,11 +40,12 @@ public class AccessGuard {
     /** The authenticated caller, as the database knows them. */
     public record Caller(java.util.UUID userId, String username, Role role) {}
 
-    private final JdbcTemplate jdbc;
+    private final UserApplicationAssignmentRepository assignmentRepository;
     private final UserRepository userRepository;
 
-    public AccessGuard(JdbcTemplate jdbc, UserRepository userRepository) {
-        this.jdbc = jdbc;
+    public AccessGuard(UserApplicationAssignmentRepository assignmentRepository,
+                       UserRepository userRepository) {
+        this.assignmentRepository = assignmentRepository;
         this.userRepository = userRepository;
     }
 
@@ -75,11 +76,7 @@ public class AccessGuard {
     public Caller requireApplication(Action action, Long applicationId) {
         Caller caller = require(action);
         List<Long> assigned = caller.role() == Role.USER
-            ? jdbc.queryForList(
-                "SELECT uaa.application_id FROM user_application_assignments uaa "
-                    + "JOIN users u ON u.id = uaa.user_id "
-                    + "WHERE u.username = ? AND u.deleted_at IS NULL",
-                Long.class, caller.username())
+            ? assignmentRepository.findApplicationIdsByUserId(caller.userId())
             : List.of();
         if (!Rbac.canAccessApplication(caller.role(), assigned, applicationId)) {
             throw new AccessDeniedAppException();

@@ -16,7 +16,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -28,7 +27,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
@@ -43,6 +41,7 @@ import com.bpl.orderapp.admin.auth.dto.ChangePasswordRequest;
 import com.bpl.orderapp.admin.auth.dto.LoginRequest;
 import com.bpl.orderapp.admin.common.GlobalExceptionHandler;
 import com.bpl.orderapp.admin.user.User;
+import com.bpl.orderapp.admin.user.UserApplicationAssignmentRepository;
 import com.bpl.orderapp.admin.user.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -70,7 +69,7 @@ class AuthControllerTest {
     @Autowired private MockMvc mvc;
     @Autowired private ObjectMapper json;
 
-    @MockBean private JdbcTemplate jdbc;
+    @MockBean private UserApplicationAssignmentRepository assignmentRepository;
     @MockBean private BCryptPasswordEncoder encoder;
     @MockBean private SecurityContextRepository securityContextRepository;
     @MockBean private UserRepository userRepository;
@@ -360,11 +359,8 @@ class AuthControllerTest {
             Optional.of(testUser(ADMIN_ID, "admin", "SYS_ADMIN", TEST_HASH, false)));
         // The assignment query uses a different SQL form (no
         // username — uses user_id). Stub it explicitly.
-        when(jdbc.queryForList(anyString(), eq(ADMIN_ID))).thenReturn(List.of(
-            Map.of("application_id", 1L),
-            Map.of("application_id", 2L),
-            Map.of("application_id", 5L)
-        ));
+        when(assignmentRepository.findApplicationIdsByUserId(ADMIN_ID))
+            .thenReturn(List.of(1L, 2L, 5L));
 
         mvc.perform(get("/api/v1/auth/me"))
             .andExpect(status().isOk())
@@ -413,7 +409,7 @@ class AuthControllerTest {
         setAuthenticatedUser("alice");
         when(userRepository.findByUsername("alice")).thenReturn(
             Optional.of(testUser(ALICE_ID, "alice", "USER", TEST_HASH, true)));
-        when(jdbc.queryForList(anyString(), eq(ALICE_ID))).thenReturn(List.of());
+        when(assignmentRepository.findApplicationIdsByUserId(ALICE_ID)).thenReturn(List.of());
 
         mvc.perform(get("/api/v1/auth/me"))
             .andExpect(status().isOk())

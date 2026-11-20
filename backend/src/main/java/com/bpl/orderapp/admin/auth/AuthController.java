@@ -1,5 +1,6 @@
 package com.bpl.orderapp.admin.auth;
 
+import com.bpl.orderapp.admin.user.UserApplicationAssignmentRepository;
 import com.bpl.orderapp.admin.user.User;
 import com.bpl.orderapp.admin.user.UserRepository;
 import com.bpl.orderapp.admin.auth.dto.ChangePasswordRequest;
@@ -10,13 +11,12 @@ import com.bpl.orderapp.admin.common.InvalidCredentialsException;
 import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.security.SessionConfig;
 import jakarta.servlet.http.HttpSession;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -106,20 +106,20 @@ public class AuthController {
         "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
     private static final int REMEMBER_ME_DAYS = 30;
 
-    private final JdbcTemplate jdbc;
+    private final UserApplicationAssignmentRepository assignmentRepository;
     private final BCryptPasswordEncoder encoder;
     private final SecurityContextRepository securityContextRepository;
     private final AuditWriter auditWriter;
     private final UserRepository userRepository;
 
     public AuthController(
-        JdbcTemplate jdbc,
+        UserApplicationAssignmentRepository assignmentRepository,
         BCryptPasswordEncoder encoder,
         SecurityContextRepository securityContextRepository,
         AuditWriter auditWriter,
         UserRepository userRepository
     ) {
-        this.jdbc = jdbc;
+        this.assignmentRepository = assignmentRepository;
         this.encoder = encoder;
         this.securityContextRepository = securityContextRepository;
         this.auditWriter = auditWriter;
@@ -418,18 +418,8 @@ public class AuthController {
         String email = user.getEmail();
         String phoneNumber = user.getPhoneNumber();
 
-        // 3. Read the assigned application IDs. The join table
-        //    is filtered by the same deleted_at IS NULL on the
-        //    user side (defense-in-depth: an orphaned assignment
-        //    from a hard-deleted user would never match, since
-        //    the user_id FK would also be gone).
-        List<Long> assignedApplicationIds = jdbc.queryForList(
-            "SELECT application_id FROM user_application_assignments " +
-                "WHERE user_id = ? ORDER BY application_id",
-            id
-        ).stream()
-         .map(m -> ((Number) m.get("application_id")).longValue())
-         .toList();
+        // 3. Read the assigned application IDs (ordered by id).
+        List<Long> assignedApplicationIds = assignmentRepository.findApplicationIdsByUserId(id);
 
         return ResponseEntity.ok(
             new MeResponse(id, username, role, mustChangePassword, assignedApplicationIds, email, phoneNumber)

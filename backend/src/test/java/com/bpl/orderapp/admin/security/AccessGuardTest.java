@@ -16,8 +16,8 @@ import com.bpl.orderapp.admin.common.AccessDeniedAppException;
 import com.bpl.orderapp.admin.common.InvalidCredentialsException;
 import com.bpl.orderapp.admin.common.Role;
 import com.bpl.orderapp.admin.user.User;
+import com.bpl.orderapp.admin.user.UserApplicationAssignmentRepository;
 import com.bpl.orderapp.admin.user.UserRepository;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -31,8 +31,9 @@ class AccessGuardTest {
     private List<Long> assignedApplications = List.of();
 
     private final UserRepository userRepository = mock(UserRepository.class, this::fakeUsers);
-    private final JdbcTemplate jdbc = mock(JdbcTemplate.class, this::fakeDatabase);
-    private final AccessGuard guard = new AccessGuard(jdbc, userRepository);
+    private final UserApplicationAssignmentRepository assignmentRepository =
+        mock(UserApplicationAssignmentRepository.class, this::fakeAssignments);
+    private final AccessGuard guard = new AccessGuard(assignmentRepository, userRepository);
 
     // Answers findByUsername from the same userExists / role fields the
     // tests already toggle, so the individual tests don't change.
@@ -49,9 +50,8 @@ class AccessGuardTest {
         return Optional.of(u);
     }
 
-    private Object fakeDatabase(InvocationOnMock call) {
-        String sql = call.getArgument(0);
-        if (sql.startsWith("SELECT uaa.application_id")) {
+    private Object fakeAssignments(InvocationOnMock call) {
+        if (call.getMethod().getName().equals("findApplicationIdsByUserId")) {
             return assignedApplications;
         }
         return null;
