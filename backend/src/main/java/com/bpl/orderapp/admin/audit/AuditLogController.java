@@ -1,13 +1,10 @@
 package com.bpl.orderapp.admin.audit;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.*;
@@ -17,12 +14,12 @@ import java.util.*;
 @org.springframework.security.access.prepost.PreAuthorize("hasRole('SYS_ADMIN') or hasRole('ADMIN')")
 public class AuditLogController {
 
-    private final JdbcTemplate jdbc;
     private static final int MAX_PAGE_SIZE = 500;
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    public AuditLogController(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    private final AuditLogReader auditLogReader;
+
+    public AuditLogController(AuditLogReader auditLogReader) {
+        this.auditLogReader = auditLogReader;
     }
 
     @GetMapping
@@ -39,90 +36,47 @@ public class AuditLogController {
         // last MAX_PAGE_SIZE rows in one page, regardless of what `size`
         // a caller passes.
         size = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        page = Math.max(page, 0);
 
-        Timestamp fromTs = parseOrNull(from, "from");
-        Timestamp toTs = parseOrNull(to, "to");
+        Instant fromTs = parseOrNull(from, "from");
+        Instant toTs = parseOrNull(to, "to");
 
-        // Build the WHERE clause conditionally rather than passing
-        // `(timestamp >= ? OR ? IS NULL)` with a null placeholder.
-        // When from/to are both absent (the common case — plain
-        // "load latest logs"), every occurrence of a parameter was
-        // NULL with no other typed context, and Postgres cannot
-        // infer a type for a bare `?` used only against `IS NULL`
-        // — it throws "could not determine data type of parameter"
-        // (surfaces as BadSqlGrammarException / 500 INTERNAL_ERROR).
-        // Only emitting a clause when the bound value is non-null
-        // sidesteps the ambiguity entirely; no cast trickery needed.
-        StringBuilder where = new StringBuilder();
-        List<Object> params = new ArrayList<>();
-        if (fromTs != null) {
-            where.append(where.isEmpty() ? " WHERE " : " AND ").append("timestamp >= ?");
-            params.add(fromTs);
-        }
-        if (toTs != null) {
-            where.append(where.isEmpty() ? " WHERE " : " AND ").append("timestamp <= ?");
-            params.add(toTs);
-        }
-        if (applicationId != null) {
-            where.append(where.isEmpty() ? " WHERE " : " AND ").append("target_application_id = ?");
-            params.add(applicationId);
+        AuditLogReader.Page result = auditLogReader.find(fromTs, toTs, applicationId, page, size);
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (AuditLog entry : result.items()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", entry.getId());
+            row.put("timestamp", entry.getTimestamp().toString());
+            row.put("actorUsername", entry.getActorUsername());
+            row.put("actorRole", entry.getActorRole());
+            row.put("actionType", entry.getActionType());
+            row.put("targetApplicationId", entry.getTargetApplicationId());
+            row.put("targetApplicationName", entry.getTargetApplicationName());
+            row.put("targetUserId", entry.getTargetUserId());
+            row.put("detail", entry.getDetail());
+            row.put("result", entry.getResult());
+            rows.add(row);
         }
 
-        List<Object> selectParams = new ArrayList<>(params);
-        selectParams.add(size);
-        selectParams.add(page * size);
-
-        List<Map<String, Object>> rows = jdbc.query(
-            "SELECT id, timestamp, actor_username, actor_role, action_type, "
-                + "target_application_id, target_application_name, target_user_id, detail, result "
-                + "FROM audit_logs" + where
-                + " ORDER BY timestamp DESC LIMIT ? OFFSET ?",
-            (rs, rowNum) -> {
-                Map<String, Object> row = new LinkedHashMap<>();
-                row.put("id", rs.getLong("id"));
-                row.put("timestamp", rs.getTimestamp("timestamp").toInstant().toString());
-                row.put("actorUsername", rs.getString("actor_username"));
-                row.put("actorRole", rs.getString("actor_role"));
-                row.put("actionType", rs.getString("action_type"));
-                row.put("targetApplicationId", rs.getObject("target_application_id"));
-                row.put("targetApplicationName", rs.getString("target_application_name"));
-                row.put("targetUserId", rs.getObject("target_user_id"));
-                row.put("detail", parseDetail(rs.getString("detail")));
-                row.put("result", rs.getString("result"));
-                return row;
-            },
-            selectParams.toArray());
-
-        Integer total = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM audit_logs" + where,
-            Integer.class, params.toArray());
-
+        long total = result.total();
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", rows);
         body.put("page", page);
         body.put("size", size);
         body.put("total", total);
-        body.put("totalPages", total == null ? 0 : (int) Math.ceil(total / (double) size));
+        body.put("totalPages", (int) Math.ceil(total / (double) size));
         return ResponseEntity.ok(body);
     }
 
-    private Timestamp parseOrNull(String iso, String paramName) {
+    private Instant parseOrNull(String iso, String paramName) {
         if (iso == null || iso.isBlank()) return null;
         try {
-            return Timestamp.from(Instant.parse(iso));
+            return Instant.parse(iso);
         } catch (DateTimeParseException e) {
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 paramName + " must be an ISO-8601 instant, e.g. 2026-09-13T00:00:00Z");
-        }
-    }
-
-    private Object parseDetail(String jsonbText) {
-        if (jsonbText == null) return null;
-        try {
-            return MAPPER.readValue(jsonbText, Map.class);
-        } catch (Exception e) {
-            return jsonbText;
         }
     }
 }

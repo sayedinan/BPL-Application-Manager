@@ -4,6 +4,7 @@ import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.common.IdempotencyService;
 import com.bpl.orderapp.admin.common.NotFoundException;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
+import com.bpl.orderapp.admin.audit.AuditLogReader;
 import com.bpl.orderapp.admin.log.ApplicationLogLine;
 import com.bpl.orderapp.admin.log.ApplicationLogLineRepository;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
@@ -20,7 +21,6 @@ import com.bpl.orderapp.admin.status.StatusPollingOrchestrator;
 import com.bpl.orderapp.admin.user.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.sql.Timestamp;
@@ -49,7 +49,7 @@ public class ApplicationController {
     private static final long STOP_CONFIRMATION_TIMEOUT_MS = 15_000;
     private static final long CONFIRMATION_POLL_INTERVAL_MS = 1_000;
 
-    private final JdbcTemplate jdbc;
+    private final AuditLogReader auditLogReader;
     private final SshCredentialCipher cipher;
     private final IdempotencyService idempotencyService;
     private final SshConnection sshConnection;
@@ -65,7 +65,7 @@ public class ApplicationController {
     private final ApplicationHealthConfigRepository healthConfigRepository;
     private final ApplicationLogLineRepository logLineRepository;
 
-    public ApplicationController(JdbcTemplate jdbc, SshCredentialCipher cipher,
+    public ApplicationController(SshCredentialCipher cipher,
             IdempotencyService idempotencyService, SshConnection sshConnection,
             AuditWriter auditWriter, LogPollingOrchestrator logPollingOrchestrator,
             StatusPollingOrchestrator statusPollingOrchestrator,
@@ -75,8 +75,9 @@ public class ApplicationController {
             ApplicationStatusStreakRepository streakRepository,
             ApplicationStatusTransitionRepository transitionRepository,
             ApplicationHealthConfigRepository healthConfigRepository,
-            ApplicationLogLineRepository logLineRepository) {
-        this.jdbc = jdbc;
+            ApplicationLogLineRepository logLineRepository,
+            AuditLogReader auditLogReader) {
+        this.auditLogReader = auditLogReader;
         this.cipher = cipher;
         this.idempotencyService = idempotencyService;
         this.sshConnection = sshConnection;
@@ -185,15 +186,7 @@ public class ApplicationController {
 
         java.util.Optional<ApplicationStatusStreak> streak = streakRepository.findById(id);
 
-        Timestamp lastRan;
-        try {
-            lastRan = jdbc.queryForObject(
-                "SELECT timestamp FROM audit_logs WHERE target_application_id = ? " +
-                    "AND action_type = 'START_APPLICATION' ORDER BY timestamp DESC LIMIT 1",
-                Timestamp.class, id);
-        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
-            lastRan = null;
-        }
+        java.util.Optional<Instant> lastRan = auditLogReader.lastStartedAt(id);
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("createdAt", createdAt.toInstant().toString());
@@ -202,7 +195,7 @@ public class ApplicationController {
         body.put("currentlyOnline", streak.map(ApplicationStatusStreak::isOnline).orElse(false));
         body.put("currentStreakStartedAt",
             streak.map(s -> s.getStreakStartedAt().toString()).orElse(null));
-        body.put("lastRanAt", lastRan != null ? lastRan.toInstant().toString() : null);
+        body.put("lastRanAt", lastRan.map(Instant::toString).orElse(null));
         body.put("lastWentOnlineAt", lastTransitionAt(id, true));
         body.put("lastWentOfflineAt", lastTransitionAt(id, false));
         body.put("recentTransitions", recentTransitions(id, 10));
