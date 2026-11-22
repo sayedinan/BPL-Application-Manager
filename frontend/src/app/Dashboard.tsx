@@ -3,48 +3,41 @@ import { Link } from 'react-router-dom';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
-import { Card, PageHeader } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
+import { PageHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { LoadingBlock } from '@/components/ui/Spinner';
 import { Alert } from '@/components/ui/Alert';
-import { HealthSummary } from '@/health/HealthBadge';
-import { classifyApp, STATE_ORDER, type AppState } from '@/lib/appState';
-import { onLiveStreamState, subscribeHealth, subscribeStatus } from '@/lib/liveStream';
-import type { HealthLatest } from '@/health/types';
+import { StatusGlyph } from '@/components/ui/Badge';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Input } from '@/components/ui/Field';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { useToast } from '@/components/ui/Toast';
+import { classifyApp, stateBadge, STATE_ORDER, type AppState } from '@/lib/appState';
 import { appPath } from '@/lib/appRoute';
+import { formatUptime } from '@/lib/duration';
+import { onLiveStreamState, subscribeHealth, subscribeStatus } from '@/lib/liveStream';
+import { DayAxis } from '@/health/DayStrip';
+import type { HealthLatest } from '@/health/types';
+import { ApplicationRow, ROW_GRID, type ApplicationSummary } from '@/app/ApplicationRow';
 
-interface ApplicationSummary {
-  id: number;
-  name: string;
-  online: boolean;
-  startedAt: string | null;
-  groupName: string | null;
-}
+type Filter = 'all' | 'attention' | 'healthy' | 'maintenance';
 
-
-function formatRunningTime(startedAt: string | null): string | null {
-  if (!startedAt) return null;
-  const ms = Date.now() - new Date(startedAt).getTime();
-  if (ms < 0) return null;
-  const totalSeconds = Math.floor(ms / 1000);
-  const d = Math.floor(totalSeconds / 86400);
-  const h = Math.floor((totalSeconds % 86400) / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  return `${d}d ${h}h ${m}m ${s}s`;
-}
+/** How many applications the attention band names before collapsing to "and N more". */
+const ATTENTION_NAMED = 4;
+/** After a start/stop finishes, the row's button is inert this long (ms). */
+const COOLDOWN_MS = 1200;
 
 export function DashboardPlaceholder(): JSX.Element {
   const { user } = useAuth();
+  const toast = useToast();
   const [apps, setApps] = useState<ApplicationSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [pendingAction, setPendingAction] = useState<'start' | 'stop' | null>(null);
-  const [, setTick] = useState(0);
-  const [filter, setFilter] = useState<'all' | 'attention' | 'healthy' | 'maintenance'>('all');
+  const [cooldownId, setCooldownId] = useState<number | null>(null);
+  const [confirmStop, setConfirmStop] = useState<ApplicationSummary | null>(null);
+  const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
 
   async function loadApplications() {
@@ -65,17 +58,13 @@ export function DashboardPlaceholder(): JSX.Element {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const clock = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(clock);
-  }, []);
-
-  // Live health for every card (HEALTH-MONITORING.md). Readings are pushed over
+  // Live health for every row (HEALTH-MONITORING.md). Readings are pushed over
   // the WebSocket the moment each check finishes; the fetch gives the starting
   // values and covers gaps (every 10 s while the live connection is down,
   // every 30 s while it is up). The key only changes when the set of
   // applications does, so the 5 s list refresh doesn't restart any of this.
   const [healthById, setHealthById] = useState<Record<number, HealthLatest>>({});
+  const [healthLoaded, setHealthLoaded] = useState(false);
   const appIdsKey = apps.map((a) => a.id).join(',');
   const healthLiveRef = useRef(false);
 
@@ -114,6 +103,7 @@ export function DashboardPlaceholder(): JSX.Element {
         }
         return next;
       });
+      setHealthLoaded(true);
     }
 
     void loadHealth();
@@ -168,7 +158,6 @@ export function DashboardPlaceholder(): JSX.Element {
 
   async function handleStartStop(app: ApplicationSummary, action: 'start' | 'stop') {
     if (!user) return;
-    setActionError(null);
     setPendingId(app.id);
     setPendingAction(action);
     try {
@@ -181,33 +170,90 @@ export function DashboardPlaceholder(): JSX.Element {
         headers: { 'Idempotency-Key': idempotencyKey },
       });
       await loadApplications();
-      if (!res.ok) {
-        if (res.status === 504) {
-          setActionError(`${action === 'start' ? 'Started' : 'Stopped'} ${app.name}, but couldn't confirm within the timeout — check its real state.`);
-        } else {
-          setActionError(`Failed to ${action} ${app.name} — check the server connection and scripts.`);
-        }
+      if (res.ok) {
+        toast.push('success', `${action === 'start' ? 'Started' : 'Stopped'} ${app.name}.`);
+      } else if (res.status === 504) {
+        toast.push(
+          'error',
+          `${action === 'start' ? 'Started' : 'Stopped'} ${app.name}, but couldn't confirm within the timeout — check its real state.`,
+        );
+      } else {
+        toast.push('error', `Failed to ${action} ${app.name} — check the server connection and scripts.`);
       }
     } catch {
-      setActionError(`Failed to ${action} ${app.name}.`);
+      toast.push('error', `Failed to ${action} ${app.name}.`);
     } finally {
       setPendingId(null);
       setPendingAction(null);
+      // The button swaps Start <-> Stop in the same spot. Keep it inert for a moment
+      // so a late second tap on the same spot doesn't immediately undo the action.
+      setCooldownId(app.id);
+      window.setTimeout(() => setCooldownId((cur) => (cur === app.id ? null : cur)), COOLDOWN_MS);
     }
   }
 
+  function confirmAndStop() {
+    const app = confirmStop;
+    setConfirmStop(null);
+    if (app) void handleStartStop(app, 'stop');
+  }
+
+  const header = (
+    <PageHeader title="Dashboard" description="Status of your applications, with today's health checks by hour." />
+  );
+
   if (loading) {
     return (
-      <LoadingBlock label="Loading applications…" className="p-8" />
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:p-8" aria-busy="true">
+        {header}
+        <p className="sr-only" role="status">
+          Loading applications…
+        </p>
+        <div className="divide-y divide-rule rounded-xl border border-rule bg-panel">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className={`${ROW_GRID} px-4 py-4`}>
+              <Skeleton className="h-5 w-40 md:order-2" />
+              <Skeleton className="h-8 w-16 md:order-4" />
+              <Skeleton className="col-span-2 h-5 w-full md:order-3 md:col-span-1" />
+            </div>
+          ))}
+        </div>
+      </div>
     );
   }
 
-  // What the summary tiles, the filters and the group headings are built from.
+  // A failed first load is not an empty fleet: say so, and offer a retry.
+  if (error && apps.length === 0) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:p-8">
+        {header}
+        <EmptyState
+          title="Couldn't load applications"
+          description={error}
+          action={
+            <Button
+              onClick={() => {
+                setLoading(true);
+                void loadApplications();
+              }}
+            >
+              Try again
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  // What the filters, the attention band and the group headings are built from.
   const rows = apps.map((app) => ({ app, state: classifyApp(app, healthById[app.id]) }));
   const needsAttention = (state: AppState) => state === 'offline' || state === 'degraded';
+  const attentionRows = rows
+    .filter((r) => needsAttention(r.state))
+    .sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state] || a.app.name.localeCompare(b.app.name));
   const counts = {
     all: rows.length,
-    attention: rows.filter((r) => needsAttention(r.state)).length,
+    attention: attentionRows.length,
     healthy: rows.filter((r) => r.state === 'healthy').length,
     maintenance: rows.filter((r) => r.state === 'maintenance').length,
   };
@@ -228,7 +274,14 @@ export function DashboardPlaceholder(): JSX.Element {
     const key = hasGroups ? (row.app.groupName ?? '') : '';
     sections.set(key, [...(sections.get(key) ?? []), row]);
   }
-  const sectionKeys = [...sections.keys()].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)));
+  // Worst-first: a group with something down comes before a healthy one, so a
+  // failure is never buried under an alphabetically earlier group. Ungrouped last.
+  const worst = (key: string) => Math.min(...(sections.get(key) ?? []).map((r) => STATE_ORDER[r.state]));
+  const sectionKeys = [...sections.keys()].sort((a, b) => {
+    if (a === '') return 1;
+    if (b === '') return -1;
+    return worst(a) - worst(b) || a.localeCompare(b);
+  });
 
   function groupSummary(key: string) {
     const members = rows.filter((r) => (r.app.groupName ?? '') === key);
@@ -238,138 +291,198 @@ export function DashboardPlaceholder(): JSX.Element {
       total: members.length,
       healthy: members.filter((r) => r.state === 'healthy').length,
       inMaintenance: members.filter((r) => r.state === 'maintenance').length,
-      tone: hasOffline ? 'text-status-error' : hasDegraded ? 'text-status-pending' : 'text-status-online',
+      tone: hasOffline ? 'text-danger' : hasDegraded ? 'text-warn' : 'text-ok',
     };
   }
 
-  const tiles: { key: 'all' | 'attention' | 'healthy' | 'maintenance'; label: string; value: number; tone: string }[] = [
-    { key: 'all', label: 'Applications', value: counts.all, tone: 'text-slate-900 dark:text-white' },
-    {
-      key: 'attention',
-      label: 'Need attention',
-      value: counts.attention,
-      tone: counts.attention > 0 ? 'text-status-error' : 'text-slate-900 dark:text-white',
-    },
-    { key: 'healthy', label: 'Healthy', value: counts.healthy, tone: 'text-status-online' },
-    { key: 'maintenance', label: 'In maintenance', value: counts.maintenance, tone: 'text-status-pending' },
+  const filters: { key: Filter; label: string; count: number }[] = [
+    { key: 'all', label: 'All', count: counts.all },
+    { key: 'attention', label: 'Need attention', count: counts.attention },
+    { key: 'healthy', label: 'Healthy', count: counts.healthy },
+    { key: 'maintenance', label: 'Maintenance', count: counts.maintenance },
   ];
 
-  function renderCard(app: ApplicationSummary): JSX.Element {
-    const runningTime = app.online ? formatRunningTime(app.startedAt) : null;
-    const isPending = pendingId === app.id;
-    return (
-      <Card key={app.id} className="overflow-hidden">
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-gh-border dark:bg-gh-subtle/60">
-          <span className="truncate font-semibold text-slate-900 dark:text-white">{app.name}</span>
-          <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>
-        </div>
-        <div className="bg-slate-100 p-4 transition-theme dark:bg-gh-inset">
-          {app.startedAt && (
-            <p className="text-xs text-slate-500 dark:text-gh-muted">
-              Started: {new Date(app.startedAt).toLocaleString()}
-            </p>
-          )}
-          {runningTime && (
-            <p className="mb-2 text-xs text-slate-500 dark:text-gh-muted">Running for {runningTime}</p>
-          )}
-          <HealthSummary health={healthById[app.id]} />
-          <div className="mt-3 flex items-center gap-2">
-            {isPending ? (
-              <Button size="sm" variant="secondary" loading className="w-full">
-                {pendingAction === 'start' ? 'Starting…' : 'Stopping…'}
-              </Button>
-            ) : app.online ? (
-              <Button size="sm" variant="danger" onClick={() => handleStartStop(app, 'stop')} className="w-full">
-                Stop
-              </Button>
-            ) : (
-              <Button size="sm" variant="primary" onClick={() => handleStartStop(app, 'start')} className="w-full">
-                Start
-              </Button>
-            )}
-          </div>
-          <Link
-            to={appPath(app.name)}
-            className="mt-2 block w-full text-center text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-gh-muted dark:hover:text-gh-fg"
-          >
-            Details →
-          </Link>
-        </div>
-      </Card>
-    );
-  }
+  const stopUptime = confirmStop ? formatUptime(confirmStop.startedAt) : null;
 
   return (
-    <div className="mx-auto max-w-6xl p-6 sm:p-8">
-      <PageHeader title="Dashboard" />
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:p-8">
+      {header}
 
-      {error && <Alert className="mb-4">{error}</Alert>}
-      {actionError && <Alert className="mb-4">{actionError}</Alert>}
-      {wsDisconnected && (
-        <Alert className="mb-4">Live status updates disconnected — retrying. Falling back to periodic refresh.</Alert>
-      )}
+      <div className="space-y-3 empty:hidden">
+        {error && <Alert>{error}</Alert>}
+        {wsDisconnected && (
+          <Alert tone="warning">Live status updates disconnected — retrying. Falling back to periodic refresh.</Alert>
+        )}
+      </div>
 
       {apps.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">
-          {user?.role === 'SYS_ADMIN'
-            ? 'No applications yet. Add one from the Applications page.'
-            : 'No applications assigned. Contact your admin.'}
-        </Card>
+        <EmptyState
+          title={user?.role === 'SYS_ADMIN' ? 'No applications yet' : 'No applications assigned'}
+          description={
+            user?.role === 'SYS_ADMIN'
+              ? 'Add the first application to start, stop and monitor it from here.'
+              : 'Ask an admin to assign you the applications you need.'
+          }
+          action={
+            user?.role === 'SYS_ADMIN' ? (
+              <Link
+                to="/applications"
+                className="inline-flex items-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-theme hover:bg-brand-700"
+              >
+                Add application
+              </Link>
+            ) : undefined
+          }
+        />
       ) : (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {tiles.map((tile) => (
-              <button
-                key={tile.key}
-                type="button"
-                aria-pressed={filter === tile.key}
-                onClick={() => setFilter(filter === tile.key ? 'all' : tile.key)}
-                className={`rounded-xl border bg-slate-50 px-4 py-3 text-left transition-colors dark:bg-gh-subtle/60 ${
-                  filter === tile.key
-                    ? 'border-brand-500 ring-1 ring-brand-500'
-                    : 'border-slate-200 hover:border-slate-300 dark:border-gh-border dark:hover:border-gh-muted'
-                }`}
-              >
-                <span className={`block text-2xl font-semibold ${tile.tone}`}>{tile.value}</span>
-                <span className="text-xs text-slate-500 dark:text-gh-muted">{tile.label}</span>
-              </button>
-            ))}
+          {counts.attention > 0 && (
+            <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-danger/30 bg-danger-bg px-4 py-3 text-sm">
+              <span className="flex items-center gap-2 font-semibold text-danger">
+                <StatusGlyph tone="error" />
+                {counts.attention} {counts.attention === 1 ? 'needs' : 'need'} attention
+              </span>
+              <ul className="flex flex-wrap gap-x-4 gap-y-1">
+                {attentionRows.slice(0, ATTENTION_NAMED).map(({ app, state }) => (
+                  <li key={app.id}>
+                    <Link to={appPath(app.name)} className="font-medium text-ink hover:underline">
+                      {app.name}
+                    </Link>{' '}
+                    <span className="text-muted">({stateBadge(state, healthById[app.id]).label})</span>
+                  </li>
+                ))}
+              </ul>
+              {attentionRows.length > ATTENTION_NAMED && (
+                <button
+                  type="button"
+                  onClick={() => setFilter('attention')}
+                  className="font-medium text-accent hover:underline"
+                >
+                  and {attentionRows.length - ATTENTION_NAMED} more
+                </button>
+              )}
+            </div>
+          )}
+
+          <details className="mb-3 text-xs text-muted">
+            <summary className="w-fit cursor-pointer select-none font-medium hover:text-ink">
+              How to read the hourly bars
+            </summary>
+            <p className="mt-2 max-w-prose">
+              One bar per hour since midnight. A tall red bar means health checks failed that hour, a short green bar
+              means every check passed, and a thin gray line means no data yet. The percentage is the share of today's
+              checks that passed.
+            </p>
+          </details>
+
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* One scrolling row on phones so the filters don't push the list down. */}
+            <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:overflow-visible sm:px-0">
+              <div role="group" aria-label="Filter applications" className="flex flex-nowrap gap-1.5 sm:flex-wrap">
+                {filters.map((f) => {
+                  const active = filter === f.key;
+                  return (
+                    <button
+                      key={f.key}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setFilter(active && f.key !== 'all' ? 'all' : f.key)}
+                      className={[
+                        'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-theme',
+                        active
+                          ? 'border-accent bg-accent/10 text-ink'
+                          : 'border-rule bg-panel text-muted hover:text-ink',
+                      ].join(' ')}
+                    >
+                      {f.label}
+                      <span
+                        className={[
+                          'tabular text-xs',
+                          f.key === 'attention' && f.count > 0 ? 'font-semibold text-danger' : 'text-muted',
+                        ].join(' ')}
+                      >
+                        {f.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <Input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search applications"
+              aria-label="Search applications"
+              className="sm:max-w-xs"
+            />
           </div>
 
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search applications"
-            aria-label="Search applications"
-            className="mb-6 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gh-border dark:bg-surface-dark dark:text-gh-fg sm:max-w-sm"
-          />
-
           {visible.length === 0 ? (
-            <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">
-              No applications match.
-            </Card>
+            <EmptyState
+              title="No applications match"
+              description="Try a different search, or clear the filter."
+              action={
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setFilter('all');
+                    setSearch('');
+                  }}
+                >
+                  Clear filters
+                </Button>
+              }
+            />
           ) : (
             <div className="space-y-8">
-              {sectionKeys.map((key) => {
+              {sectionKeys.map((key, index) => {
                 const summary = groupSummary(key);
+                const heading = key || 'Ungrouped';
                 return (
-                  <section key={key || 'other'}>
+                  <section key={key || 'other'} aria-label={hasGroups ? heading : 'Applications'}>
                     {hasGroups && (
-                      <div className="mb-3 flex flex-wrap items-baseline gap-x-3">
-                        <h2 className="text-base font-semibold text-slate-900 dark:text-white">{key || 'Other'}</h2>
-                        <span className={`text-sm font-medium ${summary.tone}`}>
-                          {summary.healthy}/{summary.total} healthy
+                      <div className="mb-2 flex flex-wrap items-baseline gap-x-3">
+                        <h2 className="text-sm font-semibold text-ink">{heading}</h2>
+                        <span className={`tabular text-xs font-medium ${summary.tone}`}>
+                          {summary.healthy} of {summary.total} healthy
                         </span>
                         {summary.inMaintenance > 0 && (
-                          <span className="text-xs text-slate-500 dark:text-gh-muted">
-                            · {summary.inMaintenance} in maintenance
-                          </span>
+                          <span className="tabular text-xs text-muted">{summary.inMaintenance} in maintenance</span>
                         )}
                       </div>
                     )}
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {(sections.get(key) ?? []).map((row) => renderCard(row.app))}
+                    <div className="overflow-hidden rounded-xl border border-rule bg-panel">
+                      {/* Column headers once, above the first group: repeating them per group is noise. */}
+                      {index === 0 && (
+                        <div
+                          aria-hidden="true"
+                          className={`${ROW_GRID} hidden border-b border-rule bg-sunken px-4 py-2 text-xs font-medium text-muted md:grid`}
+                        >
+                          <span>Status</span>
+                          <span>Application</span>
+                          <div>
+                            <span className="block">Today, by hour</span>
+                            <DayAxis />
+                          </div>
+                          <span />
+                        </div>
+                      )}
+                      <ul className="divide-y divide-rule">
+                        {(sections.get(key) ?? []).map(({ app, state }) => (
+                          <ApplicationRow
+                            key={app.id}
+                            app={app}
+                            state={state}
+                            health={healthById[app.id]}
+                            healthLoaded={healthLoaded}
+                            pending={pendingId === app.id ? pendingAction : null}
+                            cooling={cooldownId === app.id}
+                            onStart={(a) => void handleStartStop(a, 'start')}
+                            onRequestStop={setConfirmStop}
+                          />
+                        ))}
+                      </ul>
                     </div>
                   </section>
                 );
@@ -377,6 +490,21 @@ export function DashboardPlaceholder(): JSX.Element {
             </div>
           )}
         </>
+      )}
+
+      {confirmStop && (
+        <ConfirmDialog
+          title={`Stop ${confirmStop.name}?`}
+          message={
+            <>
+              {stopUptime ? `It has been up ${stopUptime}. ` : ''}
+              Stopping runs its stop script and takes it offline.
+            </>
+          }
+          confirmLabel={`Stop ${confirmStop.name}`}
+          onConfirm={confirmAndStop}
+          onCancel={() => setConfirmStop(null)}
+        />
       )}
     </div>
   );

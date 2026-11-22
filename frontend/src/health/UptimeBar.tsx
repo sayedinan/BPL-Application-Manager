@@ -3,6 +3,7 @@ import { api } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { RangeButtons } from './RangeButtons';
 import type { UptimeBars } from './types';
+import { barTitle, browserZone, lastMinute, shortDate, time, type UptimeBar as Bar } from './uptimeFormat';
 
 const OPTIONS = [
   { key: 'day', label: '1 day', count: 24 }, // today, 1 bar = 1 hour
@@ -10,51 +11,6 @@ const OPTIONS = [
   { key: 'month', label: '30 days', count: 30 }, // today + 29 days before, 1 bar = 1 calendar day
 ] as const;
 type Key = (typeof OPTIONS)[number]['key'];
-type Bar = UptimeBars['bars'][number];
-
-/** The viewer's own timezone, so "today" matches the clock they see. Empty = server decides. */
-function browserZone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-  } catch {
-    return '';
-  }
-}
-
-const time = (d: Date): string => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-const shortDate = (d: Date): string => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-/** Last minute covered by a bar (bars are [start, end), shown as 00:00 to 23:59). */
-const lastMinute = (b: Bar): Date => new Date(new Date(b.end).getTime() - 60_000);
-
-/** Merged time ranges where checks failed, e.g. "12:00 PM – 1:59 PM". */
-function downRanges(b: Bar): string[] {
-  const start = new Date(b.start).getTime();
-  const size = (new Date(b.end).getTime() - start) / b.slices.length;
-  const out: string[] = [];
-  let from = -1;
-  b.slices.forEach(([, failed], i) => {
-    if (failed > 0 && from < 0) from = i;
-    if ((failed === 0 || i === b.slices.length - 1) && from >= 0) {
-      const last = failed > 0 ? i : i - 1;
-      out.push(`${time(new Date(start + from * size))} – ${time(new Date(start + (last + 1) * size - 60_000))}`);
-      from = -1;
-    }
-  });
-  return out;
-}
-
-function barTitle(b: Bar, hourly: boolean): string {
-  const start = new Date(b.start);
-  const when = hourly
-    ? `${shortDate(start)}, ${time(start)} – ${time(lastMinute(b))}`
-    : start.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  if (b.future) return `${when} · not yet`;
-  if (b.checks === 0) return `${when} · no data`;
-  const down = downRanges(b);
-  return `${when} · ${(((b.checks - b.failedChecks) / b.checks) * 100).toFixed(1)}% available${
-    down.length ? ` · down ${down.join(', ')}` : ''
-  }`;
-}
 
 export function UptimeBar({ applicationId }: { applicationId: number }): JSX.Element {
   const [range, setRange] = useState<Key>('day');

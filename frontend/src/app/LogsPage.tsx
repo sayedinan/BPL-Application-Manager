@@ -6,8 +6,11 @@ export function LogsPage(): JSX.Element {
   const { user } = useAuth();
 
   return (
-    <div className="mx-auto max-w-6xl p-6 sm:p-8">
-      <PageHeader title="Logs" description="Audit log and per-application logs" />
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:p-8">
+      <PageHeader
+        title="Logs"
+        description="Who did what, and what each application is writing. Updates live."
+      />
 
       <Card className="overflow-hidden">
         <LogsBox role={user?.role} />

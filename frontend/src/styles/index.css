@@ -1,8 +1,60 @@
+/* Fonts are self-hosted (bundled by Vite from npm) because the CSP allows only
+   font-src 'self'. Public Sans carries the UI; JetBrains Mono is reserved for
+   scripts, logs and timestamps. */
+@import '@fontsource-variable/public-sans';
+@import '@fontsource-variable/jetbrains-mono';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+/* Design tokens: space-separated RGB channels, consumed in tailwind.config.js.
+   Light = cool white and ink. Dark = derived from the logo navy, never pure black.
+   Contrast notes: muted >= 4.5:1 on canvas and panel; ok/warn/danger text >= 4.5:1
+   on their own -bg tints. */
+:root {
+  --canvas: 247 248 250; /* #f7f8fa */
+  --panel: 255 255 255; /* #ffffff */
+  --sunken: 238 241 245; /* #eef1f5 */
+  --ink: 14 27 44; /* #0e1b2c */
+  --muted: 86 99 119; /* #566377 */
+  --rule: 213 218 225; /* #d5dae1 */
+  --accent: 15 111 219; /* #0f6fdb */
+
+  --ok: 21 128 61; /* #15803d */
+  --ok-bg: 227 245 233;
+  --warn: 180 83 9; /* #b45309 */
+  --warn-bg: 254 243 199;
+  --danger: 185 28 28; /* #b91c1c */
+  --danger-bg: 254 226 226;
+  --idle: 75 85 99; /* #4b5563 */
+  --idle-bg: 238 240 243;
+  /* Planned maintenance: its own hue so it never reads as a link or a button. */
+  --maint: 109 40 217; /* #6d28d9 */
+  --maint-bg: 237 233 254;
+}
+
+html.dark {
+  --canvas: 8 23 42; /* #08172a */
+  --panel: 13 32 56; /* #0d2038 */
+  --sunken: 6 17 32; /* #061120 */
+  --ink: 230 238 248; /* #e6eef8 */
+  --muted: 157 176 199; /* #9db0c7 */
+  --rule: 31 53 80; /* #1f3550 */
+  --accent: 74 168 255; /* #4aa8ff */
+
+  --ok: 74 222 128;
+  /* Tints are solid (pre-blended onto --panel): channel triplets cannot carry alpha. */
+  --ok-bg: 14 49 57;
+  --warn: 251 191 36;
+  --warn-bg: 50 43 46;
+  --danger: 248 113 113;
+  --danger-bg: 51 31 50;
+  --idle: 157 176 199;
+  --idle-bg: 30 49 73;
+  --maint: 196 181 253; /* #c4b5fd */
+  --maint-bg: 46 59 91;
+}
 
 @layer base {
   html {
@@ -14,12 +66,18 @@
   }
 
   body {
-    @apply bg-surface-canvas text-slate-900 antialiased;
-    @apply dark:bg-surface-dark dark:text-gh-fg;
+    @apply bg-canvas text-ink antialiased;
   }
 
   ::selection {
     @apply bg-brand-200 text-brand-900;
+  }
+
+  /* One visible focus treatment for everything keyboard-reachable. Components
+     that need a different ring can still override with focus-visible utilities. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
   }
 
   /* Thin, theme-aware scrollbars for the log viewer and long lists */
@@ -31,7 +89,7 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-slate-300 dark:bg-gh-border;
+    background: rgb(var(--rule));
     border-radius: 9999px;
   }
 }
@@ -40,5 +98,22 @@
   .transition-theme {
     transition-property: background-color, border-color, color, box-shadow;
     transition-duration: 150ms;
+  }
+
+  /* Timestamps, counts, durations: aligned digits. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Honour the OS "reduce motion" setting: no looping or entrance animation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

@@ -1,7 +1,7 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { Spinner } from './Spinner';
 
-type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
+type Variant = 'primary' | 'secondary' | 'danger' | 'dangerOutline' | 'ghost';
 type Size = 'sm' | 'md';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -11,16 +11,13 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANT_CLASSES: Record<Variant, string> = {
-  primary:
-    'bg-brand-600 text-white hover:bg-brand-700 focus-visible:ring-brand-500 disabled:bg-brand-600/50',
-  secondary:
-    'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 focus-visible:ring-brand-500 ' +
-    'dark:bg-surface-darkSubtle dark:text-gh-fg dark:border-gh-border dark:hover:bg-gh-hover',
-  danger:
-    'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500 disabled:bg-red-600/50',
-  ghost:
-    'bg-transparent text-slate-600 hover:bg-slate-100 focus-visible:ring-brand-500 ' +
-    'dark:text-gh-fgSoft dark:hover:bg-gh-hover',
+  primary: 'bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-600/50',
+  secondary: 'border border-rule bg-panel text-ink hover:bg-sunken',
+  // Fixed colors (not the theme token): white text must keep >= 4.5:1 in both themes.
+  danger: 'bg-red-700 text-white hover:bg-red-800 dark:bg-red-600 dark:hover:bg-red-700 disabled:opacity-50',
+  // For routine destructive actions (Stop): keeps solid red for confirmations only.
+  dangerOutline: 'border border-danger/50 bg-panel text-danger hover:bg-danger-bg',
+  ghost: 'bg-transparent text-muted hover:bg-sunken hover:text-ink',
 };
 
 const SIZE_CLASSES: Record<Size, string> = {
@@ -38,9 +35,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={disabled || loading}
       aria-busy={loading}
       className={[
-        'inline-flex items-center justify-center gap-1.5 rounded-xl font-medium',
-        'transition-theme focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
-        'dark:focus-visible:ring-offset-surface-dark',
+        'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium',
+        'transition-theme focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+        'focus-visible:ring-offset-2 focus-visible:ring-offset-canvas',
         'disabled:cursor-not-allowed disabled:opacity-50',
         VARIANT_CLASSES[variant],
         SIZE_CLASSES[size],

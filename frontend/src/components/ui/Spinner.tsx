@@ -15,11 +15,8 @@ export function LoadingBlock({
   className?: string;
 }): JSX.Element {
   return (
-    <div
-      role="status"
-      className={`flex items-center justify-center gap-2 text-sm text-slate-500 dark:text-gh-muted ${className}`}
-    >
-      <Spinner className="h-5 w-5 text-brand-600 dark:text-brand-500" />
+    <div role="status" className={`flex items-center justify-center gap-2 text-sm text-muted ${className}`}>
+      <Spinner className="h-5 w-5 text-accent" />
       <span>{label}</span>
     </div>
   );
