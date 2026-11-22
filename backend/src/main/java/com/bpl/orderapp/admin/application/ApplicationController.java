@@ -8,6 +8,10 @@ import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
 import com.bpl.orderapp.admin.security.AccessGuard;
 import com.bpl.orderapp.admin.security.Action;
 import com.bpl.orderapp.admin.ssh.SshConnection;
+import com.bpl.orderapp.admin.status.ApplicationStatusStreak;
+import com.bpl.orderapp.admin.status.ApplicationStatusStreakRepository;
+import com.bpl.orderapp.admin.status.ApplicationStatusTransition;
+import com.bpl.orderapp.admin.status.ApplicationStatusTransitionRepository;
 import com.bpl.orderapp.admin.status.StatusConfirmationTimeoutException;
 import com.bpl.orderapp.admin.status.StatusPollingOrchestrator;
 import com.bpl.orderapp.admin.user.UserRepository;
@@ -53,6 +57,8 @@ public class ApplicationController {
     private final AccessGuard accessGuard;
     private final UserRepository userRepository;
     private final ApplicationRepository applicationRepository;
+    private final ApplicationStatusStreakRepository streakRepository;
+    private final ApplicationStatusTransitionRepository transitionRepository;
 
     public ApplicationController(JdbcTemplate jdbc, SshCredentialCipher cipher,
             IdempotencyService idempotencyService, SshConnection sshConnection,
@@ -60,7 +66,9 @@ public class ApplicationController {
             StatusPollingOrchestrator statusPollingOrchestrator,
             java.util.List<com.bpl.orderapp.admin.notification.Notifier> notifiers,
             AccessGuard accessGuard, UserRepository userRepository,
-            ApplicationRepository applicationRepository) {
+            ApplicationRepository applicationRepository,
+            ApplicationStatusStreakRepository streakRepository,
+            ApplicationStatusTransitionRepository transitionRepository) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.idempotencyService = idempotencyService;
@@ -72,6 +80,8 @@ public class ApplicationController {
         this.accessGuard = accessGuard;
         this.userRepository = userRepository;
         this.applicationRepository = applicationRepository;
+        this.streakRepository = streakRepository;
+        this.transitionRepository = transitionRepository;
     }
 
     @GetMapping
@@ -87,44 +97,25 @@ public class ApplicationController {
         java.util.UUID userId = user.getId();
         String role = user.getRole();
 
-        // online/streak_started_at come from application_status_streak
-        // (STATUS-REDESIGN.md §4) via LEFT JOIN — a just-created
-        // application may not have a streak row yet (its first status
-        // check hasn't landed), in which case it reads as offline.
-        List<Map<String, Object>> rows;
-        if ("SYS_ADMIN".equals(role) || "ADMIN".equals(role)) {
-            rows = jdbc.queryForList(
-                "SELECT a.id, a.name, a.group_name, s.online, s.streak_started_at " +
-                    "FROM applications a " +
-                    "LEFT JOIN application_status_streak s ON s.application_id = a.id " +
-                    "ORDER BY a.name");
-        } else {
-            rows = jdbc.queryForList(
-                "SELECT a.id, a.name, a.group_name, s.online, s.streak_started_at FROM applications a " +
-                    "JOIN user_application_assignments uaa ON uaa.application_id = a.id " +
-                    "LEFT JOIN application_status_streak s ON s.application_id = a.id " +
-                    "WHERE uaa.user_id = ? ORDER BY a.name",
-                userId);
-        }
+        // A just-created application may not have a streak row yet (its first
+        // status check hasn't landed); the repository returns null online for
+        // it, which reads as offline here.
+        List<ApplicationListRow> rows = ("SYS_ADMIN".equals(role) || "ADMIN".equals(role))
+            ? applicationRepository.findAllWithStatus()
+            : applicationRepository.findAssignedWithStatus(userId);
 
         List<Map<String, Object>> result = new java.util.ArrayList<>();
-        for (Map<String, Object> row : rows) {
+        for (ApplicationListRow row : rows) {
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("id", ((Number) row.get("id")).longValue());
-            item.put("name", row.get("name"));
-            item.put("groupName", row.get("group_name"));
-            boolean online = Boolean.TRUE.equals(row.get("online"));
+            item.put("id", row.id());
+            item.put("name", row.name());
+            item.put("groupName", row.groupName());
+            boolean online = Boolean.TRUE.equals(row.online());
             item.put("online", online);
-            Object streakStartedAt = row.get("streak_started_at");
-            // .toString() on a java.sql.Timestamp has no timezone marker
-            // (e.g. "2026-09-14 09:30:00.0"), so the browser's `new Date(...)`
-            // parses it as LOCAL time instead of UTC — inflating "running for"
-            // by exactly the browser's UTC offset (6h for Dhaka). Format as a
-            // proper ISO-8601 instant instead, same fix already applied in
-            // AuditLogController. Only meaningful while online — matches the
-            // old started_at semantics (null while stopped).
-            item.put("startedAt", (online && streakStartedAt != null)
-                ? ((java.sql.Timestamp) streakStartedAt).toInstant().toString()
+            // Instant.toString() is ISO-8601 with a "Z", so the browser parses it
+            // as UTC. Only meaningful while online (null while stopped).
+            item.put("startedAt", (online && row.streakStartedAt() != null)
+                ? row.streakStartedAt().toString()
                 : null);
             result.add(item);
         }
@@ -166,31 +157,24 @@ public class ApplicationController {
         // Walk every recorded flip chronologically and sum the duration
         // spent in each state. A brand-new app with zero transitions yet
         // is assumed offline from creation (it starts stopped by design).
-        List<Map<String, Object>> transitions = jdbc.queryForList(
-            "SELECT online, transitioned_at FROM application_status_transitions " +
-                "WHERE application_id = ? ORDER BY transitioned_at ASC", id);
+        List<ApplicationStatusTransition> transitions =
+            transitionRepository.findByApplicationIdOrderByTransitionedAtAsc(id);
 
         long uptimeSeconds = 0;
         long downtimeSeconds = 0;
         Instant cursor = createdAt.toInstant();
         boolean state = false;
-        for (Map<String, Object> t : transitions) {
-            Instant flipAt = ((java.sql.Timestamp) t.get("transitioned_at")).toInstant();
+        for (ApplicationStatusTransition t : transitions) {
+            Instant flipAt = t.getTransitionedAt();
             long delta = flipAt.getEpochSecond() - cursor.getEpochSecond();
             if (state) uptimeSeconds += delta; else downtimeSeconds += delta;
             cursor = flipAt;
-            state = (Boolean) t.get("online");
+            state = t.isOnline();
         }
         long tail = Instant.now().getEpochSecond() - cursor.getEpochSecond();
         if (state) uptimeSeconds += tail; else downtimeSeconds += tail;
 
-        Map<String, Object> streakRow;
-        try {
-            streakRow = jdbc.queryForMap(
-                "SELECT online, streak_started_at FROM application_status_streak WHERE application_id = ?", id);
-        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
-            streakRow = null;
-        }
+        java.util.Optional<ApplicationStatusStreak> streak = streakRepository.findById(id);
 
         Timestamp lastRan;
         try {
@@ -206,10 +190,9 @@ public class ApplicationController {
         body.put("createdAt", createdAt.toInstant().toString());
         body.put("totalUptimeSeconds", uptimeSeconds);
         body.put("totalDowntimeSeconds", downtimeSeconds);
-        body.put("currentlyOnline", streakRow != null && Boolean.TRUE.equals(streakRow.get("online")));
-        body.put("currentStreakStartedAt", streakRow != null
-            ? ((java.sql.Timestamp) streakRow.get("streak_started_at")).toInstant().toString()
-            : null);
+        body.put("currentlyOnline", streak.map(ApplicationStatusStreak::isOnline).orElse(false));
+        body.put("currentStreakStartedAt",
+            streak.map(s -> s.getStreakStartedAt().toString()).orElse(null));
         body.put("lastRanAt", lastRan != null ? lastRan.toInstant().toString() : null);
         body.put("lastWentOnlineAt", lastTransitionAt(id, true));
         body.put("lastWentOfflineAt", lastTransitionAt(id, false));
@@ -607,24 +590,22 @@ public class ApplicationController {
     }
 
     private String lastTransitionAt(Long id, boolean online) {
-        List<Timestamp> rows = jdbc.queryForList(
-            "SELECT transitioned_at FROM application_status_transitions " +
-                "WHERE application_id = ? AND online = ? ORDER BY transitioned_at DESC LIMIT 1",
-            Timestamp.class, id, online);
-        return rows.isEmpty() ? null : rows.get(0).toInstant().toString();
+        return transitionRepository
+            .findFirstByApplicationIdAndOnlineOrderByTransitionedAtDesc(id, online)
+            .map(t -> t.getTransitionedAt().toString())
+            .orElse(null);
     }
 
     private List<Map<String, Object>> recentTransitions(Long id, int limit) {
-        return jdbc.query(
-            "SELECT online, transitioned_at FROM application_status_transitions " +
-                "WHERE application_id = ? ORDER BY transitioned_at DESC LIMIT ?",
-            (rs, n) -> {
-                Map<String, Object> row = new LinkedHashMap<>();
-                row.put("online", rs.getBoolean("online"));
-                row.put("at", rs.getTimestamp("transitioned_at").toInstant().toString());
-                return row;
-            },
-            id, limit);
+        List<Map<String, Object>> out = new java.util.ArrayList<>();
+        for (ApplicationStatusTransition t : transitionRepository.findByApplicationIdOrderByTransitionedAtDesc(
+                id, org.springframework.data.domain.PageRequest.of(0, limit))) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("online", t.isOnline());
+            row.put("at", t.getTransitionedAt().toString());
+            out.add(row);
+        }
+        return out;
     }
 
     private void requireHealthMonitoring(Long id) {
