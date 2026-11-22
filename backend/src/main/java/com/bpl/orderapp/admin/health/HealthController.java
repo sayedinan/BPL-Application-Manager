@@ -88,11 +88,14 @@ public class HealthController {
     private final ObjectMapper compactMapper;
     private final UserRepository userRepository;
     private final ApplicationRepository applicationRepository;
+    private final ApplicationHealthConfigRepository configRepository;
 
     public HealthController(JdbcTemplate jdbc, SshCredentialCipher cipher, AuditWriter auditWriter,
             HealthCheckService healthCheckService, HealthReadService healthReadService,
             StatusPollingOrchestrator statusPolling, ObjectMapper mapper, UserRepository userRepository,
-            ApplicationRepository applicationRepository) {
+            ApplicationRepository applicationRepository,
+            ApplicationHealthConfigRepository configRepository) {
+        this.configRepository = configRepository;
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.auditWriter = auditWriter;
@@ -291,21 +294,18 @@ public class HealthController {
         applicationName(id);
 
         Map<String, Object> body = new LinkedHashMap<>();
-        List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT enabled, url, api_key_enc IS NOT NULL AS has_api_key, "
-                + "tls_pin_sha256, poll_interval_seconds "
-                + "FROM application_health_config WHERE application_id = ?", id);
-        if (rows.isEmpty()) {
+        java.util.Optional<ApplicationHealthConfig> found = configRepository.findById(id);
+        if (found.isEmpty()) {
             body.put("configured", false);
             return ResponseEntity.ok(body);
         }
-        Map<String, Object> row = rows.get(0);
+        ApplicationHealthConfig config = found.get();
         body.put("configured", true);
-        body.put("enabled", row.get("enabled"));
-        body.put("url", row.get("url"));
-        body.put("hasApiKey", row.get("has_api_key"));
-        body.put("tlsPinSha256", row.get("tls_pin_sha256"));
-        body.put("pollIntervalSeconds", row.get("poll_interval_seconds"));
+        body.put("enabled", config.isEnabled());
+        body.put("url", config.getUrl());
+        body.put("hasApiKey", config.getApiKeyEnc() != null);
+        body.put("tlsPinSha256", config.getTlsPinSha256());
+        body.put("pollIntervalSeconds", config.getPollIntervalSeconds());
         return ResponseEntity.ok(body);
     }
 
@@ -331,18 +331,15 @@ public class HealthController {
             keyAction = key.isEmpty() ? "removed" : "set";
         }
 
-        jdbc.update(
-            "INSERT INTO application_health_config "
-                + "(application_id, enabled, url, api_key_enc, tls_pin_sha256, poll_interval_seconds) "
-                + "VALUES (?, ?, ?, ?, ?, ?) "
-                + "ON CONFLICT (application_id) DO UPDATE SET "
-                + "enabled = EXCLUDED.enabled, url = EXCLUDED.url, "
-                + "api_key_enc = CASE WHEN ? THEN EXCLUDED.api_key_enc "
-                + "ELSE application_health_config.api_key_enc END, "
-                + "tls_pin_sha256 = EXCLUDED.tls_pin_sha256, "
-                + "poll_interval_seconds = EXCLUDED.poll_interval_seconds, "
-                + "updated_at = NOW()",
-            id, enabled, url, encryptedKey, pin, interval, keyProvided);
+        // Upsert: update the existing row, or create it. The stored API key is
+        // only touched when the request carried one (null = keep, "" = remove).
+        ApplicationHealthConfig config = configRepository.findById(id)
+            .orElseGet(() -> new ApplicationHealthConfig(id));
+        config.apply(enabled, url, pin, interval);
+        if (keyProvided) {
+            config.setApiKeyEnc(encryptedKey);
+        }
+        configRepository.save(config);
 
         // No secrets and no URL in the audit detail.
         Map<String, Object> detail = new LinkedHashMap<>();
@@ -366,10 +363,10 @@ public class HealthController {
         requireAction(caller, Action.UPDATE_APPLICATION);
         String appName = applicationName(id);
 
-        int removed = jdbc.update("DELETE FROM application_health_config WHERE application_id = ?", id);
-        if (removed == 0) {
+        if (!configRepository.existsById(id)) {
             throw new NotFoundException();
         }
+        configRepository.deleteById(id);
         jdbc.update("DELETE FROM application_health_latest WHERE application_id = ?", id);
 
         Map<String, Object> detail = new LinkedHashMap<>();
@@ -399,10 +396,10 @@ public class HealthController {
 
         String apiKey;
         if (req.apiKey() == null) {
-            List<String> stored = jdbc.queryForList(
-                "SELECT api_key_enc FROM application_health_config "
-                    + "WHERE application_id = ? AND api_key_enc IS NOT NULL", String.class, id);
-            apiKey = stored.isEmpty() ? null : cipher.decrypt(stored.get(0));
+            apiKey = configRepository.findById(id)
+                .map(ApplicationHealthConfig::getApiKeyEnc)
+                .map(cipher::decrypt)
+                .orElse(null);
         } else {
             apiKey = validateApiKey(req.apiKey());
         }

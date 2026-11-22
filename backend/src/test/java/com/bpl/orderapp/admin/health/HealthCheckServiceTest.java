@@ -35,23 +35,25 @@ class HealthCheckServiceTest {
     private final AtomicInteger storedFailures = new AtomicInteger(0);
 
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class, this::fakeDatabase);
+    private final ApplicationHealthConfigRepository configRepository =
+        mock(ApplicationHealthConfigRepository.class, this::fakeConfigs);
     private final HealthCheckService service = new HealthCheckService(
-        jdbc, cipher, httpClient, new ContractParser(mapper), mapper, readService);
+        jdbc, cipher, httpClient, new ContractParser(mapper), mapper, readService, configRepository);
+
+    private Object fakeConfigs(InvocationOnMock call) {
+        if (call.getMethod().getName().equals("findByApplicationIdAndEnabledTrue")) {
+            if (!configured) {
+                return java.util.Optional.empty();
+            }
+            ApplicationHealthConfig config = new ApplicationHealthConfig(APP_ID);
+            config.apply(true, "http://app.test/status", null, 10);
+            return java.util.Optional.of(config);
+        }
+        return null;
+    }
 
     private Object fakeDatabase(InvocationOnMock call) {
         String sql = call.getArgument(0);
-        if (sql.startsWith("SELECT c.url")) {
-            if (!configured) {
-                return List.of();
-            }
-            Map<String, Object> row = new HashMap<>();
-            row.put("url", "http://app.test/status");
-            row.put("api_key_enc", null);
-            row.put("tls_pin_sha256", null);
-            row.put("poll_interval_seconds", 10);
-            row.put("name", "Order Engine");
-            return List.of(row);
-        }
         if (sql.startsWith("SELECT consecutive_failures")) {
             return List.of(storedFailures.get());
         }

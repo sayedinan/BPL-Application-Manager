@@ -35,8 +35,11 @@ public class HealthReadService {
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
     private final WebSocketBroadcast broadcast;
+    private final ApplicationHealthConfigRepository configRepository;
 
-    public HealthReadService(JdbcTemplate jdbc, ObjectMapper mapper, WebSocketBroadcast broadcast) {
+    public HealthReadService(JdbcTemplate jdbc, ObjectMapper mapper, WebSocketBroadcast broadcast,
+                             ApplicationHealthConfigRepository configRepository) {
+        this.configRepository = configRepository;
         this.jdbc = jdbc;
         this.mapper = mapper;
         this.broadcast = broadcast;
@@ -56,15 +59,13 @@ public class HealthReadService {
             body.put("maintenanceNote", maintenance.get(0).get("note"));
             body.put("maintenanceBy", maintenance.get(0).get("started_by"));
         }
-        List<Map<String, Object>> configRows = jdbc.queryForList(
-            "SELECT enabled, poll_interval_seconds FROM application_health_config WHERE application_id = ?",
-            applicationId);
-        if (configRows.isEmpty()) {
+        java.util.Optional<ApplicationHealthConfig> config = configRepository.findById(applicationId);
+        if (config.isEmpty()) {
             body.put("monitored", false);
             return body;
         }
-        body.put("monitored", Boolean.TRUE.equals(configRows.get(0).get("enabled")));
-        body.put("pollIntervalSeconds", configRows.get(0).get("poll_interval_seconds"));
+        body.put("monitored", config.get().isEnabled());
+        body.put("pollIntervalSeconds", config.get().getPollIntervalSeconds());
 
         List<Map<String, Object>> rows = jdbc.queryForList(
             "SELECT checked_at, reachable, http_status, response_ms, status, payload, error, "

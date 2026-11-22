@@ -83,13 +83,16 @@ public class HealthCheckService {
     private final ContractParser contractParser;
     private final ObjectMapper payloadMapper;
     private final HealthReadService readService;
+    private final ApplicationHealthConfigRepository configRepository;
 
     private final Map<Long, Instant> lastPolled = new ConcurrentHashMap<>();
     private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
 
     public HealthCheckService(JdbcTemplate jdbc, SshCredentialCipher cipher,
             HealthHttpClient httpClient, ContractParser contractParser,
-            ObjectMapper mapper, HealthReadService readService) {
+            ObjectMapper mapper, HealthReadService readService,
+            ApplicationHealthConfigRepository configRepository) {
+        this.configRepository = configRepository;
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.httpClient = httpClient;
@@ -104,17 +107,13 @@ public class HealthCheckService {
      *              the start/stop confirmation loop, which needs a fresh reading
      */
     public HealthDecision check(Long applicationId, boolean force) {
-        List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT c.url, c.api_key_enc, c.tls_pin_sha256, c.poll_interval_seconds, a.name "
-                + "FROM application_health_config c "
-                + "JOIN applications a ON a.id = c.application_id "
-                + "WHERE c.application_id = ? AND c.enabled = TRUE",
-            applicationId);
-        if (rows.isEmpty()) {
+        java.util.Optional<ApplicationHealthConfig> found =
+            configRepository.findByApplicationIdAndEnabledTrue(applicationId);
+        if (found.isEmpty()) {
             return HealthDecision.NOT_CONFIGURED;
         }
-        Map<String, Object> config = rows.get(0);
-        long intervalMs = ((Number) config.get("poll_interval_seconds")).longValue() * 1000L;
+        ApplicationHealthConfig config = found.get();
+        long intervalMs = config.getPollIntervalSeconds() * 1000L;
 
         Instant now = Instant.now();
         Instant last = lastPolled.get(applicationId);
@@ -135,7 +134,7 @@ public class HealthCheckService {
         }
     }
 
-    private HealthDecision runCheck(Long applicationId, Map<String, Object> config) {
+    private HealthDecision runCheck(Long applicationId, ApplicationHealthConfig config) {
         Instant checkedAt = Instant.now();
         Integer httpStatus = null;
         Long responseMs = null;
@@ -144,9 +143,9 @@ public class HealthCheckService {
         String error = null;
 
         try {
-            String apiKey = decryptKey((String) config.get("api_key_enc"));
+            String apiKey = decryptKey(config.getApiKeyEnc());
             HealthHttpClient.Response response = httpClient.fetch(
-                (String) config.get("url"), apiKey, (String) config.get("tls_pin_sha256"));
+                config.getUrl(), apiKey, config.getTlsPinSha256());
             httpStatus = response.statusCode();
             responseMs = response.responseMs();
             certNotAfter = response.certNotAfter();

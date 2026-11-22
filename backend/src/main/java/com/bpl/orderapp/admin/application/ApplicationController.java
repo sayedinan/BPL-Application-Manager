@@ -5,6 +5,7 @@ import com.bpl.orderapp.admin.common.IdempotencyService;
 import com.bpl.orderapp.admin.common.NotFoundException;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
+import com.bpl.orderapp.admin.health.ApplicationHealthConfigRepository;
 import com.bpl.orderapp.admin.security.AccessGuard;
 import com.bpl.orderapp.admin.security.Action;
 import com.bpl.orderapp.admin.ssh.SshConnection;
@@ -59,6 +60,7 @@ public class ApplicationController {
     private final ApplicationRepository applicationRepository;
     private final ApplicationStatusStreakRepository streakRepository;
     private final ApplicationStatusTransitionRepository transitionRepository;
+    private final ApplicationHealthConfigRepository healthConfigRepository;
 
     public ApplicationController(JdbcTemplate jdbc, SshCredentialCipher cipher,
             IdempotencyService idempotencyService, SshConnection sshConnection,
@@ -68,7 +70,8 @@ public class ApplicationController {
             AccessGuard accessGuard, UserRepository userRepository,
             ApplicationRepository applicationRepository,
             ApplicationStatusStreakRepository streakRepository,
-            ApplicationStatusTransitionRepository transitionRepository) {
+            ApplicationStatusTransitionRepository transitionRepository,
+            ApplicationHealthConfigRepository healthConfigRepository) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.idempotencyService = idempotencyService;
@@ -82,6 +85,7 @@ public class ApplicationController {
         this.applicationRepository = applicationRepository;
         this.streakRepository = streakRepository;
         this.transitionRepository = transitionRepository;
+        this.healthConfigRepository = healthConfigRepository;
     }
 
     @GetMapping
@@ -609,10 +613,7 @@ public class ApplicationController {
     }
 
     private void requireHealthMonitoring(Long id) {
-        Integer n = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM application_health_config WHERE application_id = ? AND enabled = TRUE",
-            Integer.class, id);
-        if (n == null || n == 0) {
+        if (!healthConfigRepository.existsByApplicationIdAndEnabledTrue(id)) {
             throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.CONFLICT,
                 "Set up health monitoring for this application before starting or stopping it.");
