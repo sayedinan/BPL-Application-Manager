@@ -42,7 +42,7 @@ export function UptimeBar({ applicationId }: { applicationId: number }): JSX.Ele
   const bars: Bar[] = useMemo(() => (ready && data ? data.bars : []), [ready, data]);
   const pct = ready && data ? data.availabilityPercent : null;
   const pctColor =
-    pct === null ? '' : pct >= 99 ? 'text-status-online' : pct >= 90 ? 'text-status-pending' : 'text-status-error';
+    pct === null ? '' : pct >= 99 ? 'text-ok' : pct >= 90 ? 'text-warn' : 'text-danger';
 
   const leftLabel = bars.length
     ? hourly
@@ -65,13 +65,13 @@ export function UptimeBar({ applicationId }: { applicationId: number }): JSX.Ele
           <div
             key={i}
             title={b ? barTitle(b, hourly) : undefined}
-            className="flex flex-1 flex-col-reverse overflow-hidden rounded-sm bg-slate-300 dark:bg-gh-hover"
+            className="flex flex-1 flex-col-reverse overflow-hidden rounded-sm bg-rule"
           >
             {b &&
               b.slices.map(([checks, failed], k) => (
                 <div
                   key={k}
-                  className={checks === 0 ? '' : failed > 0 ? 'bg-status-error' : 'bg-status-online'}
+                  className={checks === 0 ? '' : failed > 0 ? 'bg-danger' : 'bg-ok'}
                   style={{ flex: '1 1 0%' }}
                 />
               ))}
@@ -79,12 +79,12 @@ export function UptimeBar({ applicationId }: { applicationId: number }): JSX.Ele
         ))}
       </div>
 
-      <div className="mt-1 flex justify-between text-[11px] text-slate-500 dark:text-gh-muted">
+      <div className="mt-1 flex justify-between text-[11px] text-muted">
         <span>{leftLabel}</span>
         <span>{rightLabel}</span>
       </div>
       {ready && data && data.checks === 0 && (
-        <p className="mt-1 text-xs text-slate-500 dark:text-gh-muted">No checks recorded in this period yet.</p>
+        <p className="mt-1 text-xs text-muted">No checks recorded in this period yet.</p>
       )}
     </div>
   );

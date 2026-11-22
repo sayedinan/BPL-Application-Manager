@@ -48,12 +48,19 @@ function formatRunningTime(startedAt: string | null): string | null {
 }
 
 function formatDuration(totalSeconds: number): string {
+  if (!Number.isFinite(totalSeconds)) return '—';
   const t = Math.max(0, Math.floor(totalSeconds));
   const d = Math.floor(t / 86400);
   const h = Math.floor((t % 86400) / 3600);
   const m = Math.floor((t % 3600) / 60);
   const s = t % 60;
   return `${d}d ${h}h ${m}m ${s}s`;
+}
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
 }
 
 function formatWhen(iso: string | null): string {
@@ -64,7 +71,7 @@ function BackLink(): JSX.Element {
   return (
     <Link
       to="/"
-      className="mb-4 inline-block text-sm font-medium text-slate-500 hover:text-slate-800 dark:text-gh-muted dark:hover:text-gh-fg"
+      className="mb-4 inline-block text-sm font-medium text-muted hover:text-ink/80"
     >
       ← Dashboard
     </Link>
@@ -150,8 +157,8 @@ export function ApplicationDetailsPage(): JSX.Element {
       <div className="mx-auto max-w-6xl p-6 sm:p-8">
         <BackLink />
         <Card className="p-8 text-center">
-          <h1 className="text-lg font-semibold text-slate-900 dark:text-white">Application not found</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-gh-muted">
+          <h1 className="text-lg font-semibold text-ink dark:text-white">Application not found</h1>
+          <p className="mt-1 text-sm text-muted">
             It may have been deleted, or it isn't assigned to you.
           </p>
         </Card>
@@ -243,7 +250,7 @@ export function ApplicationDetailsPage(): JSX.Element {
               <Row label="State">{app.online ? 'Online' : 'Offline'}</Row>
               <Row label="Started">{formatWhen(app.startedAt)}</Row>
               {runningTime && <Row label="Running for">{runningTime}</Row>}
-              {stats && <Row label="Added">{new Date(stats.createdAt).toLocaleDateString()}</Row>}
+              {stats && <Row label="Added">{formatDate(stats.createdAt)}</Row>}
             </dl>
           </Section>
 
@@ -251,7 +258,7 @@ export function ApplicationDetailsPage(): JSX.Element {
             {stats ? (
               <>
                 <UptimeBar applicationId={app.id} />
-                <dl className="mt-4 border-t border-slate-200 pt-3 dark:border-gh-border">
+                <dl className="mt-4 border-t border-rule pt-3">
                   <Row label="Total uptime">{formatDuration(stats.totalUptimeSeconds)}</Row>
                   <Row label="Total downtime">{formatDuration(stats.totalDowntimeSeconds)}</Row>
                   <Row label="Last ran">{stats.lastRanAt ? formatWhen(stats.lastRanAt) : 'Never'}</Row>
@@ -262,15 +269,15 @@ export function ApplicationDetailsPage(): JSX.Element {
                   <Row label="Last went offline">{formatWhen(stats.lastWentOfflineAt)}</Row>
                 </dl>
                 {stats.recentTransitions.length > 0 && (
-                  <div className="mt-4 border-t border-slate-200 pt-3 dark:border-gh-border">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-gh-muted">
+                  <div className="mt-4 border-t border-rule pt-3">
+                    <p className="mb-2 text-sm font-semibold text-ink">
                       Recent changes
                     </p>
                     <ul className="space-y-1.5">
                       {stats.recentTransitions.map((t) => (
                         <li key={`${t.at}-${t.online}`} className="flex items-center justify-between gap-2 text-xs">
                           <Badge tone={t.online ? 'online' : 'offline'}>{t.online ? 'Online' : 'Offline'}</Badge>
-                          <span className="text-slate-500 dark:text-gh-muted">{formatWhen(t.at)}</span>
+                          <span className="text-muted">{formatWhen(t.at)}</span>
                         </li>
                       ))}
                     </ul>

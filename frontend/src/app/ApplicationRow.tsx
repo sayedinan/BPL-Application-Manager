@@ -94,7 +94,7 @@ export function ApplicationRow({
   const monitored = health?.monitored === true;
 
   return (
-    <li className={`${ROW_GRID} px-4 py-3`}>
+    <li className={`${ROW_GRID} px-4 py-3 transition-theme hover:bg-sunken/50`}>
       {/* DOM order is name, action, strip so keyboard and screen-reader order reads
           "name, Start/Stop" first; md:order-* puts the status column first visually.
           On phones the badge sits on the name line (saves a row); on wide screens

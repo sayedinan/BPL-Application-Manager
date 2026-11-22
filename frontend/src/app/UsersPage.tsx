@@ -29,10 +29,10 @@ interface Application {
 }
 
 const inputClass =
-  'w-full rounded-xl border border-slate-200 bg-white shadow-sm px-3 py-2 text-sm text-slate-900 ' +
-  'placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
-  'dark:border-gh-border dark:bg-surface-dark dark:text-gh-fg';
-const labelClass = 'mb-1 block text-sm font-medium text-slate-700 dark:text-gh-fgSoft';
+  'w-full rounded-xl border border-rule bg-panel shadow-sm px-3 py-2 text-sm text-ink ' +
+  'placeholder:text-muted/70 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
+  ' dark:bg-sunken';
+const labelClass = 'mb-1 block text-sm font-medium text-ink/80';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function roleTone(role: User['role']): BadgeTone {
@@ -84,8 +84,8 @@ function fieldErrorsFrom(err: unknown): Record<string, string> | null {
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
   return (
     <div className="flex items-start justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
-      <dt className="shrink-0 text-slate-500 dark:text-gh-muted">{label}</dt>
-      <dd className="min-w-0 break-words text-right font-medium text-slate-900 dark:text-gh-fg">{children}</dd>
+      <dt className="shrink-0 text-muted">{label}</dt>
+      <dd className="min-w-0 break-words text-right font-medium text-ink">{children}</dd>
     </div>
   );
 }
@@ -358,14 +358,14 @@ export function UsersPage(): JSX.Element {
       {error && <Alert className="mb-4">{error}</Alert>}
 
       {createdResult && (
-        <Card className="mb-6 max-w-xl border-status-online/30 bg-status-onlineBg/60 p-5 dark:border-green-500/20 dark:bg-green-500/5">
-          <p className="mb-1 font-semibold text-status-online dark:text-green-400">
+        <Card className="mb-6 max-w-xl border-ok/30 bg-ok-bg/60 p-5 dark:border-green-500/20 dark:bg-green-500/5">
+          <p className="mb-1 font-semibold text-ok dark:text-green-400">
             User &quot;{createdResult.username}&quot; created.
           </p>
-          <p className="mb-2 text-sm text-slate-600 dark:text-gh-fgSoft">
+          <p className="mb-2 text-sm text-ink/80">
             Temporary password (shown once — deliver this out-of-band; it cannot be retrieved again):
           </p>
-          <code className="block break-all rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-sm dark:border-gh-border dark:bg-surface-dark dark:text-gh-fg">
+          <code className="block break-all rounded-lg border border-rule bg-panel px-3 py-2 font-mono text-sm dark:bg-sunken">
             {createdResult.temporaryPassword}
           </code>
           <div className="mt-3 flex gap-2">
@@ -382,10 +382,10 @@ export function UsersPage(): JSX.Element {
       {showForm && (
         <Modal onClose={() => { setShowForm(false); resetForm(); }}>
           <form onSubmit={handleCreate} noValidate>
-            <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-gh-border dark:bg-gh-subtle/60">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white">New User</h2>
+            <div className="border-b border-rule bg-sunken px-5 py-3">
+              <h2 className="text-base font-semibold text-ink dark:text-white">New User</h2>
             </div>
-            <div className="bg-slate-100 p-5 dark:bg-gh-inset">
+            <div className="bg-panel p-5">
             <label className="mb-3 block">
               <span className={labelClass}>Full name</span>
               <input
@@ -427,7 +427,7 @@ export function UsersPage(): JSX.Element {
             <label className="mb-3 block">
               <span className={labelClass}>Phone number</span>
               <div className="flex items-center gap-2">
-                <span className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-gh-border dark:bg-gh-hover dark:text-gh-muted">
+                <span className="rounded-lg border border-rule bg-sunken px-3 py-2 text-sm text-muted">
                   8801
                 </span>
                 <input
@@ -458,7 +458,7 @@ export function UsersPage(): JSX.Element {
                 {canCreateAdmin && <option value="SYS_ADMIN">Sys.Admin</option>}
               </select>
               {!canCreateAdmin && (
-                <span className="mt-1 block text-xs text-slate-500 dark:text-gh-muted">
+                <span className="mt-1 block text-xs text-muted">
                   Only Sys.Admin can create Admin accounts.
                 </span>
               )}
@@ -475,12 +475,12 @@ export function UsersPage(): JSX.Element {
       {loading ? (
         <LoadingBlock className="py-10" />
       ) : users.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">No users yet.</Card>
+        <Card className="p-8 text-center text-sm text-muted">No users yet.</Card>
       ) : (
         <Card className="overflow-x-auto">
           <table className="w-full min-w-[38rem] text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-gh-border dark:bg-gh-subtle/60 dark:text-gh-muted">
+              <tr className="border-b border-rule bg-sunken text-left text-xs font-medium text-muted">
                 <th className="px-3 py-3 font-medium w-12">#</th>
                 <th className="px-4 py-3 font-medium">Username</th>
                 <th className="px-4 py-3 font-medium">Applications</th>
@@ -489,7 +489,7 @@ export function UsersPage(): JSX.Element {
                 <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="bg-slate-100 dark:bg-gh-inset">
+            <tbody className="bg-panel">
               {users.map((u, index) => {
                 const rowNum = index + 1;
                 const isSelf = currentUser?.id === u.id;
@@ -497,17 +497,17 @@ export function UsersPage(): JSX.Element {
                 const viewerIsSysAdmin = currentUser?.role === 'SYS_ADMIN';
                 const canManageRow = viewerIsSysAdmin || !isSysAdminRow;
                 return (
-                  <tr key={u.id} className="border-b border-slate-200 last:border-0 dark:border-gh-border">
-                    <td className="px-3 py-3 text-xs text-slate-400 dark:text-gh-muted">{rowNum}</td>
-                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">
+                  <tr key={u.id} className="border-b border-rule last:border-0">
+                    <td className="px-3 py-3 text-xs text-muted">{rowNum}</td>
+                    <td className="px-4 py-3 font-medium text-ink dark:text-white">
                       {u.username}
-                      {isSelf && <span className="ml-2 text-xs font-normal text-slate-400">(you)</span>}
+                      {isSelf && <span className="ml-2 text-xs font-normal text-muted/70">(you)</span>}
                     </td>
                     <td className="px-4 py-3">
                       {u.role !== 'USER' ? (
-                        <span className="text-xs text-slate-500 dark:text-gh-muted">All applications</span>
+                        <span className="text-xs text-muted">All applications</span>
                       ) : (u.assignedApplicationIds ?? []).length === 0 ? (
-                        <span className="text-xs italic text-slate-400">None assigned</span>
+                        <span className="text-xs italic text-muted/70">None assigned</span>
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {u.assignedApplicationIds.map((appId) => (
@@ -593,23 +593,23 @@ export function UsersPage(): JSX.Element {
 
       {detailsUser && (
         <Modal onClose={() => setDetailsUserId(null)} widthClass="max-w-lg">
-          <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-gh-border dark:bg-gh-subtle/60">
-            <h2 className="text-base font-semibold text-slate-900 dark:text-white">User details</h2>
+          <div className="border-b border-rule bg-sunken px-5 py-3">
+            <h2 className="text-base font-semibold text-ink dark:text-white">User details</h2>
           </div>
-          <div className="bg-slate-100 p-5 dark:bg-gh-inset">
-            <dl className="divide-y divide-slate-200 text-sm dark:divide-gh-border">
+          <div className="bg-panel p-5">
+            <dl className="divide-y divide-rule text-sm">
               <DetailRow label="Full name">
-                {detailsUser.full_name ?? <span className="font-normal italic text-slate-400">Not set</span>}
+                {detailsUser.full_name ?? <span className="font-normal italic text-muted/70">Not set</span>}
               </DetailRow>
               <DetailRow label="Username">{detailsUser.username}</DetailRow>
               <DetailRow label="Email">
-                {detailsUser.email ?? <span className="font-normal italic text-slate-400">none</span>}
+                {detailsUser.email ?? <span className="font-normal italic text-muted/70">none</span>}
               </DetailRow>
               <DetailRow label="Phone">
                 {detailsUser.phone_number ? (
                   <span className="font-mono text-xs">{detailsUser.phone_number}</span>
                 ) : (
-                  <span className="font-normal italic text-slate-400">none</span>
+                  <span className="font-normal italic text-muted/70">none</span>
                 )}
               </DetailRow>
               <DetailRow label="Role">
@@ -628,7 +628,7 @@ export function UsersPage(): JSX.Element {
                 {detailsUser.role !== 'USER' ? (
                   <span className="font-normal">All applications</span>
                 ) : (detailsUser.assignedApplicationIds ?? []).length === 0 ? (
-                  <span className="font-normal italic text-slate-400">None assigned</span>
+                  <span className="font-normal italic text-muted/70">None assigned</span>
                 ) : (
                   <span className="inline-flex flex-wrap justify-end gap-1">
                     {detailsUser.assignedApplicationIds.map((appId) => (
@@ -649,12 +649,12 @@ export function UsersPage(): JSX.Element {
 
       {editingUser && (
         <Modal onClose={() => setEditingUser(null)}>
-          <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-gh-border dark:bg-gh-subtle/60">
-            <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+          <div className="border-b border-rule bg-sunken px-5 py-3">
+            <h2 className="text-base font-semibold text-ink dark:text-white">
               Edit &quot;{editingUser.username}&quot;
             </h2>
           </div>
-          <div className="bg-slate-100 p-5 dark:bg-gh-inset">
+          <div className="bg-panel p-5">
 
           <label className="mb-3 block">
             <span className={labelClass}>Full name</span>
@@ -692,7 +692,7 @@ export function UsersPage(): JSX.Element {
           <label className="mb-3 block">
             <span className={labelClass}>Phone number (optional — for SMS alerts)</span>
             <div className="flex items-center gap-2">
-              <span className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-gh-border dark:bg-gh-hover dark:text-gh-muted">
+              <span className="rounded-lg border border-rule bg-sunken px-3 py-2 text-sm text-muted">
                 8801
               </span>
               <input
@@ -721,7 +721,7 @@ export function UsersPage(): JSX.Element {
               {canCreateAdmin && <option value="SYS_ADMIN">Sys.Admin</option>}
             </select>
             {!canCreateAdmin && (
-              <span className="mt-1 block text-xs text-slate-500 dark:text-gh-muted">
+              <span className="mt-1 block text-xs text-muted">
                 Only Sys.Admin can change roles to/from Admin or Sys.Admin.
               </span>
             )}
@@ -731,7 +731,7 @@ export function UsersPage(): JSX.Element {
             <fieldset className="mb-4">
               <legend className={labelClass}>Assigned Applications</legend>
               {applications.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-gh-muted">No applications available.</p>
+                <p className="text-xs text-muted">No applications available.</p>
               ) : (
                 <>
                   <div className="flex flex-wrap gap-2">
@@ -749,7 +749,7 @@ export function UsersPage(): JSX.Element {
                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
                             selected
                               ? 'border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-500/40 dark:bg-brand-500/15 dark:text-brand-300'
-                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-gh-border dark:bg-surface-darkSubtle dark:text-gh-muted dark:hover:bg-gh-hover',
+                              : 'border-rule bg-panel text-muted hover:border-rule hover:bg-sunken dark:bg-panel',
                           ].join(' ')}
                         >
                           {app.name}
@@ -757,7 +757,7 @@ export function UsersPage(): JSX.Element {
                       );
                     })}
                   </div>
-                  <p className="mt-2 text-xs text-slate-500 dark:text-gh-muted">
+                  <p className="mt-2 text-xs text-muted">
                     Click an application to assign it, click again to remove it.
                   </p>
                 </>
@@ -766,7 +766,7 @@ export function UsersPage(): JSX.Element {
           )}
 
           {editRole !== 'USER' && (
-            <p className="mb-4 text-xs text-slate-500 dark:text-gh-muted">
+            <p className="mb-4 text-xs text-muted">
               Admin and Sys.Admin see all applications — no assignment needed.
             </p>
           )}

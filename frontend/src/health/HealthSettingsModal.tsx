@@ -8,11 +8,11 @@ import { LoadingBlock } from '@/components/ui/Spinner';
 import type { HealthConfig, HealthTestResult } from './types';
 
 const inputClass =
-  'w-full rounded-xl border border-slate-200 bg-white shadow-sm px-3 py-2 text-sm text-slate-900 ' +
-  'placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
-  'dark:border-gh-border dark:bg-surface-dark dark:text-gh-fg';
-const labelClass = 'mb-1 block text-sm font-medium text-slate-700 dark:text-gh-fgSoft';
-const hintClass = 'mt-1 text-xs text-slate-500 dark:text-gh-muted';
+  'w-full rounded-xl border border-rule bg-panel shadow-sm px-3 py-2 text-sm text-ink ' +
+  'placeholder:text-muted/70 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
+  ' dark:bg-sunken';
+const labelClass = 'mb-1 block text-sm font-medium text-ink/80';
+const hintClass = 'mt-1 text-xs text-muted';
 
 const MIN_INTERVAL = 3;
 const MAX_INTERVAL = 300;
@@ -205,9 +205,9 @@ export function HealthSettingsModal({
 
   return (
     <Modal onClose={onClose} widthClass="max-w-xl">
-      <div className="border-b border-slate-200 px-6 py-4 pr-14 dark:border-gh-border">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Health monitoring</h2>
-        <p className="mt-1 text-xs text-slate-500 dark:text-gh-muted">{applicationName}</p>
+      <div className="border-b border-rule px-6 py-4 pr-14">
+        <h2 className="text-lg font-semibold text-ink dark:text-white">Health monitoring</h2>
+        <p className="mt-1 text-xs text-muted">{applicationName}</p>
       </div>
 
       <div className="space-y-4 p-6">
@@ -219,7 +219,7 @@ export function HealthSettingsModal({
           <>
             {formError && <Alert>{formError}</Alert>}
 
-            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-gh-fgSoft">
+            <label className="flex items-center gap-2 text-sm text-ink/80">
               <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
               Monitor this application through its health endpoint
             </label>
@@ -239,7 +239,7 @@ export function HealthSettingsModal({
 
             <div>
               <div className="mb-1 flex items-center justify-between gap-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-gh-fgSoft" htmlFor="health-key">
+                <label className="text-sm font-medium text-ink/80" htmlFor="health-key">
                   API key
                 </label>
                 <button
@@ -264,7 +264,7 @@ export function HealthSettingsModal({
                 autoComplete="new-password"
               />
               {hasApiKey && (
-                <label className="mt-2 flex items-center gap-2 text-xs text-slate-600 dark:text-gh-fgSoft">
+                <label className="mt-2 flex items-center gap-2 text-xs text-ink/80">
                   <input
                     type="checkbox"
                     checked={removeKey}
@@ -277,10 +277,10 @@ export function HealthSettingsModal({
                 </label>
               )}
               {generatedKey && apiKey === generatedKey && (
-                <div className="mt-2 rounded-lg border border-slate-200 bg-slate-100 p-3 dark:border-gh-border dark:bg-gh-inset">
-                  <code className="block break-all text-xs text-slate-900 dark:text-gh-fg">{generatedKey}</code>
+                <div className="mt-2 rounded-lg border border-rule bg-sunken p-3">
+                  <code className="block break-all text-xs text-ink">{generatedKey}</code>
                   <div className="mt-2 flex items-center justify-between gap-2">
-                    <p className="text-xs text-slate-500 dark:text-gh-muted">
+                    <p className="text-xs text-muted">
                       Copy it now and give it to the application's team: after you save, it can't be shown again.
                     </p>
                     <Button size="sm" variant="secondary" onClick={() => void handleCopy()}>
@@ -304,10 +304,10 @@ export function HealthSettingsModal({
                   autoComplete="off"
                   spellCheck={false}
                 />
-                <details className="mt-1 text-xs text-slate-500 dark:text-gh-muted">
+                <details className="mt-1 text-xs text-muted">
                   <summary className="cursor-pointer">How to get the fingerprint</summary>
                   <p className="mt-1">Run this on a server that can reach the application, then paste the result:</p>
-                  <code className="mt-1 block break-all rounded-md bg-slate-100 p-2 dark:bg-gh-inset">
+                  <code className="mt-1 block break-all rounded-md bg-sunken p-2">
                     openssl s_client -connect HOST:PORT {'</dev/null'} 2{'>'}/dev/null | openssl x509 -noout -fingerprint -sha256
                   </code>
                 </details>
@@ -348,7 +348,7 @@ export function HealthSettingsModal({
             )}
 
             {enabled && !testPassed && (
-              <label className="flex items-start gap-2 text-xs text-slate-600 dark:text-gh-fgSoft">
+              <label className="flex items-start gap-2 text-xs text-ink/80">
                 <input
                   type="checkbox"
                   className="mt-0.5"
@@ -362,7 +362,7 @@ export function HealthSettingsModal({
               </label>
             )}
 
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-4 dark:border-gh-border">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-rule pt-4">
               <div className="flex items-center gap-2">
                 {configured &&
                   (confirmRemove ? (

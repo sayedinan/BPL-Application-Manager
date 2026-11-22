@@ -15,9 +15,9 @@ interface ChangePasswordResponse {
 }
 
 const inputClass =
-  'mt-1 block w-full rounded-xl border border-slate-200 bg-white shadow-sm px-3 py-2 text-sm text-slate-900 ' +
-  'transition-theme placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
-  'dark:border-gh-border dark:bg-surface-dark dark:text-white';
+  'mt-1 block w-full rounded-xl border border-rule bg-panel shadow-sm px-3 py-2 text-sm text-ink ' +
+  'transition-theme placeholder:text-muted/70 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
+  ' dark:bg-sunken dark:text-white';
 
 export function RealChangePasswordPage(): JSX.Element {
   const { user, setUser } = useAuth();
@@ -62,13 +62,13 @@ export function RealChangePasswordPage(): JSX.Element {
   return (
     <div
       data-change-password-page="real"
-      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-surface-canvas px-4 dark:bg-surface-dark"
+      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas px-4 dark:bg-sunken"
     >
 
-      <Card className="relative w-full max-w-sm animate-fade-in p-8 !bg-slate-50 !shadow-none dark:!bg-surface-darkSubtle">
+      <Card className="relative w-full max-w-sm animate-fade-in p-8 shadow-popover">
         <div className="mb-6 text-center">
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Change Password</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-gh-muted">
+          <h1 className="text-xl font-bold text-ink dark:text-white">Change Password</h1>
+          <p className="mt-1 text-sm text-muted">
             {user?.mustChangePassword
               ? 'You must set a new password before continuing.'
               : 'Enter your current password, then choose a new one.'}
@@ -77,7 +77,7 @@ export function RealChangePasswordPage(): JSX.Element {
 
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div>
-            <label htmlFor="oldPassword" className="block text-sm font-medium text-slate-700 dark:text-gh-fgSoft">
+            <label htmlFor="oldPassword" className="block text-sm font-medium text-ink/80">
               Current password
             </label>
             <input
@@ -93,7 +93,7 @@ export function RealChangePasswordPage(): JSX.Element {
           </div>
 
           <div>
-            <label htmlFor="newPassword" className="block text-sm font-medium text-slate-700 dark:text-gh-fgSoft">
+            <label htmlFor="newPassword" className="block text-sm font-medium text-ink/80">
               New password
             </label>
             <input
@@ -109,7 +109,7 @@ export function RealChangePasswordPage(): JSX.Element {
           </div>
 
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-700 dark:text-gh-fgSoft">
+            <label htmlFor="confirmPassword" className="block text-sm font-medium text-ink/80">
               Confirm new password
             </label>
             <input

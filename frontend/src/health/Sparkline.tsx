@@ -44,15 +44,15 @@ export function Sparkline({
   return (
     <div>
       <div className="mb-1 flex justify-between gap-2 text-xs">
-        <span className="font-medium text-slate-700 dark:text-gh-fgSoft">{label}</span>
-        <span className="text-slate-500 dark:text-gh-muted">
+        <span className="font-medium text-ink/80">{label}</span>
+        <span className="text-muted">
           {current === null ? 'no reading' : `${current.toFixed(decimals)}${unit}`}
         </span>
       </div>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         preserveAspectRatio="none"
-        className="h-10 w-full rounded bg-slate-200/60 dark:bg-gh-hover/40"
+        className="h-10 w-full rounded bg-rule/60"
         role="img"
         aria-label={`${label} over the last ${values.length} checks`}
       >

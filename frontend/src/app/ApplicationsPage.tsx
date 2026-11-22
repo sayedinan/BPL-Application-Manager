@@ -46,10 +46,10 @@ const EMPTY_FORM: FormState = {
 };
 
 const inputClass =
-  'w-full rounded-xl border border-slate-200 bg-white shadow-sm px-3 py-2 text-sm text-slate-900 ' +
-  'placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
-  'dark:border-gh-border dark:bg-surface-dark dark:text-gh-fg';
-const labelClass = 'mb-1 block text-sm font-medium text-slate-700 dark:text-gh-fgSoft';
+  'w-full rounded-xl border border-rule bg-panel shadow-sm px-3 py-2 text-sm text-ink ' +
+  'placeholder:text-muted/70 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
+  ' dark:bg-sunken';
+const labelClass = 'mb-1 block text-sm font-medium text-ink/80';
 
 export function ApplicationsPage(): JSX.Element {
   const [apps, setApps] = useState<ApplicationSummary[]>([]);
@@ -275,12 +275,12 @@ export function ApplicationsPage(): JSX.Element {
           onClose={() => { if (editingId !== null) cancelEdit(); else setShowForm(false); }}
         >
           <form onSubmit={editingId !== null ? handleUpdate : handleCreate} noValidate>
-            <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-gh-border dark:bg-gh-subtle/60">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+            <div className="border-b border-rule bg-sunken px-5 py-3">
+              <h2 className="text-base font-semibold text-ink dark:text-white">
                 {editingId !== null ? 'Edit Application' : 'New Application'}
               </h2>
             </div>
-            <div className="bg-slate-100 p-5 dark:bg-gh-inset">
+            <div className="bg-panel p-5">
 
             <label className="mb-3 block">
               <span className={labelClass}>Name</span>
@@ -309,7 +309,7 @@ export function ApplicationsPage(): JSX.Element {
                 value={form.sshHostKeyFingerprint}
                 readOnly
                 placeholder="Captured after a successful Test Connection"
-                className={`${inputClass} cursor-default bg-slate-50 font-mono text-xs dark:bg-gh-hover/50`}
+                className={`${inputClass} cursor-default bg-sunken font-mono text-xs`}
               />
             </label>
 
@@ -339,9 +339,9 @@ export function ApplicationsPage(): JSX.Element {
               <span className={labelClass}>Log Script</span>
               <textarea value={form.logScript} onChange={(e) => updateField('logScript', e.target.value)} className={`${inputClass} font-mono`} rows={3} required />
             </label>
-            <div className="mt-6 mb-5 border-t border-slate-200 pt-4 dark:border-gh-border">
-              <h3 className="mb-1 text-sm font-semibold text-slate-900 dark:text-white">Custom notification messages</h3>
-              <p className="mb-4 text-xs text-slate-500 dark:text-gh-muted">
+            <div className="mt-6 mb-5 border-t border-rule pt-4">
+              <h3 className="mb-1 text-sm font-semibold text-ink dark:text-white">Custom notification messages</h3>
+              <p className="mb-4 text-xs text-muted">
                 Optional. Leave blank to use the default wording. Placeholders: <code>{'{appName}'}</code>, <code>{'{actor}'}</code>, <code>{'{role}'}</code>, <code>{'{timestamp}'}</code> ({'{actor}'}/{'{role}'} only apply to Start/Stop — external events have no logged-in actor).
               </p>
 
@@ -399,23 +399,23 @@ export function ApplicationsPage(): JSX.Element {
         loading ? (
         <LoadingBlock className="py-10" />
       ) : apps.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-slate-500 dark:text-gh-muted">
+        <Card className="p-8 text-center text-sm text-muted">
             No applications yet. Add one above.
           </Card>
         ) : (
           <Card className="overflow-x-auto">
             <table className="w-full min-w-[20rem] text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-gh-border dark:bg-gh-subtle/60 dark:text-gh-muted">
+                <tr className="border-b border-rule bg-sunken text-left text-xs font-medium text-muted">
                   <th className="px-4 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="bg-slate-100 dark:bg-gh-inset">
+              <tbody className="bg-panel">
                 {apps.map((app) => (
-                  <tr key={app.id} className="border-b border-slate-200 last:border-0 dark:border-gh-border">
-                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{app.name}</td>
+                  <tr key={app.id} className="border-b border-rule last:border-0">
+                    <td className="px-4 py-3 font-medium text-ink dark:text-white">{app.name}</td>
                     <td className="px-4 py-3">
                       <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>
                     </td>

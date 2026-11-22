@@ -12,7 +12,7 @@ export function RangeButtons<K extends string>({
     <span
       role="group"
       aria-label="Time range"
-      className="inline-flex overflow-hidden rounded-lg border border-slate-200 dark:border-gh-border"
+      className="inline-flex overflow-hidden rounded-lg border border-rule"
     >
       {options.map((o) => {
         const active = o.key === value;
@@ -26,7 +26,7 @@ export function RangeButtons<K extends string>({
               'px-2.5 py-1 text-xs font-medium transition-colors ' +
               (active
                 ? 'bg-brand-500 text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-100 dark:bg-surface-dark dark:text-gh-muted dark:hover:bg-gh-hover')
+                : 'bg-panel text-muted hover:bg-sunken dark:bg-sunken')
             }
           >
             {o.label}

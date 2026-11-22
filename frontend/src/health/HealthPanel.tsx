@@ -63,12 +63,12 @@ export function Section({
   children: ReactNode;
 }): JSX.Element {
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 dark:border-gh-border">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-gh-border dark:bg-gh-subtle/60">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-gh-muted">{title}</h3>
-        {aside && <span className="text-xs text-slate-500 dark:text-gh-muted">{aside}</span>}
+    <section className="overflow-hidden rounded-2xl border border-rule">
+      <div className="flex items-center justify-between gap-3 border-b border-rule bg-sunken px-4 py-2.5">
+        <h3 className="text-sm font-semibold text-ink">{title}</h3>
+        {aside && <span className="text-xs text-muted">{aside}</span>}
       </div>
-      <div className="bg-slate-100 p-4 transition-theme dark:bg-gh-inset">{children}</div>
+      <div className="bg-panel p-4 transition-theme">{children}</div>
     </section>
   );
 }
@@ -76,8 +76,8 @@ export function Section({
 export function Row({ label, children }: { label: string; children: ReactNode }): JSX.Element {
   return (
     <div className="flex items-start justify-between gap-4 py-1.5 text-sm first:pt-0 last:pb-0">
-      <dt className="shrink-0 text-slate-500 dark:text-gh-muted">{label}</dt>
-      <dd className="min-w-0 break-words text-right font-medium text-slate-900 dark:text-gh-fg">{children}</dd>
+      <dt className="shrink-0 text-muted">{label}</dt>
+      <dd className="min-w-0 break-words text-right font-medium text-ink">{children}</dd>
     </div>
   );
 }
@@ -86,14 +86,14 @@ export function Row({ label, children }: { label: string; children: ReactNode })
 function LiveIndicator({ live }: { live: boolean }): JSX.Element {
   return (
     <span
-      className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-gh-muted"
+      className="inline-flex items-center gap-1.5 text-xs font-medium text-muted"
       title={
         live
           ? 'Readings arrive the moment each check finishes'
           : 'Live connection is down; refreshing every 10 seconds'
       }
     >
-      <span className={`h-2 w-2 rounded-full ${live ? 'animate-pulse bg-status-online' : 'bg-slate-400'}`} />
+      <span className={`h-2 w-2 rounded-full ${live ? 'animate-pulse bg-ok' : 'bg-idle/60'}`} />
       {live ? 'LIVE' : 'Polling'}
     </span>
   );
@@ -112,22 +112,22 @@ function Gauge({
   toggle?: ReactNode;
 }): JSX.Element | null {
   if (percent == null) return null;
-  const color = percent >= 90 ? 'bg-status-error' : percent >= 70 ? 'bg-status-pending' : 'bg-status-online';
+  const color = percent >= 90 ? 'bg-danger' : percent >= 70 ? 'bg-warn' : 'bg-ok';
   const width = Math.min(100, Math.max(0, percent));
   return (
     <div>
       <div className="mb-1 flex justify-between gap-2 text-xs">
-        <span className="inline-flex items-center gap-1 font-medium text-slate-700 dark:text-gh-fgSoft">
+        <span className="inline-flex items-center gap-1 font-medium text-ink/80">
           {label}
           {toggle}
         </span>
-        <span className="text-slate-500 dark:text-gh-muted">
+        <span className="text-muted">
           {detail ? `${detail} · ` : ''}
           {percent.toFixed(1)}%
         </span>
       </div>
       <div
-        className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-gh-hover"
+        className="h-2 overflow-hidden rounded-full bg-rule"
         role="progressbar"
         aria-label={label}
         aria-valuemin={0}
@@ -189,8 +189,8 @@ function HistoryChart({
   return (
     <div>
       <div className="mb-1 flex justify-between gap-2 text-xs">
-        <span className="font-medium text-slate-700 dark:text-gh-fgSoft">{label}</span>
-        <span className="text-slate-500 dark:text-gh-muted">
+        <span className="font-medium text-ink/80">{label}</span>
+        <span className="text-muted">
           latest {latest.toFixed(decimals)}
           {unit} · peak {peak.toFixed(decimals)}
           {unit}
@@ -199,7 +199,7 @@ function HistoryChart({
       <svg
         viewBox={`0 0 ${width} ${height}`}
         preserveAspectRatio="none"
-        className="h-16 w-full rounded bg-slate-200/60 dark:bg-gh-hover/40"
+        className="h-16 w-full rounded bg-rule/60"
         role="img"
         aria-label={`${label} over the selected period`}
       >
@@ -211,7 +211,7 @@ function HistoryChart({
               x2={x(i)}
               y1={0}
               y2={height}
-              className="stroke-status-error"
+              className="stroke-danger"
               strokeWidth={2}
               opacity={0.5}
               vectorEffect="non-scaling-stroke"
@@ -266,7 +266,7 @@ function HistoryToggle({
       aria-expanded={open}
       aria-label={`${open ? 'Hide' : 'Show'} ${label} history`}
       title={`${open ? 'Hide' : 'Show'} history`}
-      className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-500 hover:bg-slate-200 dark:text-gh-muted dark:hover:bg-gh-hover"
+      className="inline-flex h-7 w-7 items-center justify-center rounded text-muted hover:bg-rule/60"
     >
       <svg
         viewBox="0 0 20 20"
@@ -334,12 +334,12 @@ function MetricHistory({
               fixedMax={m.fixedMax}
               decimals={m.decimals}
             />
-            <p className="text-xs text-slate-500 dark:text-gh-muted">
+            <p className="text-xs text-muted">
               Last {samples.length} checks, since you opened this page
             </p>
           </>
         ) : (
-          <p className="text-xs text-slate-500 dark:text-gh-muted">Collecting readings… graph appears after two checks.</p>
+          <p className="text-xs text-muted">Collecting readings… graph appears after two checks.</p>
         )
       ) : history && history.hours === hours && history.points.length >= 2 ? (
         <>
@@ -351,12 +351,12 @@ function MetricHistory({
             fixedMax={m.fixedMax}
             decimals={m.decimals}
           />
-          <p className="text-xs text-slate-500 dark:text-gh-muted">
+          <p className="text-xs text-muted">
             {formatWhen(history.points[0].t)} to now · red marks show failed checks
           </p>
         </>
       ) : history && history.hours === hours ? (
-        <p className="text-xs text-slate-500 dark:text-gh-muted">Not enough data yet.</p>
+        <p className="text-xs text-muted">Not enough data yet.</p>
       ) : (
         <LoadingBlock label="Loading history…" className="py-4" />
       )}
@@ -429,7 +429,7 @@ export function HealthPanel({
         <div className="flex flex-wrap items-center gap-3">
           <HealthBadge health={latest} />
           <LiveIndicator live={live} />
-          <span className="text-xs text-slate-500 dark:text-gh-muted">
+          <span className="text-xs text-muted">
             Last checked {latest.checkedAt ? timeAgo(latest.checkedAt) : '—'}
             {latest.pollIntervalSeconds ? ` · checks about every ${latest.pollIntervalSeconds}s` : ''}
           </span>
@@ -441,7 +441,7 @@ export function HealthPanel({
         <Alert>{error}</Alert>
       ) : !latest || !latest.monitored ? (
         <Section title="Health">
-          <p className="py-4 text-center text-sm text-slate-500 dark:text-gh-muted">
+          <p className="py-4 text-center text-sm text-muted">
             Health monitoring is not set up for this application. A Sys.Admin can set it up from the
             Applications page.
           </p>
@@ -535,16 +535,16 @@ export function HealthPanel({
 
           {snap?.checks && snap.checks.length > 0 && (
             <Section title="Connected systems">
-              <ul className="divide-y divide-slate-200 dark:divide-gh-border">
+              <ul className="divide-y divide-rule">
                 {snap.checks.map((c) => (
                   <li key={c.name} className="flex items-center justify-between gap-3 py-2 text-sm first:pt-0 last:pb-0">
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-900 dark:text-gh-fg">{c.name}</p>
-                      {c.message && <p className="text-xs text-slate-500 dark:text-gh-muted">{c.message}</p>}
+                      <p className="truncate font-medium text-ink">{c.name}</p>
+                      {c.message && <p className="text-xs text-muted">{c.message}</p>}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       {c.latencyMs !== undefined && (
-                        <span className="text-xs text-slate-500 dark:text-gh-muted">{Math.round(c.latencyMs)} ms</span>
+                        <span className="text-xs text-muted">{Math.round(c.latencyMs)} ms</span>
                       )}
                       <Badge tone={statusTone(c.status)}>{c.status}</Badge>
                     </div>
@@ -613,11 +613,11 @@ export function HealthPanel({
             </Section>
           )}
 
-          <details className="overflow-hidden rounded-2xl border border-slate-200 text-sm dark:border-gh-border">
-            <summary className="cursor-pointer bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-gh-subtle/60 dark:text-gh-muted">
+          <details className="overflow-hidden rounded-2xl border border-rule text-sm">
+            <summary className="cursor-pointer bg-sunken px-4 py-2.5 text-sm font-semibold text-ink">
               Technical details
             </summary>
-            <dl className="border-t border-slate-200 bg-slate-100 p-4 dark:border-gh-border dark:bg-gh-inset">
+            <dl className="border-t border-rule bg-panel p-4">
               <Row label="HTTP status">{latest.httpStatus ?? '—'}</Row>
               <Row label="Failed checks in a row">{latest.consecutiveFailures ?? 0}</Row>
               <Row label="Reported at">{formatWhen(snap?.timestamp)}</Row>

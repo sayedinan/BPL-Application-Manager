@@ -24,24 +24,6 @@ export default {
         danger: { DEFAULT: token('danger'), bg: token('danger-bg') },
         idle: { DEFAULT: token('idle'), bg: token('idle-bg') },
         maint: { DEFAULT: token('maint'), bg: token('maint-bg') },
-
-        // ---- Legacy names, remapped onto the cool palette ----
-        // Untouched pages still use slate-*, gh-*, surface-* and status-*.
-        // Retire these as each page is restyled onto the semantic tokens above.
-        slate: {
-          50: '#f4f6f9',
-          100: '#eaeef3',
-          200: '#d5dae1',
-          300: '#b3bcc9',
-          400: '#8b97a8',
-          500: '#66738a',
-          600: '#4d5a70',
-          700: '#3a475b',
-          800: '#25324a',
-          900: '#0e1b2c',
-          950: '#08121f',
-        },
-        // Brand palette pulled from the BPL logo (navy hexagon + cyan power ring).
         brand: {
           50: '#eef6ff',
           100: '#d9ecff',
@@ -54,34 +36,6 @@ export default {
           800: '#134a8a',
           900: '#0f2f52', // logo navy
           950: '#0a1d33',
-        },
-        surface: {
-          light: token('panel'),
-          subtle: token('sunken'),
-          canvas: token('canvas'),
-          dark: '#08172a',
-          darkSubtle: '#0d2038',
-        },
-        // Dark palette derived from the logo navy (no pure black, no GitHub gray).
-        gh: {
-          inset: '#061120',
-          subtle: '#0d2038',
-          hover: '#14304f',
-          border: '#1f3550',
-          fg: '#e6eef8',
-          fgSoft: '#c5d3e4',
-          muted: '#9db0c7',
-          subtle2: '#7a8fa8',
-        },
-        status: {
-          online: '#15803d',
-          onlineBg: '#e3f5e9',
-          offline: '#4b5563',
-          offlineBg: '#eef0f3',
-          pending: '#b45309',
-          pendingBg: '#fef3c7',
-          error: '#b91c1c',
-          errorBg: '#fee2e2',
         },
       },
       fontFamily: {
