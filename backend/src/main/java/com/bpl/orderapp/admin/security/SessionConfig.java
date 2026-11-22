@@ -12,6 +12,12 @@ public class SessionConfig {
     /** Request attribute set by AuthController when "remember me" is ticked. */
     public static final String REMEMBER_ME_ATTR = "BPL_REMEMBER_ME";
 
+    /**
+     * Session attribute marking a session as "remember me". The WebSocket
+     * browser-closed detector must not delete these sessions.
+     */
+    public static final String REMEMBER_ME_SESSION_ATTR = "BPL_REMEMBER_ME_SESSION";
+
     @Bean
     public CookieSerializer cookieSerializer(
             @Value("${spring.session.cookie.secure:false}") boolean secure,

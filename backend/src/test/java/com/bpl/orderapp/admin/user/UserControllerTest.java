@@ -92,6 +92,58 @@ class UserControllerTest {
         assertThat(saved.getValue().isMustChangePassword()).isTrue();
     }
 
+    private User aliceWithLiveSessions() {
+        User alice = new User();
+        ReflectionTestUtils.setField(alice, "id", TEST_USER_ID);
+        alice.setUsername("alice");
+        alice.setRole("ADMIN");
+        when(userRepository.findById(TEST_USER_ID)).thenReturn(Optional.of(alice));
+        org.mockito.Mockito.doReturn(java.util.Map.of(
+                "s1", org.mockito.Mockito.mock(org.springframework.session.Session.class),
+                "s2", org.mockito.Mockito.mock(org.springframework.session.Session.class)))
+            .when(sessionRepository).findByPrincipalName("alice");
+        return alice;
+    }
+
+    @Test
+    void resetPassword_revokesAllOfTheUsersSessions() throws Exception {
+        aliceWithLiveSessions();
+        when(encoder.encode(anyString())).thenReturn("hash");
+
+        mvc.perform(post("/api/v1/users/" + TEST_USER_ID + "/reset-password"))
+            .andExpect(status().isOk());
+
+        verify(sessionRepository).deleteById("s1");
+        verify(sessionRepository).deleteById("s2");
+    }
+
+    @Test
+    void updateUser_roleChange_revokesTheUsersSessions() throws Exception {
+        aliceWithLiveSessions();
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .put("/api/v1/users/" + TEST_USER_ID)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content("{\"role\":\"USER\"}"))
+            .andExpect(status().isOk());
+
+        verify(sessionRepository).deleteById("s1");
+        verify(sessionRepository).deleteById("s2");
+    }
+
+    @Test
+    void updateUser_emailOnlyChange_keepsTheUsersSessions() throws Exception {
+        aliceWithLiveSessions();
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .put("/api/v1/users/" + TEST_USER_ID)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"alice@example.com\"}"))
+            .andExpect(status().isOk());
+
+        verify(sessionRepository, never()).deleteById(anyString());
+    }
+
     @Test
     void resetPassword_userNotFound_returns404() throws Exception {
         UUID missing = UUID.randomUUID();

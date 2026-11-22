@@ -7,6 +7,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
 
 /**
@@ -104,7 +105,12 @@ public class SecurityConfig {
             // requests don't get a session row.
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
-            );
+            )
+
+            // Absolute 90-day cap on any login, including sliding
+            // "remember me" sessions. Runs before the context is loaded,
+            // so an over-age session is treated as unauthenticated.
+            .addFilterBefore(new AbsoluteSessionLifetimeFilter(), SecurityContextHolderFilter.class);
 
         return http.build();
     }

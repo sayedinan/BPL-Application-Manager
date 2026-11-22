@@ -209,6 +209,13 @@ public class UserController {
         }
         return ResponseEntity.ok(new com.bpl.orderapp.admin.user.dto.CreateUserResponse(newId, username, role, cleartext));
     }
+    /** Deletes every live session whose principal is {@code username}. No-op for null. */
+    private void revokeSessions(String username) {
+        if (username == null) return;
+        new java.util.ArrayList<>(sessionRepository.findByPrincipalName(username).keySet())
+            .forEach(sessionRepository::deleteById);
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
     public ResponseEntity<Void> deleteUser(@PathVariable java.util.UUID id, HttpServletRequest httpRequest) {
@@ -227,12 +234,9 @@ public class UserController {
         String deletedUsername = target.getUsername();
 
         userRepository.deleteById(id);
-        if (deletedUsername != null) {
-            // Kill live sessions so a deleted user's cookie can't authenticate as a
-            // new user later created with the same username.
-            new java.util.ArrayList<>(sessionRepository.findByPrincipalName(deletedUsername).keySet())
-                .forEach(sessionRepository::deleteById);
-        }
+        // Kill live sessions so a deleted user's cookie can't authenticate as a
+        // new user later created with the same username.
+        revokeSessions(deletedUsername);
 
         try {
             auditWriter.write(
@@ -291,6 +295,10 @@ public class UserController {
         user.setPasswordHash(newHash);
         user.setMustChangePassword(true);
         userRepository.save(user);
+
+        // Sign the user out everywhere: a "remember me" session would otherwise keep
+        // working for up to 30 days on the password that was just reset.
+        revokeSessions(username);
 
         // Both columns still change in one UPDATE, so the "both apply or neither"
         // rule holds. updated_at comes from @PreUpdate. The updated != 1 check is
@@ -419,6 +427,15 @@ public class UserController {
             user.setFullName(req.fullName().trim());
         }
         userRepository.save(user);
+
+        // The session carries the role (ROLE_<role>) and principal username from login
+        // time, and a "remember me" session lives up to 30 days. Revoke so a demoted or
+        // renamed user re-authenticates and picks up the current role and name.
+        boolean roleChanged = req.role() != null && !req.role().equals(oldRole);
+        boolean usernameChanged = req.username() != null && !req.username().equals(oldUsername);
+        if (roleChanged || usernameChanged) {
+            revokeSessions(oldUsername);
+        }
 
         try {
             java.util.Map<String, Object> detail = new java.util.HashMap<>();

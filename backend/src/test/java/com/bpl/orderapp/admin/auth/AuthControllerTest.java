@@ -33,6 +33,7 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -74,6 +75,7 @@ class AuthControllerTest {
     @MockBean private SecurityContextRepository securityContextRepository;
     @MockBean private UserRepository userRepository;
     @MockBean private AuditWriter auditWriter;
+    @MockBean private FindByIndexNameSessionRepository<?> sessionRepository;
 
     private static final String TEST_PASSWORD = "The-real-password1";
     private static final String TEST_HASH = new BCryptPasswordEncoder(10).encode(TEST_PASSWORD);
@@ -119,6 +121,50 @@ class AuthControllerTest {
         // The encoder.matches was called exactly once with the
         // (cleartext, hash) pair, never with a dummy.
         verify(encoder, times(1)).matches(TEST_PASSWORD, TEST_HASH);
+    }
+
+    @Test
+    void login_withRememberMe_marksSessionAndExtendsIdleTimeout() throws Exception {
+        when(userRepository.findByUsername("admin")).thenReturn(
+            Optional.of(testUser(ADMIN_ID, "admin", "SYS_ADMIN", TEST_HASH, false)));
+        when(encoder.matches(TEST_PASSWORD, TEST_HASH)).thenReturn(true);
+
+        var result = mvc.perform(post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(new LoginRequest("admin", TEST_PASSWORD, true))))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        // Drives the persistent cookie (request attribute) and protects the
+        // session from the WebSocket browser-closed detector (session attribute).
+        assertThat(result.getRequest().getAttribute(
+            com.bpl.orderapp.admin.security.SessionConfig.REMEMBER_ME_ATTR)).isEqualTo(Boolean.TRUE);
+        var session = result.getRequest().getSession(false);
+        assertThat(session).isNotNull();
+        assertThat(session.getAttribute(
+            com.bpl.orderapp.admin.security.SessionConfig.REMEMBER_ME_SESSION_ATTR)).isEqualTo(Boolean.TRUE);
+        assertThat(session.getMaxInactiveInterval()).isEqualTo(30 * 24 * 60 * 60);
+    }
+
+    @Test
+    void login_withoutRememberMe_doesNotMarkSession() throws Exception {
+        when(userRepository.findByUsername("admin")).thenReturn(
+            Optional.of(testUser(ADMIN_ID, "admin", "SYS_ADMIN", TEST_HASH, false)));
+        when(encoder.matches(TEST_PASSWORD, TEST_HASH)).thenReturn(true);
+
+        var result = mvc.perform(post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(new LoginRequest("admin", TEST_PASSWORD, false))))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        assertThat(result.getRequest().getAttribute(
+            com.bpl.orderapp.admin.security.SessionConfig.REMEMBER_ME_ATTR)).isNull();
+        var session = result.getRequest().getSession(false);
+        if (session != null) {
+            assertThat(session.getAttribute(
+                com.bpl.orderapp.admin.security.SessionConfig.REMEMBER_ME_SESSION_ATTR)).isNull();
+        }
     }
 
     @Test
@@ -240,6 +286,32 @@ class AuthControllerTest {
         verify(userRepository).save(saved.capture());
         assertThat(saved.getValue().getPasswordHash()).isEqualTo("new-bcrypt-hash");
         assertThat(saved.getValue().isMustChangePassword()).isFalse();
+    }
+
+    @Test
+    void changePassword_revokesOtherSessions_butKeepsTheCallersOwn() throws Exception {
+        when(userRepository.findByUsername("admin")).thenReturn(
+            Optional.of(testUser(ADMIN_ID, "admin", "SYS_ADMIN", TEST_HASH, true)));
+        when(encoder.matches(TEST_PASSWORD, TEST_HASH)).thenReturn(true);
+        when(encoder.encode(NEW_PASSWORD)).thenReturn("new-bcrypt-hash");
+        // Three live sessions for "admin": the caller's own and two others
+        // (e.g. a remembered session on another device).
+        org.mockito.Mockito.doReturn(java.util.Map.of(
+                "current", org.mockito.Mockito.mock(org.springframework.session.Session.class),
+                "other-1", org.mockito.Mockito.mock(org.springframework.session.Session.class),
+                "other-2", org.mockito.Mockito.mock(org.springframework.session.Session.class)))
+            .when(sessionRepository).findByPrincipalName("admin");
+
+        mvc.perform(post("/api/v1/auth/change-password")
+                .session(new org.springframework.mock.web.MockHttpSession(null, "current"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(
+                    new ChangePasswordRequest("admin", TEST_PASSWORD, NEW_PASSWORD))))
+            .andExpect(status().isOk());
+
+        verify(sessionRepository).deleteById("other-1");
+        verify(sessionRepository).deleteById("other-2");
+        verify(sessionRepository, never()).deleteById("current");
     }
 
     @Test

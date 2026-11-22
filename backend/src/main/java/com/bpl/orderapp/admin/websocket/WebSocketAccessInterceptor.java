@@ -2,6 +2,7 @@ package com.bpl.orderapp.admin.websocket;
 
 import com.bpl.orderapp.admin.common.Role;
 import com.bpl.orderapp.admin.log.WebSocketLimits;
+import com.bpl.orderapp.admin.security.SessionConfig;
 import com.bpl.orderapp.admin.user.User;
 import com.bpl.orderapp.admin.user.UserApplicationAssignmentRepository;
 import com.bpl.orderapp.admin.user.UserRepository;
@@ -187,15 +188,23 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
         }, CLOSE_GRACE_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
     }
 
-    private void recordBrowserClosed(String username, java.time.Instant disconnectedAt) {
+    void recordBrowserClosed(String username, java.time.Instant disconnectedAt) {
         AtomicInteger current = perUserConnections.get(username);
         if (current != null && current.get() > 0) return; // reconnected or another tab open
-        var sessions = sessionRepository.findByPrincipalName(username);
-        boolean hasLiveSession = sessions.values().stream().anyMatch(s -> !s.isExpired());
-        if (!hasLiveSession) return; // already logged out / expired
+        // "Remember me" sessions are meant to outlive the browser, so they are
+        // neither audited as a logout nor deleted here (they expire on their own
+        // 30-day idle timeout, or on an explicit logout).
+        List<String> closableIds = new java.util.ArrayList<>();
+        for (var entry : sessionRepository.findByPrincipalName(username).entrySet()) {
+            var s = entry.getValue();
+            if (s.isExpired()) continue;
+            if (Boolean.TRUE.equals(s.getAttribute(SessionConfig.REMEMBER_ME_SESSION_ATTR))) continue;
+            closableIds.add(entry.getKey());
+        }
+        if (closableIds.isEmpty()) return; // already logged out / expired / remember-me only
         String role = userRepository.findByUsername(username).map(User::getRole).orElse("UNKNOWN");
         auditWriter.writeAt(disconnectedAt, "LOGOUT", username, role, Map.of("reason", "BROWSER_CLOSED"), "SUCCESS");
-        new java.util.ArrayList<>(sessions.keySet()).forEach(sessionRepository::deleteById);
+        closableIds.forEach(sessionRepository::deleteById);
         log.info("Browser closed detected for '{}' at {}; LOGOUT audited, orphaned session removed", username, disconnectedAt);
     }
 

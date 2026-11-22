@@ -25,6 +25,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -112,14 +113,17 @@ public class AuthController {
     private final SecurityContextRepository securityContextRepository;
     private final AuditWriter auditWriter;
     private final UserRepository userRepository;
+    private final FindByIndexNameSessionRepository<?> sessionRepository;
 
     public AuthController(
         UserApplicationAssignmentRepository assignmentRepository,
         BCryptPasswordEncoder encoder,
         SecurityContextRepository securityContextRepository,
         AuditWriter auditWriter,
-        UserRepository userRepository
+        UserRepository userRepository,
+        FindByIndexNameSessionRepository<?> sessionRepository
     ) {
+        this.sessionRepository = sessionRepository;
         this.assignmentRepository = assignmentRepository;
         this.encoder = encoder;
         this.securityContextRepository = securityContextRepository;
@@ -231,7 +235,10 @@ public class AuthController {
         securityContextRepository.saveContext(context, httpRequest, httpResponse);
 
         if (request.remember()) {
-            httpRequest.getSession().setMaxInactiveInterval(REMEMBER_ME_DAYS * 24 * 60 * 60);
+            HttpSession newSession = httpRequest.getSession();
+            newSession.setMaxInactiveInterval(REMEMBER_ME_DAYS * 24 * 60 * 60);
+            // Lets the WebSocket browser-closed detector leave this session alone.
+            newSession.setAttribute(SessionConfig.REMEMBER_ME_SESSION_ATTR, Boolean.TRUE);
         }
 
         log.info("Login succeeded for user '{}' (role={}); session established", username, role);
@@ -334,6 +341,16 @@ public class AuthController {
         userRepository.save(user);
 
         log.info("Change-password succeeded for user '{}'", username);
+
+        // Sign out every other device/session (e.g. a stolen or forgotten "remember me"
+        // session). The caller's own session, if any, is kept: the forced-change flow
+        // continues on it.
+        HttpSession currentSession = httpRequest.getSession(false);
+        String keepSessionId = currentSession != null ? currentSession.getId() : null;
+        new java.util.ArrayList<>(sessionRepository.findByPrincipalName(username).keySet())
+            .stream()
+            .filter(sid -> !sid.equals(keepSessionId))
+            .forEach(sessionRepository::deleteById);
 
         try {
             auditWriter.write("CHANGE_PASSWORD", username, role, null, null, id,
