@@ -218,9 +218,13 @@ public class ApplicationController {
         try {
             String encPass = cipher.encrypt(sshPassword);
             String plainPass = cipher.decrypt(encPass);
-            com.jcraft.jsch.Session session = sshConnection.connect(serverIp, sshUsername, plainPass, sshHostKeyFingerprint);
-            String presentedFingerprint = session.getHostKey().getFingerPrint(new com.jcraft.jsch.JSch());
-            session.disconnect();
+            com.jcraft.jsch.Session session = sshConnection.openUncached(serverIp, sshUsername, plainPass, sshHostKeyFingerprint);
+            String presentedFingerprint;
+            try {
+                presentedFingerprint = session.getHostKey().getFingerPrint(new com.jcraft.jsch.JSch());
+            } finally {
+                session.disconnect();
+            }
             Map<String, Object> ok = new HashMap<>();
             ok.put("status", "OK");
             ok.put("fingerprint", presentedFingerprint);
@@ -229,7 +233,7 @@ public class ApplicationController {
             log.error("SSH connection test failed for server={}", serverIp, e);
             Map<String, Object> fail = new HashMap<>();
             fail.put("status", "SSH_CONNECTION_FAILED");
-            fail.put("message", e.getMessage());
+            fail.put("message", e instanceof SecurityException ? "SSH host key fingerprint mismatch" : "Could not establish an SSH connection with the supplied details");
             return ResponseEntity.status(502).body(fail);
         }
     }
@@ -274,12 +278,7 @@ public class ApplicationController {
         String smsExternalOfflineMessage = (String) req.get("smsExternalOfflineMessage");
         rejectIfAnySmsTooLong(smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage);
         String encPassword = cipher.encrypt(sshPassword);
-        ShellCheckValidator validator = new ShellCheckValidator();
-        try {
-            validator.validate(startScript);
-            validator.validate(stopScript);
-            validator.validate(logScript);
-        } catch (Exception e) { /* fail-open per §12.3, unchanged */ }
+        validateScripts(httpRequest, startScript, stopScript, logScript);
 
         Application newApp = new Application();
         newApp.setName(name);
@@ -345,7 +344,6 @@ public class ApplicationController {
             String plainPass = cipher.decrypt(encPass);
             com.jcraft.jsch.Session session = sshConnection.connect(host, user, plainPass, fingerprint);
             SshConnection.SshResult result = sshConnection.runScriptWithTimeout(session, startScript, 120000);
-            session.disconnect();
             scriptSucceeded = result.exitCode == 0;
             if (!scriptSucceeded) {
                 log.warn("Start script exited non-zero for application id={}", id);
@@ -413,7 +411,6 @@ public class ApplicationController {
             String plainPass = cipher.decrypt(encPass);
             com.jcraft.jsch.Session session = sshConnection.connect(host, user, plainPass, fingerprint);
             SshConnection.SshResult result = sshConnection.runScriptWithTimeout(session, stopScript, 120000);
-            session.disconnect();
             scriptSucceeded = result.exitCode == 0;
             if (!scriptSucceeded) {
                 log.warn("Stop script exited non-zero for application id={}", id);
@@ -500,6 +497,27 @@ public class ApplicationController {
         return observed == expectedOnline;
     }
 
+    /**
+     * ShellCheck gate (§12.3). Error-severity findings reject the save (400
+     * SHELLCHECK_FAILED via ShellCheckFailedException). Fail-open ONLY when
+     * ShellCheck itself is unavailable, and that case is audited.
+     */
+    private void validateScripts(HttpServletRequest httpRequest, String... scripts) {
+        ShellCheckValidator validator = new ShellCheckValidator();
+        try {
+            for (String sc : scripts) validator.validate(sc);
+        } catch (ShellCheckValidator.ShellCheckUnavailableException e) {
+            log.warn("ShellCheck unavailable; saving unvalidated scripts", e);
+            try {
+                var actor = currentActor();
+                auditWriter.write("SHELLCHECK_UNAVAILABLE", actor.get("username"), actor.get("role"),
+                    null, null, null, Map.of("note", "scripts saved without validation"), "SUCCESS", httpRequest);
+            } catch (Exception auditEx) {
+                log.warn("Audit write failed for SHELLCHECK_UNAVAILABLE", auditEx);
+            }
+        }
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<Void> updateApplication(@PathVariable Long id, @RequestBody Map<String, Object> req, HttpServletRequest httpRequest) {
         accessGuard.require(Action.UPDATE_APPLICATION);
@@ -529,6 +547,7 @@ public class ApplicationController {
         Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
 
         String sshPassword = (String) req.get("sshPassword");
+        validateScripts(httpRequest, startScript, stopScript, logScript);
         app.setName(name);
         app.setServerIp(serverAddress);
         app.setSshUsername(sshUsername);

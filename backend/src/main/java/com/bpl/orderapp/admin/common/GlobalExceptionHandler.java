@@ -237,13 +237,48 @@ public class GlobalExceptionHandler {
                 .contentType(MediaType.APPLICATION_PROBLEM_JSON)
                 .body(pd);
         }
-        // For non-400 statuses, fall through to the catch-all below
-        // by rethrowing. The simplest path is to just handle the
-        // 400 case here and let everything else get the default
-        // Spring behavior; if a future endpoint raises 4xx other
-        // than 400, add it here.
-        log.warn("Unhandled ResponseStatusException with non-400 status: {}", ex.getStatusCode());
-        return handleAny(ex);
+        // Other statuses (e.g. 409, 404) keep their own status instead of
+        // collapsing to 500.
+        if (status.is5xxServerError()) {
+            return handleAny(ex);
+        }
+        ProblemDetail pd = baseProblem(status.name(), status,
+            ex.getReason() == null ? status.getReasonPhrase() : ex.getReason());
+        return ResponseEntity.status(status)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(pd);
+    }
+
+    @ExceptionHandler(com.bpl.orderapp.admin.application.ShellCheckValidator.ShellCheckFailedException.class)
+    public ResponseEntity<ProblemDetail> handleShellCheckFailed(
+            com.bpl.orderapp.admin.application.ShellCheckValidator.ShellCheckFailedException ex) {
+        ProblemDetail pd = baseProblem(ErrorCode.SHELLCHECK_FAILED, HttpStatus.BAD_REQUEST,
+            "Script failed ShellCheck validation");
+        pd.setProperty("details", ex.getFindings());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON).body(pd);
+    }
+
+    @ExceptionHandler({
+        org.springframework.web.HttpRequestMethodNotSupportedException.class,
+        org.springframework.web.HttpMediaTypeNotSupportedException.class,
+        org.springframework.web.bind.MissingServletRequestParameterException.class,
+        org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class
+    })
+    public ResponseEntity<ProblemDetail> handleStandardMvc(Exception ex) {
+        HttpStatus status;
+        String detail;
+        if (ex instanceof org.springframework.web.HttpRequestMethodNotSupportedException) {
+            status = HttpStatus.METHOD_NOT_ALLOWED; detail = "Method not allowed";
+        } else if (ex instanceof org.springframework.web.HttpMediaTypeNotSupportedException) {
+            status = HttpStatus.UNSUPPORTED_MEDIA_TYPE; detail = "Unsupported media type";
+        } else {
+            status = HttpStatus.BAD_REQUEST; detail = "Invalid request parameter";
+        }
+        ProblemDetail pd = baseProblem(
+            status == HttpStatus.BAD_REQUEST ? ErrorCode.VALIDATION_FAILED : status.name(), status, detail);
+        return ResponseEntity.status(status)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON).body(pd);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

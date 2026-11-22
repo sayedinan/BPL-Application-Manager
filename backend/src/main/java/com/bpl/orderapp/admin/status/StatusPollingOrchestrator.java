@@ -58,6 +58,11 @@ public class StatusPollingOrchestrator {
     private final WebSocketBroadcast broadcast;
     private final LogPollingOrchestrator logPollingOrchestrator;
     private final ThreadPoolTaskScheduler healthScheduler;
+
+    @jakarta.annotation.PreDestroy
+    public void shutdownSchedulers() {
+        healthScheduler.shutdown();
+    }
     private final AuditWriter auditWriter;
     // Spring auto-injects every bean implementing Notifier — empty
     // list if neither email nor SMS is configured, one entry if only

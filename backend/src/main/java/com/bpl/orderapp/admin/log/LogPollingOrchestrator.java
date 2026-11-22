@@ -45,6 +45,11 @@ public class LogPollingOrchestrator {
     private final SshConnection sshConnection;
     private final WebSocketBroadcast broadcast;
     private final ThreadPoolTaskScheduler scheduler;
+
+    @jakarta.annotation.PreDestroy
+    public void shutdownScheduler() {
+        scheduler.shutdown();
+    }
     private final ApplicationRepository applicationRepository;
     private final ApplicationStatusStreakRepository streakRepository;
     private final ApplicationLogLineRepository logLineRepository;

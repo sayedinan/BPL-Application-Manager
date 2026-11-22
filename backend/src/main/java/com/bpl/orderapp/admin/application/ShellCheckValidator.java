@@ -1,16 +1,42 @@
 package com.bpl.orderapp.admin.application;
 import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
+
 @Component
 public class ShellCheckValidator {
-    public List<Map<String,String>> validate(String script) throws Exception {
+
+    /** Thrown when ShellCheck ran and reported error-severity findings. Mapped to 400 SHELLCHECK_FAILED. */
+    public static class ShellCheckFailedException extends RuntimeException {
+        private final transient List<Map<String, String>> findings;
+        public ShellCheckFailedException(List<Map<String, String>> findings) {
+            super("SHELLCHECK_FAILED: " + findings);
+            this.findings = findings;
+        }
+        public List<Map<String, String>> getFindings() { return findings; }
+    }
+
+    /** Thrown only when ShellCheck itself could not run (not installed, timed out). Callers fail open and audit. */
+    public static class ShellCheckUnavailableException extends Exception {
+        public ShellCheckUnavailableException(String msg, Throwable cause) { super(msg, cause); }
+    }
+
+    public List<Map<String,String>> validate(String script) throws ShellCheckUnavailableException {
+        if (script == null || script.isBlank()) return List.of();
         List<Map<String,String>> errors = new ArrayList<>();
+        Process p = null;
         try {
-            Process p = new ProcessBuilder("shellcheck", "--format=json", "-").start();
-            p.getOutputStream().write(script.getBytes()); p.getOutputStream().close();
-            String out = new String(p.getInputStream().readAllBytes());
-            // Parse JSON array output from --format=json
+            p = new ProcessBuilder("shellcheck", "--format=json", "-")
+                .redirectError(ProcessBuilder.Redirect.DISCARD).start();
+            p.getOutputStream().write(script.getBytes(StandardCharsets.UTF_8));
+            p.getOutputStream().close();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            if (!p.waitFor(15, TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                throw new ShellCheckUnavailableException("shellcheck timed out", null);
+            }
             com.fasterxml.jackson.databind.JsonNode arr = new ObjectMapper().readTree(out);
             for (com.fasterxml.jackson.databind.JsonNode o : arr) {
                 if ("error".equals(o.path("severity").asText())) {
@@ -20,12 +46,16 @@ public class ShellCheckValidator {
                     errors.add(d);
                 }
             }
-            if (!errors.isEmpty()) throw new RuntimeException("SHELLCHECK_FAILED: " + errors);
         } catch (java.io.IOException e) {
-            // Fail-open (§12.3 v1.1): save proceeds; audit wired 9.3
-            // Audit: ACTION=SHELLCHECK_UNAVAILABLE, RESULT=SUCCESS,
-            // detail notes unvalidated script(s) — wired by caller (Phase 9).
+            // Fail-open (§12.3 v1.1) ONLY when ShellCheck is unavailable.
+            throw new ShellCheckUnavailableException("shellcheck unavailable", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ShellCheckUnavailableException("shellcheck interrupted", e);
+        } finally {
+            if (p != null && p.isAlive()) p.destroyForcibly();
         }
+        if (!errors.isEmpty()) throw new ShellCheckFailedException(errors);
         return errors;
     }
 }
