@@ -4,7 +4,6 @@ import com.bpl.orderapp.admin.application.Application;
 import com.bpl.orderapp.admin.application.ApplicationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Async;
 
 import java.time.Instant;
@@ -41,17 +40,17 @@ public class SmsNotificationService implements Notifier {
     private static final Logger log = LoggerFactory.getLogger(SmsNotificationService.class);
 
     private final DurbarSmsClient durbarSmsClient;
-    private final JdbcTemplate jdbc;
+    private final SmsSendLogRepository smsSendLogRepository;
     private final NotificationRecipientResolver recipientResolver;
     private final Optional<EmailNotificationService> emailNotificationService;
     private final ApplicationRepository applicationRepository;
 
-    public SmsNotificationService(DurbarSmsClient durbarSmsClient, JdbcTemplate jdbc,
+    public SmsNotificationService(DurbarSmsClient durbarSmsClient, SmsSendLogRepository smsSendLogRepository,
             NotificationRecipientResolver recipientResolver,
             Optional<EmailNotificationService> emailNotificationService,
             ApplicationRepository applicationRepository) {
         this.durbarSmsClient = durbarSmsClient;
-        this.jdbc = jdbc;
+        this.smsSendLogRepository = smsSendLogRepository;
         this.recipientResolver = recipientResolver;
         this.emailNotificationService = emailNotificationService;
         this.applicationRepository = applicationRepository;
@@ -92,11 +91,9 @@ public class SmsNotificationService implements Notifier {
     private void logAttempt(Long applicationId, String phoneNumber, LifecycleEventType eventType,
             DurbarSmsClient.SmsSendResult result) {
         try {
-            jdbc.update(
-                "INSERT INTO sms_send_log (application_id, recipient_phone_number, event_type, "
-                    + "is_error, inserted_sms_id, response_message, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            smsSendLogRepository.save(new SmsSendLog(
                 applicationId, phoneNumber, eventType.name(), result.isError(),
-                result.insertedSmsIds(), result.message(), java.sql.Timestamp.from(Instant.now()));
+                result.insertedSmsIds(), result.message()));
         } catch (Exception e) {
             log.warn("Failed to write sms_send_log row for {}: {}", phoneNumber, e.getMessage());
         }

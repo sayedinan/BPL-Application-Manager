@@ -6,7 +6,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.javamail.JavaMailSender;
 
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -75,10 +74,10 @@ public class NotificationConfig {
     @ConditionalOnExpression("'${durbar.sms.user-id:}' != ''")
     public SmsNotificationService smsNotificationService(
             DurbarSmsClient durbarSmsClient,
-            JdbcTemplate jdbc,
+            SmsSendLogRepository smsSendLogRepository,
             NotificationRecipientResolver recipientResolver,
             Optional<EmailNotificationService> emailNotificationService,
             ApplicationRepository applicationRepository) {
-        return new SmsNotificationService(durbarSmsClient, jdbc, recipientResolver, emailNotificationService, applicationRepository);
+        return new SmsNotificationService(durbarSmsClient, smsSendLogRepository, recipientResolver, emailNotificationService, applicationRepository);
     }
 }
