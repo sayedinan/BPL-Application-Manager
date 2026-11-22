@@ -89,12 +89,15 @@ public class HealthController {
     private final UserRepository userRepository;
     private final ApplicationRepository applicationRepository;
     private final ApplicationHealthConfigRepository configRepository;
+    private final ApplicationHealthLatestRepository latestRepository;
 
     public HealthController(JdbcTemplate jdbc, SshCredentialCipher cipher, AuditWriter auditWriter,
             HealthCheckService healthCheckService, HealthReadService healthReadService,
             StatusPollingOrchestrator statusPolling, ObjectMapper mapper, UserRepository userRepository,
             ApplicationRepository applicationRepository,
-            ApplicationHealthConfigRepository configRepository) {
+            ApplicationHealthConfigRepository configRepository,
+            ApplicationHealthLatestRepository latestRepository) {
+        this.latestRepository = latestRepository;
         this.configRepository = configRepository;
         this.jdbc = jdbc;
         this.cipher = cipher;
@@ -367,7 +370,7 @@ public class HealthController {
             throw new NotFoundException();
         }
         configRepository.deleteById(id);
-        jdbc.update("DELETE FROM application_health_latest WHERE application_id = ?", id);
+        latestRepository.deleteById(id); // no-op if there is no latest row
 
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("change", "health_config_removed");

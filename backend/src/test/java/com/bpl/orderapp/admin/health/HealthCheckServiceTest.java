@@ -37,8 +37,28 @@ class HealthCheckServiceTest {
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class, this::fakeDatabase);
     private final ApplicationHealthConfigRepository configRepository =
         mock(ApplicationHealthConfigRepository.class, this::fakeConfigs);
+    private final ApplicationHealthLatestRepository latestRepository =
+        mock(ApplicationHealthLatestRepository.class, this::fakeLatest);
     private final HealthCheckService service = new HealthCheckService(
-        jdbc, cipher, httpClient, new ContractParser(mapper), mapper, readService, configRepository);
+        jdbc, cipher, httpClient, new ContractParser(mapper), mapper, readService,
+        configRepository, latestRepository);
+
+    // Stands in for application_health_latest: remembers the failure counter
+    // that save() receives and hands it back on the next check.
+    private Object fakeLatest(InvocationOnMock call) {
+        switch (call.getMethod().getName()) {
+            case "findConsecutiveFailuresByApplicationId":
+                return java.util.Optional.of(storedFailures.get());
+            case "findById":
+                return java.util.Optional.empty();
+            case "save":
+                ApplicationHealthLatest row = call.getArgument(0);
+                storedFailures.set(row.getConsecutiveFailures());
+                return row;
+            default:
+                return null;
+        }
+    }
 
     private Object fakeConfigs(InvocationOnMock call) {
         if (call.getMethod().getName().equals("findByApplicationIdAndEnabledTrue")) {
@@ -54,14 +74,6 @@ class HealthCheckServiceTest {
 
     private Object fakeDatabase(InvocationOnMock call) {
         String sql = call.getArgument(0);
-        if (sql.startsWith("SELECT consecutive_failures")) {
-            return List.of(storedFailures.get());
-        }
-        if (sql.startsWith("INSERT INTO application_health_latest")) {
-            Object[] arguments = call.getArguments();
-            storedFailures.set((Integer) arguments[arguments.length - 1]);
-            return 1;
-        }
         return call.getMethod().getReturnType() == int.class ? 1 : null;
     }
 

@@ -36,9 +36,12 @@ public class HealthReadService {
     private final ObjectMapper mapper;
     private final WebSocketBroadcast broadcast;
     private final ApplicationHealthConfigRepository configRepository;
+    private final ApplicationHealthLatestRepository latestRepository;
 
     public HealthReadService(JdbcTemplate jdbc, ObjectMapper mapper, WebSocketBroadcast broadcast,
-                             ApplicationHealthConfigRepository configRepository) {
+                             ApplicationHealthConfigRepository configRepository,
+                             ApplicationHealthLatestRepository latestRepository) {
+        this.latestRepository = latestRepository;
         this.configRepository = configRepository;
         this.jdbc = jdbc;
         this.mapper = mapper;
@@ -67,28 +70,24 @@ public class HealthReadService {
         body.put("monitored", config.get().isEnabled());
         body.put("pollIntervalSeconds", config.get().getPollIntervalSeconds());
 
-        List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT checked_at, reachable, http_status, response_ms, status, payload, error, "
-                + "ssl_not_after, consecutive_failures "
-                + "FROM application_health_latest WHERE application_id = ?", applicationId);
-        if (rows.isEmpty()) {
+        java.util.Optional<ApplicationHealthLatest> found = latestRepository.findById(applicationId);
+        if (found.isEmpty()) {
             body.put("checkedAt", null); // configured, first check hasn't landed yet
             return body;
         }
-        Map<String, Object> row = rows.get(0);
-        body.put("checkedAt", iso(row.get("checked_at")));
-        body.put("reachable", row.get("reachable"));
-        body.put("httpStatus", row.get("http_status"));
-        body.put("responseMs", row.get("response_ms"));
-        body.put("status", row.get("status"));
-        body.put("error", row.get("error"));
-        body.put("consecutiveFailures", row.get("consecutive_failures"));
-        Instant sslNotAfter = row.get("ssl_not_after") == null
-            ? null : ((Timestamp) row.get("ssl_not_after")).toInstant();
+        ApplicationHealthLatest row = found.get();
+        body.put("checkedAt", row.getCheckedAt().toString());
+        body.put("reachable", row.isReachable());
+        body.put("httpStatus", row.getHttpStatus());
+        body.put("responseMs", row.getResponseMs());
+        body.put("status", row.getStatus());
+        body.put("error", row.getError());
+        body.put("consecutiveFailures", row.getConsecutiveFailures());
+        Instant sslNotAfter = row.getSslNotAfter();
         body.put("sslNotAfter", sslNotAfter == null ? null : sslNotAfter.toString());
         body.put("sslDaysRemaining",
             sslNotAfter == null ? null : ChronoUnit.DAYS.between(Instant.now(), sslNotAfter));
-        body.put("snapshot", parseJson(row.get("payload")));
+        body.put("snapshot", parseJson(row.getPayload()));
         return body;
     }
 

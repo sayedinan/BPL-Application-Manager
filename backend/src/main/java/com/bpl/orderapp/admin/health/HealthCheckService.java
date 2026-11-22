@@ -59,24 +59,6 @@ public class HealthCheckService {
     private static final long DUE_SLACK_MS = 1500;
     private static final int HISTORY_RETENTION_DAYS = 30;
 
-    private static final String UPSERT_LATEST =
-        "INSERT INTO application_health_latest "
-        + "(application_id, checked_at, reachable, http_status, response_ms, status, "
-        + "payload, error, ssl_not_after, consecutive_failures) "
-        + "VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?) "
-        + "ON CONFLICT (application_id) DO UPDATE SET "
-        + "checked_at = EXCLUDED.checked_at, "
-        + "reachable = EXCLUDED.reachable, "
-        + "http_status = EXCLUDED.http_status, "
-        + "response_ms = EXCLUDED.response_ms, "
-        + "status = EXCLUDED.status, "
-        // Keep the last good payload and certificate expiry when this
-        // check failed and has nothing new to store.
-        + "payload = COALESCE(EXCLUDED.payload, application_health_latest.payload), "
-        + "error = EXCLUDED.error, "
-        + "ssl_not_after = COALESCE(EXCLUDED.ssl_not_after, application_health_latest.ssl_not_after), "
-        + "consecutive_failures = EXCLUDED.consecutive_failures";
-
     private final JdbcTemplate jdbc;
     private final SshCredentialCipher cipher;
     private final HealthHttpClient httpClient;
@@ -84,6 +66,7 @@ public class HealthCheckService {
     private final ObjectMapper payloadMapper;
     private final HealthReadService readService;
     private final ApplicationHealthConfigRepository configRepository;
+    private final ApplicationHealthLatestRepository latestRepository;
 
     private final Map<Long, Instant> lastPolled = new ConcurrentHashMap<>();
     private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
@@ -91,7 +74,9 @@ public class HealthCheckService {
     public HealthCheckService(JdbcTemplate jdbc, SshCredentialCipher cipher,
             HealthHttpClient httpClient, ContractParser contractParser,
             ObjectMapper mapper, HealthReadService readService,
-            ApplicationHealthConfigRepository configRepository) {
+            ApplicationHealthConfigRepository configRepository,
+            ApplicationHealthLatestRepository latestRepository) {
+        this.latestRepository = latestRepository;
         this.configRepository = configRepository;
         this.jdbc = jdbc;
         this.cipher = cipher;
@@ -243,10 +228,7 @@ public class HealthCheckService {
     }
 
     private int previousFailures(Long applicationId) {
-        List<Integer> rows = jdbc.queryForList(
-            "SELECT consecutive_failures FROM application_health_latest WHERE application_id = ?",
-            Integer.class, applicationId);
-        return rows.isEmpty() ? 0 : rows.get(0);
+        return latestRepository.findConsecutiveFailuresByApplicationId(applicationId).orElse(0);
     }
 
     // Best-effort: a failed write is logged but must not stop the
@@ -268,9 +250,11 @@ public class HealthCheckService {
                 ? null : (int) Math.min(responseMs, Integer.MAX_VALUE);
             String statusText = status == null ? null : status.name();
 
-            jdbc.update(UPSERT_LATEST,
-                applicationId, checkedTs, reachable, httpStatus, responseMsValue, statusText,
-                payload, error, certNotAfter == null ? null : Timestamp.from(certNotAfter), failures);
+            ApplicationHealthLatest latest = latestRepository.findById(applicationId)
+                .orElseGet(() -> new ApplicationHealthLatest(applicationId));
+            latest.record(checkedAt, reachable, httpStatus, responseMsValue, statusText,
+                payload, error, certNotAfter, failures);
+            latestRepository.save(latest);
             // The resource readings of this check, kept for the history charts
             // (same choice as the frontend: system CPU, else the process's).
             HealthSnapshot.Resources resources = snapshot == null ? null : snapshot.resources();
