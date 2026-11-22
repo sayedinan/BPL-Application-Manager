@@ -256,6 +256,19 @@ class AuthControllerTest {
     // change-password
     // -----------------------------------------------------------------
 
+    // Filters are disabled in this slice, so the session principal that the
+    // real chain would provide is set on the holder directly.
+    private static org.springframework.test.web.servlet.request.RequestPostProcessor asPrincipal(String name) {
+        return request -> {
+            SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(name, null, List.of()));
+            return request;
+        };
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearPrincipal() { SecurityContextHolder.clearContext(); }
+
     private static final String NEW_PASSWORD = "A-fresh-password-12chars";
 
     @Test
@@ -267,6 +280,7 @@ class AuthControllerTest {
         when(encoder.encode(NEW_PASSWORD)).thenReturn("new-bcrypt-hash");
 
         mvc.perform(post("/api/v1/auth/change-password")
+                .with(asPrincipal("admin"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(
                     new ChangePasswordRequest("admin", TEST_PASSWORD, NEW_PASSWORD))))
@@ -303,6 +317,7 @@ class AuthControllerTest {
             .when(sessionRepository).findByPrincipalName("admin");
 
         mvc.perform(post("/api/v1/auth/change-password")
+                .with(asPrincipal("admin"))
                 .session(new org.springframework.mock.web.MockHttpSession(null, "current"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(
@@ -315,12 +330,32 @@ class AuthControllerTest {
     }
 
     @Test
+    void changePassword_ignoresBodyUsername_actsOnSessionPrincipalOnly() throws Exception {
+        // Logged in as "admin" but the body names "victim": the victim's
+        // account must never be looked up (no password oracle / reset).
+        when(userRepository.findByUsername("admin")).thenReturn(
+            Optional.of(testUser(ADMIN_ID, "admin", "SYS_ADMIN", TEST_HASH, true)));
+        when(encoder.matches("guess", TEST_HASH)).thenReturn(false);
+
+        mvc.perform(post("/api/v1/auth/change-password")
+                .with(asPrincipal("admin"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(
+                    new ChangePasswordRequest("victim", "guess", NEW_PASSWORD))))
+            .andExpect(status().isUnauthorized());
+
+        verify(userRepository, never()).findByUsername("victim");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
     void changePassword_wrongOldPassword_returns401() throws Exception {
         when(userRepository.findByUsername("admin")).thenReturn(
             Optional.of(testUser(ADMIN_ID, "admin", "SYS_ADMIN", TEST_HASH, true)));
         when(encoder.matches("not-the-old-password", TEST_HASH)).thenReturn(false);
 
         mvc.perform(post("/api/v1/auth/change-password")
+                .with(asPrincipal("admin"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(
                     new ChangePasswordRequest("admin", "not-the-old-password", NEW_PASSWORD))))
@@ -337,6 +372,7 @@ class AuthControllerTest {
         when(userRepository.findByUsername("nobody")).thenReturn(Optional.empty());
 
         mvc.perform(post("/api/v1/auth/change-password")
+                .with(asPrincipal("nobody"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(
                     new ChangePasswordRequest("nobody", TEST_PASSWORD, NEW_PASSWORD))))
@@ -355,6 +391,7 @@ class AuthControllerTest {
         when(userRepository.findByUsername("soft-deleted")).thenReturn(Optional.empty());
 
         mvc.perform(post("/api/v1/auth/change-password")
+                .with(asPrincipal("soft-deleted"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(
                     new ChangePasswordRequest("soft-deleted", TEST_PASSWORD, NEW_PASSWORD))))
@@ -365,6 +402,7 @@ class AuthControllerTest {
     @Test
     void changePassword_tooShort_returns400_validationFailed() throws Exception {
         mvc.perform(post("/api/v1/auth/change-password")
+                .with(asPrincipal("admin"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(
                     new ChangePasswordRequest("admin", TEST_PASSWORD, "short"))))
@@ -384,6 +422,7 @@ class AuthControllerTest {
         when(encoder.matches(TEST_PASSWORD, TEST_HASH)).thenReturn(true);
 
         mvc.perform(post("/api/v1/auth/change-password")
+                .with(asPrincipal("admin"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(
                     new ChangePasswordRequest("admin", TEST_PASSWORD, TEST_PASSWORD))))

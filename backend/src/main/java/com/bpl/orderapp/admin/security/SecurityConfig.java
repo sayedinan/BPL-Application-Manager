@@ -99,6 +99,12 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
 
+            // Unauthenticated access to protected paths must be 401 (not
+            // Spring's default 403) so the SPA's expired-session redirect fires.
+            .exceptionHandling(e -> e.authenticationEntryPoint(
+                new org.springframework.security.web.authentication.HttpStatusEntryPoint(
+                    org.springframework.http.HttpStatus.UNAUTHORIZED)))
+
             // Session policy: only create a session when
             // something is actually put in the SecurityContext
             // (i.e. after a successful login). Unauthenticated

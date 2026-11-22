@@ -88,6 +88,15 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             case SUBSCRIBE -> handleSubscribe(accessor);
             case DISCONNECT -> cleanupSession(accessor.getSessionId());
             case UNSUBSCRIBE -> handleUnsubscribe(accessor);
+            case SEND -> {
+                // Clients may only SEND to application destinations (/app).
+                // Anything else would let a client publish straight onto
+                // broker topics (/topic/...) and forge logs/status/audit events.
+                String dest = accessor.getDestination();
+                if (dest == null || !dest.startsWith("/app")) {
+                    throw new MessageDeliveryException("SEND to this destination is not allowed");
+                }
+            }
             default -> {}
         }
         return message;

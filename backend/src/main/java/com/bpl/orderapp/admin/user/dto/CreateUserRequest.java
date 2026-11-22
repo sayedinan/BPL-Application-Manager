@@ -9,7 +9,7 @@ import java.util.List;
 public record CreateUserRequest(
     @NotBlank String username,
     @NotBlank @Size(max = 150) String fullName,
-    @NotBlank String role,
+    @NotBlank @Pattern(regexp = "SYS_ADMIN|ADMIN|USER", message = "role must be SYS_ADMIN, ADMIN or USER") String role,
     @NotBlank @Email String email,
     // Optional — unlike email, a user isn't required to have a phone
     // number (no SMS alerts is an acceptable state, per

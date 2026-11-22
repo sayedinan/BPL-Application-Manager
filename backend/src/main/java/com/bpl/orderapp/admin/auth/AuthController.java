@@ -294,10 +294,20 @@ public class AuthController {
             HttpServletRequest httpRequest) {
 
         // 1. Look up the user through the repository.
-        java.util.Optional<User> found = userRepository.findByUsername(request.username());
+        // SECURITY: the target account is always the session principal.
+        // The body's username is ignored, otherwise any logged-in user could
+        // use this endpoint as a password oracle / reset for other accounts.
+        org.springframework.security.core.Authentication auth =
+            org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() || auth.getName() == null
+                || "anonymousUser".equals(auth.getName())) {
+            throw new InvalidCredentialsException();
+        }
+        String principalName = auth.getName();
+        java.util.Optional<User> found = userRepository.findByUsername(principalName);
 
         if (found.isEmpty()) {
-            log.info("Change-password attempt for unknown user: '{}'", request.username());
+            log.info("Change-password attempt for unknown user: '{}'", principalName);
             // Constant-time: run a real bcrypt matches against the
             // dummy hash so timing matches the "user exists, wrong
             // old password" path.
