@@ -319,10 +319,10 @@ public class ApplicationController {
     @PostMapping("/{id}/start")
     public ResponseEntity<Map<String, Object>> startApplication(@PathVariable Long id,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestParam java.util.UUID userId, HttpServletRequest httpRequest) {
+            HttpServletRequest httpRequest) {
         accessGuard.requireApplication(Action.CONTROL_APPLICATION, id);
         requireHealthMonitoring(id);
-        idempotencyService.checkAndStore(idempotencyKey, userId, id);
+        idempotencyService.checkAndStore(idempotencyKey, accessGuard.currentCaller().userId(), id);
 
         Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
         // getHostAddress(), not toString(): toString() would give "/10.0.0.5" and SSH would fail.
@@ -388,10 +388,10 @@ public class ApplicationController {
     @PostMapping("/{id}/stop")
     public ResponseEntity<Map<String, Object>> stopApplication(@PathVariable Long id,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestParam java.util.UUID userId, HttpServletRequest httpRequest) {
+            HttpServletRequest httpRequest) {
         accessGuard.requireApplication(Action.CONTROL_APPLICATION, id);
         requireHealthMonitoring(id);
-        idempotencyService.checkAndStore(idempotencyKey, userId, id);
+        idempotencyService.checkAndStore(idempotencyKey, accessGuard.currentCaller().userId(), id);
 
         Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
         String host = app.getServerIp().getHostAddress();
