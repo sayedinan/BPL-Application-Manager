@@ -28,7 +28,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import com.bpl.orderapp.admin.websocket.WebSocketConnectionRepository;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
@@ -44,7 +44,7 @@ class UserControllerTest {
 
     @Autowired private MockMvc mvc;
 
-    @MockBean private JdbcTemplate jdbc;
+    @MockBean private FindByIndexNameSessionRepository<?> sessionRepository;
     @MockBean private BCryptPasswordEncoder encoder;
     @MockBean private UserRepository userRepository;
     @MockBean private AuditWriter auditWriter;

@@ -9,7 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import com.bpl.orderapp.admin.websocket.WebSocketConnectionRepository;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
@@ -94,7 +94,7 @@ public class UserController {
 
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
 
-    private final JdbcTemplate jdbc;
+    private final FindByIndexNameSessionRepository<?> sessionRepository;
     private final AuditWriter auditWriter;
     private final BCryptPasswordEncoder encoder;
     private final UserRepository userRepository;
@@ -102,12 +102,12 @@ public class UserController {
     private final UserApplicationAssignmentRepository assignmentRepository;
     private final WebSocketConnectionRepository connectionRepository;
 
-    public UserController(JdbcTemplate jdbc, BCryptPasswordEncoder encoder, AuditWriter auditWriter,
+    public UserController(FindByIndexNameSessionRepository<?> sessionRepository, BCryptPasswordEncoder encoder, AuditWriter auditWriter,
                           UserRepository userRepository, ApplicationRepository applicationRepository,
                           UserApplicationAssignmentRepository assignmentRepository,
                           WebSocketConnectionRepository connectionRepository) {
         this.connectionRepository = connectionRepository;
-        this.jdbc = jdbc;
+        this.sessionRepository = sessionRepository;
         this.encoder = encoder;
         this.auditWriter = auditWriter;
         this.userRepository = userRepository;
@@ -230,7 +230,8 @@ public class UserController {
         if (deletedUsername != null) {
             // Kill live sessions so a deleted user's cookie can't authenticate as a
             // new user later created with the same username.
-            jdbc.update("DELETE FROM spring_session WHERE principal_name = ?", deletedUsername);
+            new java.util.ArrayList<>(sessionRepository.findByPrincipalName(deletedUsername).keySet())
+                .forEach(sessionRepository::deleteById);
         }
 
         try {
