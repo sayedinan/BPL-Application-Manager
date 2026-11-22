@@ -7,7 +7,7 @@ import com.bpl.orderapp.admin.user.UserApplicationAssignmentRepository;
 import com.bpl.orderapp.admin.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.MessageDeliveryException;
@@ -32,7 +32,7 @@ import com.bpl.orderapp.admin.log.LogViewerEvent;
 public class WebSocketAccessInterceptor implements ChannelInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(WebSocketAccessInterceptor.class);
-    private final JdbcTemplate jdbc;
+    private final FindByIndexNameSessionRepository<?> sessionRepository;
     private final UserRepository userRepository;
     private final UserApplicationAssignmentRepository assignmentRepository;
     private final WebSocketConnectionRepository connectionRepository;
@@ -53,14 +53,14 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             return t;
         });
 
-    public WebSocketAccessInterceptor(JdbcTemplate jdbc, AuditWriter auditWriter,
+    public WebSocketAccessInterceptor(FindByIndexNameSessionRepository<?> sessionRepository, AuditWriter auditWriter,
                                       ApplicationEventPublisher events, UserRepository userRepository,
                                       UserApplicationAssignmentRepository assignmentRepository,
                                       WebSocketConnectionRepository connectionRepository,
                                       WebSocketSubscriptionRepository subscriptionRepository) {
         this.connectionRepository = connectionRepository;
         this.subscriptionRepository = subscriptionRepository;
-        this.jdbc = jdbc;
+        this.sessionRepository = sessionRepository;
         this.auditWriter = auditWriter;
         this.events = events;
         this.userRepository = userRepository;
@@ -190,13 +190,12 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
     private void recordBrowserClosed(String username, java.time.Instant disconnectedAt) {
         AtomicInteger current = perUserConnections.get(username);
         if (current != null && current.get() > 0) return; // reconnected or another tab open
-        Integer sessions = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM spring_session WHERE principal_name = ? AND expiry_time > ?",
-            Integer.class, username, System.currentTimeMillis());
-        if (sessions == null || sessions == 0) return; // already logged out / expired
+        var sessions = sessionRepository.findByPrincipalName(username);
+        boolean hasLiveSession = sessions.values().stream().anyMatch(s -> !s.isExpired());
+        if (!hasLiveSession) return; // already logged out / expired
         String role = userRepository.findByUsername(username).map(User::getRole).orElse("UNKNOWN");
         auditWriter.writeAt(disconnectedAt, "LOGOUT", username, role, Map.of("reason", "BROWSER_CLOSED"), "SUCCESS");
-        jdbc.update("DELETE FROM spring_session WHERE principal_name = ?", username);
+        new java.util.ArrayList<>(sessions.keySet()).forEach(sessionRepository::deleteById);
         log.info("Browser closed detected for '{}' at {}; LOGOUT audited, orphaned session removed", username, disconnectedAt);
     }
 
