@@ -10,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -32,15 +31,13 @@ public class MaintenanceController {
 
     private static final int MAX_NOTE_LENGTH = 200;
 
-    private final JdbcTemplate jdbc;
     private final AccessGuard accessGuard;
     private final AuditWriter auditWriter;
     private final MaintenanceService maintenanceService;
     private final ApplicationRepository applicationRepository;
 
-    public MaintenanceController(JdbcTemplate jdbc, AccessGuard accessGuard, AuditWriter auditWriter,
+    public MaintenanceController(AccessGuard accessGuard, AuditWriter auditWriter,
             MaintenanceService maintenanceService, ApplicationRepository applicationRepository) {
-        this.jdbc = jdbc;
         this.accessGuard = accessGuard;
         this.auditWriter = auditWriter;
         this.maintenanceService = maintenanceService;

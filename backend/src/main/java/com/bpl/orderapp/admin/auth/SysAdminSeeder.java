@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -63,18 +62,15 @@ public class SysAdminSeeder implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(SysAdminSeeder.class);
 
-    private final JdbcTemplate jdbc;
     private final BCryptPasswordEncoder encoder;
     private final String username;
     private final UserRepository userRepository;
 
     public SysAdminSeeder(
-        JdbcTemplate jdbc,
         BCryptPasswordEncoder encoder,
         @Value("${app.bootstrap.sysadmin.username:admin}") String username,
         UserRepository userRepository
     ) {
-        this.jdbc = jdbc;
         this.encoder = encoder;
         this.username = username;
         this.userRepository = userRepository;

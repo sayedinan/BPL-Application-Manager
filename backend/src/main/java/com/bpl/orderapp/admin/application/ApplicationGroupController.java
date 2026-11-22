@@ -9,7 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,14 +26,12 @@ public class ApplicationGroupController {
     private static final Logger log = LoggerFactory.getLogger(ApplicationGroupController.class);
     private static final int MAX_GROUP_LENGTH = 60;
 
-    private final JdbcTemplate jdbc;
     private final AccessGuard accessGuard;
     private final AuditWriter auditWriter;
     private final ApplicationRepository applicationRepository;
 
-    public ApplicationGroupController(JdbcTemplate jdbc, AccessGuard accessGuard, AuditWriter auditWriter,
+    public ApplicationGroupController(AccessGuard accessGuard, AuditWriter auditWriter,
             ApplicationRepository applicationRepository) {
-        this.jdbc = jdbc;
         this.accessGuard = accessGuard;
         this.auditWriter = auditWriter;
         this.applicationRepository = applicationRepository;
