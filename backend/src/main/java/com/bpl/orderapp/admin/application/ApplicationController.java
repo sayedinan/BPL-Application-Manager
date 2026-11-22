@@ -4,6 +4,8 @@ import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.common.IdempotencyService;
 import com.bpl.orderapp.admin.common.NotFoundException;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
+import com.bpl.orderapp.admin.log.ApplicationLogLine;
+import com.bpl.orderapp.admin.log.ApplicationLogLineRepository;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
 import com.bpl.orderapp.admin.health.ApplicationHealthConfigRepository;
 import com.bpl.orderapp.admin.security.AccessGuard;
@@ -61,6 +63,7 @@ public class ApplicationController {
     private final ApplicationStatusStreakRepository streakRepository;
     private final ApplicationStatusTransitionRepository transitionRepository;
     private final ApplicationHealthConfigRepository healthConfigRepository;
+    private final ApplicationLogLineRepository logLineRepository;
 
     public ApplicationController(JdbcTemplate jdbc, SshCredentialCipher cipher,
             IdempotencyService idempotencyService, SshConnection sshConnection,
@@ -71,7 +74,8 @@ public class ApplicationController {
             ApplicationRepository applicationRepository,
             ApplicationStatusStreakRepository streakRepository,
             ApplicationStatusTransitionRepository transitionRepository,
-            ApplicationHealthConfigRepository healthConfigRepository) {
+            ApplicationHealthConfigRepository healthConfigRepository,
+            ApplicationLogLineRepository logLineRepository) {
         this.jdbc = jdbc;
         this.cipher = cipher;
         this.idempotencyService = idempotencyService;
@@ -86,6 +90,7 @@ public class ApplicationController {
         this.streakRepository = streakRepository;
         this.transitionRepository = transitionRepository;
         this.healthConfigRepository = healthConfigRepository;
+        this.logLineRepository = logLineRepository;
     }
 
     @GetMapping
@@ -239,8 +244,16 @@ public class ApplicationController {
     @GetMapping("/{id}/logs")
     public ResponseEntity<List<Map<String, Object>>> getLogs(@PathVariable Long id) {
         accessGuard.requireApplication(Action.LIST_APPLICATIONS, id);
-        List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT line_number, content, captured_at FROM application_log_lines WHERE application_id = ? ORDER BY line_number ASC", id);
+        // Same JSON keys as before (line_number, content, captured_at); the
+        // frontend's LogsBox reads them. captured_at is now an ISO-8601 instant.
+        List<Map<String, Object>> rows = new java.util.ArrayList<>();
+        for (ApplicationLogLine line : logLineRepository.findByApplicationIdOrderByLineNumberAsc(id)) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("line_number", line.getLineNumber());
+            row.put("content", line.getContent());
+            row.put("captured_at", line.getCapturedAt().toString());
+            rows.add(row);
+        }
         return ResponseEntity.ok(rows);
     }
 

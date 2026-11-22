@@ -48,12 +48,15 @@ public class LogPollingOrchestrator {
     private final ThreadPoolTaskScheduler scheduler;
     private final ApplicationRepository applicationRepository;
     private final ApplicationStatusStreakRepository streakRepository;
+    private final ApplicationLogLineRepository logLineRepository;
 
     private final ConcurrentHashMap<Long, ScheduledFuture<?>> activePollers = new ConcurrentHashMap<>();
 
     public LogPollingOrchestrator(JdbcTemplate jdbc, SshCredentialCipher cipher,
             SshConnection sshConnection, WebSocketBroadcast broadcast, ApplicationRepository applicationRepository,
-            ApplicationStatusStreakRepository streakRepository) {
+            ApplicationStatusStreakRepository streakRepository,
+            ApplicationLogLineRepository logLineRepository) {
+        this.logLineRepository = logLineRepository;
         this.streakRepository = streakRepository;
         this.jdbc = jdbc;
         this.cipher = cipher;
@@ -155,15 +158,14 @@ public class LogPollingOrchestrator {
         int end = batch.length;
         while (end > 0 && batch[end - 1].isBlank()) end--;
 
-        List<String> lastContentRows = jdbc.queryForList(
-            "SELECT content FROM application_log_lines WHERE application_id = ? ORDER BY line_number DESC LIMIT 1",
-            String.class, applicationId);
+        java.util.Optional<ApplicationLogLine> lastLine =
+            logLineRepository.findFirstByApplicationIdOrderByLineNumberDesc(applicationId);
 
-        if (lastContentRows.isEmpty()) {
+        if (lastLine.isEmpty()) {
             return Arrays.asList(Arrays.copyOf(batch, end));
         }
 
-        String lastContent = lastContentRows.get(0);
+        String lastContent = lastLine.get().getContent();
         for (int i = end - 1; i >= 0; i--) {
             if (batch[i].equals(lastContent)) {
                 return Arrays.asList(Arrays.copyOfRange(batch, i + 1, end));
@@ -173,17 +175,12 @@ public class LogPollingOrchestrator {
     }
 
     private void appendAndBroadcast(Long applicationId, String content) {
-        Long lastLineNumber = jdbc.queryForObject(
-            "SELECT COALESCE(MAX(line_number), 0) FROM application_log_lines WHERE application_id = ?",
-            Long.class, applicationId);
-        long nextLineNumber = lastLineNumber + 1;
+        long nextLineNumber = logLineRepository.findFirstByApplicationIdOrderByLineNumberDesc(applicationId)
+            .map(last -> last.getLineNumber() + 1)
+            .orElse(1L);
         Instant now = Instant.now();
-        jdbc.update(
-            "INSERT INTO application_log_lines (application_id, line_number, content, captured_at) VALUES (?, ?, ?, ?)",
-            applicationId, nextLineNumber, content, java.sql.Timestamp.from(now));
-        jdbc.update(
-            "DELETE FROM application_log_lines WHERE application_id = ? AND line_number <= ?",
-            applicationId, nextLineNumber - MAX_RETAINED_LINES);
+        logLineRepository.save(new ApplicationLogLine(applicationId, nextLineNumber, content, now));
+        logLineRepository.deleteUpToLine(applicationId, nextLineNumber - MAX_RETAINED_LINES);
         broadcast.broadcast(applicationId, content, nextLineNumber, now.toString());
     }
 }
