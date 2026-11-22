@@ -8,6 +8,7 @@ import com.bpl.orderapp.admin.user.dto.UpdateUserRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import com.bpl.orderapp.admin.websocket.WebSocketConnectionRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -99,10 +100,13 @@ public class UserController {
     private final UserRepository userRepository;
     private final ApplicationRepository applicationRepository;
     private final UserApplicationAssignmentRepository assignmentRepository;
+    private final WebSocketConnectionRepository connectionRepository;
 
     public UserController(JdbcTemplate jdbc, BCryptPasswordEncoder encoder, AuditWriter auditWriter,
                           UserRepository userRepository, ApplicationRepository applicationRepository,
-                          UserApplicationAssignmentRepository assignmentRepository) {
+                          UserApplicationAssignmentRepository assignmentRepository,
+                          WebSocketConnectionRepository connectionRepository) {
+        this.connectionRepository = connectionRepository;
         this.jdbc = jdbc;
         this.encoder = encoder;
         this.auditWriter = auditWriter;
@@ -129,10 +133,7 @@ public class UserController {
             row.put("created_at", u.getCreatedAt());
             java.util.List<Long> assigned = assignmentRepository.findApplicationIdsByUserId(u.getId());
             row.put("assignedApplicationIds", assigned);
-            Integer liveConnections = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM websocket_connections WHERE username = ?",
-                Integer.class, u.getUsername());
-            row.put("online", liveConnections != null && liveConnections > 0);
+            row.put("online", connectionRepository.existsByUsername(u.getUsername()));
             users.add(row);
         }
         return ResponseEntity.ok(users);

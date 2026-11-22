@@ -25,6 +25,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import com.bpl.orderapp.admin.websocket.WebSocketConnectionRepository;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -49,6 +50,7 @@ class UserControllerTest {
     @MockBean private AuditWriter auditWriter;
     @MockBean private ApplicationRepository applicationRepository;
     @MockBean private UserApplicationAssignmentRepository assignmentRepository;
+    @MockBean private WebSocketConnectionRepository connectionRepository;
 
     private static final UUID TEST_USER_ID = UUID.fromString("12345678-1234-5678-1234-567812345678");
 

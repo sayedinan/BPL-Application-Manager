@@ -4,11 +4,11 @@ import com.bpl.orderapp.admin.application.Application;
 import com.bpl.orderapp.admin.application.ApplicationRepository;
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.bpl.orderapp.admin.ssh.SshConnection;
+import com.bpl.orderapp.admin.websocket.WebSocketSubscriptionRepository;
 import com.bpl.orderapp.admin.status.ApplicationStatusStreakRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Component;
 
@@ -41,7 +41,6 @@ public class LogPollingOrchestrator {
     private static final int LOG_POLL_INTERVAL_SECONDS = 5;
     private static final int LOG_SCRIPT_TIMEOUT_MS = 15000;
 
-    private final JdbcTemplate jdbc;
     private final SshCredentialCipher cipher;
     private final SshConnection sshConnection;
     private final WebSocketBroadcast broadcast;
@@ -49,16 +48,18 @@ public class LogPollingOrchestrator {
     private final ApplicationRepository applicationRepository;
     private final ApplicationStatusStreakRepository streakRepository;
     private final ApplicationLogLineRepository logLineRepository;
+    private final WebSocketSubscriptionRepository subscriptionRepository;
 
     private final ConcurrentHashMap<Long, ScheduledFuture<?>> activePollers = new ConcurrentHashMap<>();
 
-    public LogPollingOrchestrator(JdbcTemplate jdbc, SshCredentialCipher cipher,
+    public LogPollingOrchestrator(SshCredentialCipher cipher,
             SshConnection sshConnection, WebSocketBroadcast broadcast, ApplicationRepository applicationRepository,
             ApplicationStatusStreakRepository streakRepository,
-            ApplicationLogLineRepository logLineRepository) {
+            ApplicationLogLineRepository logLineRepository,
+            WebSocketSubscriptionRepository subscriptionRepository) {
+        this.subscriptionRepository = subscriptionRepository;
         this.logLineRepository = logLineRepository;
         this.streakRepository = streakRepository;
-        this.jdbc = jdbc;
         this.cipher = cipher;
         this.sshConnection = sshConnection;
         this.broadcast = broadcast;
@@ -91,10 +92,7 @@ public class LogPollingOrchestrator {
     }
 
     public int viewerCount(Long applicationId) {
-        Integer n = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM websocket_subscriptions WHERE topic_key = ?",
-            Integer.class, String.valueOf(applicationId));
-        return n == null ? 0 : n;
+        return (int) subscriptionRepository.countByTopicKey(String.valueOf(applicationId));
     }
 
     private boolean isOnline(Long applicationId) {

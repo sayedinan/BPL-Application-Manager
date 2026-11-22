@@ -35,6 +35,8 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
     private final JdbcTemplate jdbc;
     private final UserRepository userRepository;
     private final UserApplicationAssignmentRepository assignmentRepository;
+    private final WebSocketConnectionRepository connectionRepository;
+    private final WebSocketSubscriptionRepository subscriptionRepository;
     private final AtomicInteger globalConnections = new AtomicInteger(0);
     private final ConcurrentHashMap<String, AtomicInteger> perUserConnections = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicInteger> perApplicationSubscribers = new ConcurrentHashMap<>();
@@ -53,7 +55,11 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
 
     public WebSocketAccessInterceptor(JdbcTemplate jdbc, AuditWriter auditWriter,
                                       ApplicationEventPublisher events, UserRepository userRepository,
-                                      UserApplicationAssignmentRepository assignmentRepository) {
+                                      UserApplicationAssignmentRepository assignmentRepository,
+                                      WebSocketConnectionRepository connectionRepository,
+                                      WebSocketSubscriptionRepository subscriptionRepository) {
+        this.connectionRepository = connectionRepository;
+        this.subscriptionRepository = subscriptionRepository;
         this.jdbc = jdbc;
         this.auditWriter = auditWriter;
         this.events = events;
@@ -63,8 +69,10 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
 
     @jakarta.annotation.PostConstruct
     public void clearStaleStateOnStartup() {
-        int subs = jdbc.update("DELETE FROM websocket_subscriptions");
-        int conns = jdbc.update("DELETE FROM websocket_connections");
+        long subs = subscriptionRepository.count();
+        long conns = connectionRepository.count();
+        subscriptionRepository.deleteAllInBatch();
+        connectionRepository.deleteAllInBatch();
         if (subs > 0 || conns > 0) {
             log.info("Cleared {} stale websocket_subscriptions and {} stale websocket_connections rows on startup", subs, conns);
         }
@@ -92,7 +100,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
         AtomicInteger userCount = perUserConnections.computeIfAbsent(username, k -> new AtomicInteger(0));
         if (userCount.get() >= WebSocketLimits.MAX_PER_USER) throw new MessageDeliveryException("Per-user connection limit reached");
         globalConnections.incrementAndGet(); userCount.incrementAndGet(); sessionUsers.put(sessionId, username);
-        jdbc.update("INSERT INTO websocket_connections (session_id, username) VALUES (?, ?)", sessionId, username);
+        connectionRepository.save(new WebSocketConnection(sessionId, username));
     }
 
     @Transactional
@@ -105,7 +113,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
         Role role = lookupRole(username);
         if ("/topic/audit-log".equals(destination)) {
             if (role != Role.SYS_ADMIN && role != Role.ADMIN) throw new MessageDeliveryException("Not authorized for audit log");
-            jdbc.update("INSERT INTO websocket_subscriptions (session_id, subscription_id, topic_key) VALUES (?, ?, ?)", sessionId, subscriptionId, "audit-log");
+            subscriptionRepository.save(new WebSocketSubscription(sessionId, subscriptionId, "audit-log"));
             return;
         }
         if (destination.startsWith("/topic/application-logs/")) {
@@ -116,9 +124,9 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
                 List<Long> assigned = assignmentRepository.findApplicationIdsByUserId(userId);
                 if (!assigned.contains(applicationId)) throw new MessageDeliveryException("Not authorized for this application's logs");
             }
-            Integer appCount = jdbc.queryForObject("SELECT COUNT(*) FROM websocket_subscriptions WHERE topic_key = ?", Integer.class, idPart);
-            if (appCount != null && appCount >= WebSocketLimits.MAX_PER_APP) throw new MessageDeliveryException("Per-application subscriber limit reached");
-            jdbc.update("INSERT INTO websocket_subscriptions (session_id, subscription_id, topic_key) VALUES (?, ?, ?)", sessionId, subscriptionId, idPart);
+            long appCount = subscriptionRepository.countByTopicKey(idPart);
+            if (appCount >= WebSocketLimits.MAX_PER_APP) throw new MessageDeliveryException("Per-application subscriber limit reached");
+            subscriptionRepository.save(new WebSocketSubscription(sessionId, subscriptionId, idPart));
             events.publishEvent(new LogViewerEvent(applicationId, true));
             return;
         }
@@ -136,20 +144,18 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
 
     @Transactional
     protected void handleUnsubscribe(StompHeaderAccessor accessor) {
-        List<String> keys = jdbc.queryForList(
-            "SELECT topic_key FROM websocket_subscriptions WHERE session_id = ? AND subscription_id = ?",
-            String.class, accessor.getSessionId(), accessor.getSubscriptionId());
-        jdbc.update("DELETE FROM websocket_subscriptions WHERE session_id = ? AND subscription_id = ?", accessor.getSessionId(), accessor.getSubscriptionId());
+        List<String> keys = subscriptionRepository.findTopicKeys(accessor.getSessionId(), accessor.getSubscriptionId());
+        subscriptionRepository.deleteAllBySubscription(accessor.getSessionId(), accessor.getSubscriptionId());
         publishViewersLeft(keys);
     }
 
     @Transactional
     protected void cleanupSession(String sessionId) {
         if (sessionId == null) return;
-        List<String> keys = jdbc.queryForList("SELECT topic_key FROM websocket_subscriptions WHERE session_id = ?", String.class, sessionId);
-        jdbc.update("DELETE FROM websocket_subscriptions WHERE session_id = ?", sessionId);
+        List<String> keys = subscriptionRepository.findTopicKeysBySession(sessionId);
+        subscriptionRepository.deleteAllBySession(sessionId);
         publishViewersLeft(keys);
-        int deleted = jdbc.update("DELETE FROM websocket_connections WHERE session_id = ?", sessionId);
+        int deleted = connectionRepository.deleteAllBySession(sessionId);
         String username = sessionUsers.remove(sessionId);
         if (deleted > 0) {
             globalConnections.updateAndGet(v -> Math.max(0, v - 1));
