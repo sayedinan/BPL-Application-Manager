@@ -24,3 +24,8 @@ Thumbs.db
 
 
 temp
+
+# Secrets / build artifacts
+caddy_certs/
+frontend/dist-tsbuild/
+*.tsbuildinfo

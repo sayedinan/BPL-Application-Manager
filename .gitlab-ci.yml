@@ -1,6 +1,18 @@
 test-backend:
   stage: test
   image: eclipse-temurin:25-jdk
+  variables:
+    # build.gradle.kts aborts the test task when SSH_CIPHER_KEY is unset.
+    # Test-only value; real keys come from deployment secrets.
+    SSH_CIPHER_KEY: "ci-only-test-key-0123456789-abcdefghij"
   script:
     - cd backend
     - ./gradlew test --no-daemon
+
+test-frontend:
+  stage: test
+  image: node:22
+  script:
+    - cd frontend
+    - npm ci
+    - npm test
