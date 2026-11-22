@@ -1,14 +1,13 @@
 package com.bpl.orderapp.admin.health;
 
 import com.bpl.orderapp.admin.log.WebSocketBroadcast;
+import com.bpl.orderapp.admin.maintenance.ApplicationMaintenanceRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
@@ -32,18 +31,19 @@ public class HealthReadService {
 
     private static final Logger log = LoggerFactory.getLogger(HealthReadService.class);
 
-    private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
     private final WebSocketBroadcast broadcast;
     private final ApplicationHealthConfigRepository configRepository;
     private final ApplicationHealthLatestRepository latestRepository;
+    private final ApplicationMaintenanceRepository maintenanceRepository;
 
-    public HealthReadService(JdbcTemplate jdbc, ObjectMapper mapper, WebSocketBroadcast broadcast,
+    public HealthReadService(ObjectMapper mapper, WebSocketBroadcast broadcast,
                              ApplicationHealthConfigRepository configRepository,
-                             ApplicationHealthLatestRepository latestRepository) {
+                             ApplicationHealthLatestRepository latestRepository,
+                             ApplicationMaintenanceRepository maintenanceRepository) {
+        this.maintenanceRepository = maintenanceRepository;
         this.latestRepository = latestRepository;
         this.configRepository = configRepository;
-        this.jdbc = jdbc;
         this.mapper = mapper;
         this.broadcast = broadcast;
     }
@@ -53,15 +53,13 @@ public class HealthReadService {
         Map<String, Object> body = new LinkedHashMap<>();
         // An open maintenance window (alerts held back) is shown for every
         // application, whether or not it is monitored through a health endpoint.
-        List<Map<String, Object>> maintenance = jdbc.queryForList(
-            "SELECT starts_at, ends_at, note, started_by FROM application_maintenance "
-                + "WHERE application_id = ? AND ends_at > NOW()", applicationId);
-        if (!maintenance.isEmpty()) {
-            body.put("maintenanceStartsAt", iso(maintenance.get(0).get("starts_at")));
-            body.put("maintenanceUntil", iso(maintenance.get(0).get("ends_at")));
-            body.put("maintenanceNote", maintenance.get(0).get("note"));
-            body.put("maintenanceBy", maintenance.get(0).get("started_by"));
-        }
+        maintenanceRepository.findByApplicationIdAndEndsAtAfter(applicationId, Instant.now())
+            .ifPresent(window -> {
+                body.put("maintenanceStartsAt", window.getStartsAt().toString());
+                body.put("maintenanceUntil", window.getEndsAt().toString());
+                body.put("maintenanceNote", window.getNote());
+                body.put("maintenanceBy", window.getStartedBy());
+            });
         java.util.Optional<ApplicationHealthConfig> config = configRepository.findById(applicationId);
         if (config.isEmpty()) {
             body.put("monitored", false);
@@ -98,10 +96,6 @@ public class HealthReadService {
         } catch (RuntimeException e) {
             log.warn("Could not push health for application id={}", applicationId, e);
         }
-    }
-
-    private static String iso(Object timestamp) {
-        return timestamp == null ? null : ((Timestamp) timestamp).toInstant().toString();
     }
 
     // The payload column is JSONB, which the driver hands back as a

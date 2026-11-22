@@ -10,12 +10,12 @@ import com.bpl.orderapp.admin.health.HealthCheckService;
 import com.bpl.orderapp.admin.health.HealthDecision;
 import com.bpl.orderapp.admin.log.LogPollingOrchestrator;
 import com.bpl.orderapp.admin.log.WebSocketBroadcast;
+import com.bpl.orderapp.admin.maintenance.ApplicationMaintenanceRepository;
 import com.bpl.orderapp.admin.notification.LifecycleEventType;
 import com.bpl.orderapp.admin.notification.Notifier;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Component;
 
@@ -55,7 +55,6 @@ public class StatusPollingOrchestrator {
     // must not make the SSH checks of every other application late.
     private static final int HEALTH_POLL_THREADS = 8;
 
-    private final JdbcTemplate jdbc;
     private final WebSocketBroadcast broadcast;
     private final LogPollingOrchestrator logPollingOrchestrator;
     private final ThreadPoolTaskScheduler healthScheduler;
@@ -68,6 +67,7 @@ public class StatusPollingOrchestrator {
     private final ApplicationRepository applicationRepository;
     private final ApplicationStatusStreakRepository streakRepository;
     private final ApplicationStatusTransitionRepository transitionRepository;
+    private final ApplicationMaintenanceRepository maintenanceRepository;
 
     // Flap detection for external transitions only (web-app-triggered
     // start/stop are deliberate one-off actions, never flapping).
@@ -92,17 +92,18 @@ public class StatusPollingOrchestrator {
     // after one.
     private final Set<Long> actionInProgress = ConcurrentHashMap.newKeySet();
 
-    public StatusPollingOrchestrator(JdbcTemplate jdbc,
+    public StatusPollingOrchestrator(
             WebSocketBroadcast broadcast,
             LogPollingOrchestrator logPollingOrchestrator, AuditWriter auditWriter,
             List<Notifier> notifiers, HealthCheckService healthCheckService,
             ApplicationRepository applicationRepository,
             ApplicationStatusStreakRepository streakRepository,
-            ApplicationStatusTransitionRepository transitionRepository) {
+            ApplicationStatusTransitionRepository transitionRepository,
+            ApplicationMaintenanceRepository maintenanceRepository) {
+        this.maintenanceRepository = maintenanceRepository;
         this.streakRepository = streakRepository;
         this.transitionRepository = transitionRepository;
         this.auditWriter = auditWriter;
-        this.jdbc = jdbc;
         this.broadcast = broadcast;
         this.logPollingOrchestrator = logPollingOrchestrator;
         this.notifiers = notifiers;
@@ -224,10 +225,7 @@ public class StatusPollingOrchestrator {
     }
 
     private boolean isInMaintenance(Long applicationId) {
-        List<Integer> rows = jdbc.queryForList(
-            "SELECT 1 FROM application_maintenance WHERE application_id = ? AND starts_at <= NOW() AND ends_at > NOW()",
-            Integer.class, applicationId);
-        return !rows.isEmpty();
+        return maintenanceRepository.isOpen(applicationId, Instant.now());
     }
 
     /**
