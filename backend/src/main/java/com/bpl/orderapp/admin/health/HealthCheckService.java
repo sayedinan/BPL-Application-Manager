@@ -6,11 +6,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -59,7 +57,6 @@ public class HealthCheckService {
     private static final long DUE_SLACK_MS = 1500;
     private static final int HISTORY_RETENTION_DAYS = 30;
 
-    private final JdbcTemplate jdbc;
     private final SshCredentialCipher cipher;
     private final HealthHttpClient httpClient;
     private final ContractParser contractParser;
@@ -67,18 +64,20 @@ public class HealthCheckService {
     private final HealthReadService readService;
     private final ApplicationHealthConfigRepository configRepository;
     private final ApplicationHealthLatestRepository latestRepository;
+    private final ApplicationHealthHistoryRepository historyRepository;
 
     private final Map<Long, Instant> lastPolled = new ConcurrentHashMap<>();
     private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
 
-    public HealthCheckService(JdbcTemplate jdbc, SshCredentialCipher cipher,
+    public HealthCheckService(SshCredentialCipher cipher,
             HealthHttpClient httpClient, ContractParser contractParser,
             ObjectMapper mapper, HealthReadService readService,
             ApplicationHealthConfigRepository configRepository,
-            ApplicationHealthLatestRepository latestRepository) {
+            ApplicationHealthLatestRepository latestRepository,
+            ApplicationHealthHistoryRepository historyRepository) {
+        this.historyRepository = historyRepository;
         this.latestRepository = latestRepository;
         this.configRepository = configRepository;
-        this.jdbc = jdbc;
         this.cipher = cipher;
         this.httpClient = httpClient;
         this.contractParser = contractParser;
@@ -245,7 +244,6 @@ public class HealthCheckService {
                     log.warn("Could not serialize health payload for application id={}", applicationId);
                 }
             }
-            Timestamp checkedTs = Timestamp.from(checkedAt);
             Integer responseMsValue = responseMs == null
                 ? null : (int) Math.min(responseMs, Integer.MAX_VALUE);
             String statusText = status == null ? null : status.name();
@@ -267,11 +265,8 @@ public class HealthCheckService {
                 ? null : resources.memory().usedPercent();
             Double disk = resources == null || resources.disk() == null
                 ? null : resources.disk().usedPercent();
-            jdbc.update(
-                "INSERT INTO application_health_history "
-                    + "(application_id, checked_at, reachable, response_ms, status, "
-                    + "cpu_percent, memory_percent, disk_percent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                applicationId, checkedTs, reachable, responseMsValue, statusText, cpu, memory, disk);
+            historyRepository.save(new ApplicationHealthHistory(
+                applicationId, checkedAt, reachable, responseMsValue, statusText, cpu, memory, disk));
         } catch (RuntimeException e) {
             log.warn("Could not store health check result for application id={}", applicationId, e);
         }
@@ -282,9 +277,8 @@ public class HealthCheckService {
     @Scheduled(cron = "0 30 3 * * *")
     public void deleteOldHistory() {
         try {
-            int deleted = jdbc.update(
-                "DELETE FROM application_health_history WHERE checked_at < ?",
-                Timestamp.from(Instant.now().minus(Duration.ofDays(HISTORY_RETENTION_DAYS))));
+            int deleted = historyRepository.deleteOlderThan(
+                Instant.now().minus(Duration.ofDays(HISTORY_RETENTION_DAYS)));
             if (deleted > 0) {
                 log.info("Deleted {} health history rows older than {} days", deleted, HISTORY_RETENTION_DAYS);
             }

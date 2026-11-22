@@ -19,7 +19,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -34,7 +33,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
-import java.sql.Timestamp;
 import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -79,7 +77,6 @@ public class HealthController {
     private static final int MAX_HISTORY_HOURS = 720;
     private static final int HISTORY_TARGET_POINTS = 240;
 
-    private final JdbcTemplate jdbc;
     private final SshCredentialCipher cipher;
     private final AuditWriter auditWriter;
     private final HealthCheckService healthCheckService;
@@ -90,16 +87,18 @@ public class HealthController {
     private final ApplicationRepository applicationRepository;
     private final ApplicationHealthConfigRepository configRepository;
     private final ApplicationHealthLatestRepository latestRepository;
+    private final ApplicationHealthHistoryRepository historyRepository;
 
-    public HealthController(JdbcTemplate jdbc, SshCredentialCipher cipher, AuditWriter auditWriter,
+    public HealthController(SshCredentialCipher cipher, AuditWriter auditWriter,
             HealthCheckService healthCheckService, HealthReadService healthReadService,
             StatusPollingOrchestrator statusPolling, ObjectMapper mapper, UserRepository userRepository,
             ApplicationRepository applicationRepository,
             ApplicationHealthConfigRepository configRepository,
-            ApplicationHealthLatestRepository latestRepository) {
+            ApplicationHealthLatestRepository latestRepository,
+            ApplicationHealthHistoryRepository historyRepository) {
+        this.historyRepository = historyRepository;
         this.latestRepository = latestRepository;
         this.configRepository = configRepository;
-        this.jdbc = jdbc;
         this.cipher = cipher;
         this.auditWriter = auditWriter;
         this.healthCheckService = healthCheckService;
@@ -143,34 +142,25 @@ public class HealthController {
         int bucketSeconds = Math.max(60, (hours * 3600 / HISTORY_TARGET_POINTS) / 60 * 60);
         Instant since = Instant.now().minusSeconds(hours * 3600L);
 
-        List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT floor(extract(epoch FROM checked_at) / ?) * ? AS bucket, "
-                + "COUNT(*) AS checks, "
-                + "COUNT(*) FILTER (WHERE NOT reachable OR status IS NULL OR status = 'DOWN') AS failed, "
-                + "AVG(response_ms) AS avg_ms, "
-                + "AVG(cpu_percent) AS avg_cpu, AVG(memory_percent) AS avg_memory, AVG(disk_percent) AS avg_disk "
-                + "FROM application_health_history "
-                + "WHERE application_id = ? AND checked_at >= ? "
-                + "GROUP BY bucket ORDER BY bucket",
-            bucketSeconds, bucketSeconds, id, Timestamp.from(since));
+        List<Object[]> rows = historyRepository.findBuckets(id, since, bucketSeconds);
 
         List<Map<String, Object>> points = new ArrayList<>();
         long totalChecks = 0;
         long totalFailed = 0;
-        for (Map<String, Object> row : rows) {
-            long checks = ((Number) row.get("checks")).longValue();
-            long failed = ((Number) row.get("failed")).longValue();
+        for (Object[] row : rows) {
+            long checks = ((Number) row[1]).longValue();
+            long failed = ((Number) row[2]).longValue();
             totalChecks += checks;
             totalFailed += failed;
             Map<String, Object> point = new LinkedHashMap<>();
-            point.put("t", Instant.ofEpochSecond(((Number) row.get("bucket")).longValue()).toString());
+            point.put("t", Instant.ofEpochSecond(((Number) row[0]).longValue()).toString());
             point.put("checks", checks);
             point.put("failedChecks", failed);
-            point.put("avgResponseMs", row.get("avg_ms") == null
-                ? null : Math.round(((Number) row.get("avg_ms")).doubleValue()));
-            point.put("avgCpuPercent", oneDecimal(row.get("avg_cpu")));
-            point.put("avgMemoryPercent", oneDecimal(row.get("avg_memory")));
-            point.put("avgDiskPercent", oneDecimal(row.get("avg_disk")));
+            point.put("avgResponseMs", row[3] == null
+                ? null : Math.round(((Number) row[3]).doubleValue()));
+            point.put("avgCpuPercent", oneDecimal(row[4]));
+            point.put("avgMemoryPercent", oneDecimal(row[5]));
+            point.put("avgDiskPercent", oneDecimal(row[6]));
             points.add(point);
         }
 
@@ -241,18 +231,12 @@ public class HealthController {
             long[] sliceChecks = new long[sliceCount];
             long[] sliceFailed = new long[sliceCount];
             if (!future) {
-                List<Map<String, Object>> rows = jdbc.queryForList(
-                    "SELECT floor((extract(epoch FROM checked_at) - ?) / ?)::int AS slice, "
-                        + "COUNT(*) AS checks, "
-                        + "COUNT(*) FILTER (WHERE NOT reachable OR status IS NULL OR status = 'DOWN') AS failed "
-                        + "FROM application_health_history "
-                        + "WHERE application_id = ? AND checked_at >= ? AND checked_at < ? "
-                        + "GROUP BY slice",
-                    start.getEpochSecond(), sliceSeconds, id, Timestamp.from(start), Timestamp.from(end));
-                for (Map<String, Object> row : rows) {
-                    int slot = Math.max(0, Math.min(sliceCount - 1, ((Number) row.get("slice")).intValue()));
-                    sliceChecks[slot] += ((Number) row.get("checks")).longValue();
-                    sliceFailed[slot] += ((Number) row.get("failed")).longValue();
+                List<Object[]> rows = historyRepository.findUptimeSlices(
+                    id, start, end, start.getEpochSecond(), sliceSeconds);
+                for (Object[] row : rows) {
+                    int slot = Math.max(0, Math.min(sliceCount - 1, ((Number) row[0]).intValue()));
+                    sliceChecks[slot] += ((Number) row[1]).longValue();
+                    sliceFailed[slot] += ((Number) row[2]).longValue();
                 }
             }
             long checks = 0;

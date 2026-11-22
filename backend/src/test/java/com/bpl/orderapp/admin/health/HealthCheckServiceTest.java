@@ -10,9 +10,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
@@ -20,7 +17,6 @@ import org.mockito.invocation.InvocationOnMock;
 
 import com.bpl.orderapp.admin.common.SshCredentialCipher;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 class HealthCheckServiceTest {
 
@@ -34,14 +30,15 @@ class HealthCheckServiceTest {
     private boolean configured = true;
     private final AtomicInteger storedFailures = new AtomicInteger(0);
 
-    private final JdbcTemplate jdbc = mock(JdbcTemplate.class, this::fakeDatabase);
     private final ApplicationHealthConfigRepository configRepository =
         mock(ApplicationHealthConfigRepository.class, this::fakeConfigs);
     private final ApplicationHealthLatestRepository latestRepository =
         mock(ApplicationHealthLatestRepository.class, this::fakeLatest);
+    private final ApplicationHealthHistoryRepository historyRepository =
+        mock(ApplicationHealthHistoryRepository.class);
     private final HealthCheckService service = new HealthCheckService(
-        jdbc, cipher, httpClient, new ContractParser(mapper), mapper, readService,
-        configRepository, latestRepository);
+        cipher, httpClient, new ContractParser(mapper), mapper, readService,
+        configRepository, latestRepository, historyRepository);
 
     // Stands in for application_health_latest: remembers the failure counter
     // that save() receives and hands it back on the next check.
@@ -70,11 +67,6 @@ class HealthCheckServiceTest {
             return java.util.Optional.of(config);
         }
         return null;
-    }
-
-    private Object fakeDatabase(InvocationOnMock call) {
-        String sql = call.getArgument(0);
-        return call.getMethod().getReturnType() == int.class ? 1 : null;
     }
 
     private static String contractBody(String status) {
