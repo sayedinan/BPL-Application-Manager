@@ -77,9 +77,10 @@ import java.util.List;
  *
  * <h2>Why a controller, not a service</h2>
  * The credential check lives in the controller for now because
- * there is no {@code UserService} yet. When user-management
- * service lands, the JdbcTemplate call moves there; the
- * controller then calls the service and translates the result.
+ * there is no {@code UserService} yet; it reads users through
+ * {@code UserRepository} (JPA). If a user-management service
+ * lands, the repository calls move there and the controller
+ * just translates the result.
  * The DTOs (LoginRequest, LoginResponse) stay in this package
  * either way.
  */
