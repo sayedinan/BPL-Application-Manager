@@ -19,18 +19,26 @@ public interface ApplicationHealthHistoryRepository
     int deleteOlderThan(@Param("cutoff") Instant cutoff);
 
     // ------------------------------------------------------------------
-    // The two queries below are PostgreSQL-specific on purpose (epoch
-    // bucketing, COUNT(*) FILTER). They are the only raw SQL left for the
-    // health history; rewrite them here when the database changes.
+    // The queries below are raw SQLite SQL on purpose (epoch bucketing,
+    // COUNT(*) FILTER; needs SQLite >= 3.30). checked_at is stored as epoch
+    // milliseconds, so the *Ms methods take longs: bind longs, never doubles,
+    // so the division stays integral (it truncates, equal to floor for the
+    // non-negative epoch values used here). Callers use the Instant-based
+    // default methods.
     // ------------------------------------------------------------------
 
     /**
      * Charts: one row per time bucket.
      * Columns: [0] bucket start (epoch seconds), [1] checks, [2] failed checks,
      * [3] avg response ms, [4] avg cpu %, [5] avg memory %, [6] avg disk %.
+     * Numeric columns come back as Long/Double; read them through Number.
      */
+    default List<Object[]> findBuckets(Long applicationId, Instant since, int bucketSeconds) {
+        return findBucketsMs(applicationId, since.toEpochMilli(), bucketSeconds * 1000L);
+    }
+
     @Query(value = """
-        SELECT floor(extract(epoch FROM checked_at) / :bucketSeconds) * :bucketSeconds AS bucket,
+        SELECT (checked_at / :bucketMs) * (:bucketMs / 1000) AS bucket,
                COUNT(*) AS checks,
                COUNT(*) FILTER (WHERE NOT reachable OR status IS NULL OR status = 'DOWN') AS failed,
                AVG(response_ms) AS avg_ms,
@@ -38,28 +46,34 @@ public interface ApplicationHealthHistoryRepository
                AVG(memory_percent) AS avg_memory,
                AVG(disk_percent) AS avg_disk
         FROM application_health_history
-        WHERE application_id = :applicationId AND checked_at >= :since
+        WHERE application_id = :applicationId AND checked_at >= :sinceMs
         GROUP BY bucket ORDER BY bucket
         """, nativeQuery = true)
-    List<Object[]> findBuckets(@Param("applicationId") Long applicationId,
-                               @Param("since") Instant since,
-                               @Param("bucketSeconds") int bucketSeconds);
+    List<Object[]> findBucketsMs(@Param("applicationId") Long applicationId,
+                                 @Param("sinceMs") long sinceMs,
+                                 @Param("bucketMs") long bucketMs);
 
     /**
      * Uptime bars: one row per slice inside [rangeStart, rangeEnd).
      * Columns: [0] slice index, [1] checks, [2] failed checks.
      */
+    default List<Object[]> findUptimeSlices(Long applicationId, Instant rangeStart, Instant rangeEnd,
+                                            long startEpoch, long sliceSeconds) {
+        return findUptimeSlicesMs(applicationId, rangeStart.toEpochMilli(), rangeEnd.toEpochMilli(),
+                startEpoch * 1000L, sliceSeconds * 1000L);
+    }
+
     @Query(value = """
-        SELECT CAST(floor((extract(epoch FROM checked_at) - :startEpoch) / :sliceSeconds) AS integer) AS slice,
+        SELECT CAST((checked_at - :startMs) / :sliceMs AS INTEGER) AS slice,
                COUNT(*) AS checks,
                COUNT(*) FILTER (WHERE NOT reachable OR status IS NULL OR status = 'DOWN') AS failed
         FROM application_health_history
-        WHERE application_id = :applicationId AND checked_at >= :rangeStart AND checked_at < :rangeEnd
+        WHERE application_id = :applicationId AND checked_at >= :rangeStartMs AND checked_at < :rangeEndMs
         GROUP BY slice
         """, nativeQuery = true)
-    List<Object[]> findUptimeSlices(@Param("applicationId") Long applicationId,
-                                    @Param("rangeStart") Instant rangeStart,
-                                    @Param("rangeEnd") Instant rangeEnd,
-                                    @Param("startEpoch") long startEpoch,
-                                    @Param("sliceSeconds") long sliceSeconds);
+    List<Object[]> findUptimeSlicesMs(@Param("applicationId") Long applicationId,
+                                      @Param("rangeStartMs") long rangeStartMs,
+                                      @Param("rangeEndMs") long rangeEndMs,
+                                      @Param("startMs") long startMs,
+                                      @Param("sliceMs") long sliceMs);
 }
