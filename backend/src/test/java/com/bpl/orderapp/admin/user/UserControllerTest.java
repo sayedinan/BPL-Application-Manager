@@ -131,6 +131,22 @@ class UserControllerTest {
         verify(sessionRepository).deleteById("s2");
     }
 
+    // The DB no longer has a CHECK on users.role (SQLite migration), so the
+    // controller is the only guard against storing an unknown role.
+    @Test
+    void updateUser_unknownRole_isRejectedAndNothingIsSaved() throws Exception {
+        aliceWithLiveSessions();
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .put("/api/v1/users/" + TEST_USER_ID)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content("{\"role\":\"BOGUS\"}"))
+            .andExpect(status().isBadRequest());
+
+        org.mockito.Mockito.verify(userRepository, org.mockito.Mockito.never())
+            .save(org.mockito.ArgumentMatchers.any(User.class));
+    }
+
     @Test
     void updateUser_emailOnlyChange_keepsTheUsersSessions() throws Exception {
         aliceWithLiveSessions();

@@ -1,6 +1,8 @@
 package com.bpl.orderapp.admin.application;
 
+import com.bpl.orderapp.admin.common.InetAddressConverter;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -10,8 +12,6 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 import org.hibernate.annotations.DynamicUpdate;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 import java.net.InetAddress;
 import java.time.Instant;
@@ -28,10 +28,8 @@ public class Application {
     @Column(name = "name", nullable = false, length = 64)
     private String name;
 
-    // The one Postgres-specific mapping in this entity: the column type is
-    // inet. For the SQLite move this becomes a String field (validated in
-    // Java) plus a migration that changes the column to text.
-    @JdbcTypeCode(SqlTypes.INET)
+    // Stored as TEXT (the IP literal); callers keep the InetAddress API.
+    @Convert(converter = InetAddressConverter.class)
     @Column(name = "server_ip", nullable = false)
     private InetAddress serverIp;
 

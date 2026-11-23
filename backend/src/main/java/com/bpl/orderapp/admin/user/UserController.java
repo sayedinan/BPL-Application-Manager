@@ -391,6 +391,13 @@ public class UserController {
         }
 
         if (req.role() != null) {
+            // No DB CHECK on users.role any more; reject unknown values here so
+            // a bad string can never be stored (Role.valueOf would later fail on read).
+            if (java.util.Arrays.stream(com.bpl.orderapp.admin.common.Role.values())
+                    .noneMatch(r -> r.name().equals(req.role()))) {
+                throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "role must be USER, ADMIN or SYS_ADMIN");
+            }
             if (!"USER".equals(req.role()) && !callerIsSysAdmin) {
                 throw new com.bpl.orderapp.admin.common.AdminCeilingException();
             }

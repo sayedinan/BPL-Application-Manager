@@ -1,9 +1,8 @@
 package com.bpl.orderapp.admin.audit;
 
+import com.bpl.orderapp.admin.common.JsonMapConverter;
 import jakarta.persistence.*;
 import org.hibernate.annotations.Immutable;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.Map;
@@ -40,7 +39,8 @@ public class AuditLog {
     @Column(name = "target_user_id")
     private UUID targetUserId;
 
-    @JdbcTypeCode(SqlTypes.JSON)
+    @Convert(converter = JsonMapConverter.class)
+    @Column(name = "detail")
     private Map<String, Object> detail;
 
     @Column(nullable = false, length = 16)

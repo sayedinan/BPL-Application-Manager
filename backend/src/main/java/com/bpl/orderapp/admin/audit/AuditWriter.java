@@ -20,6 +20,17 @@ public class AuditWriter {
     private static final Set<String> SECRET_KEYS =
         Set.of("ssh_password_enc", "temporaryPassword", "password_hash", "password");
 
+    /**
+     * Allowed audit_logs.action_type values. There is no DB CHECK on this column
+     * (SQLite cannot change a CHECK without rebuilding the table), so this set is
+     * the guard. Adding an action means adding it here.
+     */
+    static final Set<String> ALLOWED_ACTIONS = Set.of(
+        "START_APPLICATION", "STOP_APPLICATION", "CREATE_APPLICATION", "UPDATE_APPLICATION",
+        "DELETE_APPLICATION", "ASSIGN_APPLICATION", "CREATE_USER", "CREATE_ADMIN", "UPDATE_USER",
+        "DELETE_USER", "RESET_PASSWORD", "CHANGE_PASSWORD", "LOGIN", "LOGOUT",
+        "SHELLCHECK_UNAVAILABLE", "APPLICATION_ONLINE", "APPLICATION_OFFLINE");
+
     /** Back-compat overload for any call site that genuinely has no
      *  request in scope. Writes source_ip = NULL. Prefer the
      *  HttpServletRequest overload below wherever a request is available. */
@@ -42,6 +53,9 @@ public class AuditWriter {
     private void insert(Instant when, String actionType, String actorUsername, String actorRole,
                         Long targetAppId, String targetAppName, UUID targetUserId,
                         Map<String, Object> detail, String result, String sourceIp) {
+        if (!ALLOWED_ACTIONS.contains(actionType)) {
+            throw new IllegalArgumentException("Unknown audit action type: " + actionType);
+        }
         if (targetAppName == null && targetAppId != null) {
             try {
                 targetAppName = applicationRepository.findNameById(targetAppId).orElse(null);

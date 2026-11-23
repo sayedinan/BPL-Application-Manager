@@ -4,8 +4,6 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 
@@ -32,8 +30,7 @@ public class ApplicationHealthLatest {
     @Column(name = "status", length = 16)
     private String status;
 
-    // JSON text, normalized to the contract shape. JSONB in Postgres.
-    @JdbcTypeCode(SqlTypes.JSON)
+    // JSON text, normalized to the contract shape. TEXT column guarded by json_valid().
     @Column(name = "payload")
     private String payload;
 
