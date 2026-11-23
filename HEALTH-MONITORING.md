@@ -38,6 +38,10 @@ The existing flap suppression (3+ transitions in 2 minutes) still applies.
 
 All three tables cascade-delete with the application, same pattern as V5 and V12.
 
+> Column types in the tables below are the original PostgreSQL design. In SQLite, timestamps are `INTEGER`
+> epoch milliseconds, booleans `INTEGER` 0/1 and `payload` is `TEXT` guarded by `json_valid()`. The real
+> schema is `db/migration/V1__sqlite_baseline.sql`.
+
 ### `application_health_config`
 One optional row per application. No row = no health monitoring (SSH fallback).
 

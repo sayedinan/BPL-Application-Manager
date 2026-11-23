@@ -13,7 +13,7 @@ A web-based administration tool for managing BPL (and future PCL) order applicat
 **Core Principles:**
 - **No mock mode** — every application is real, SSH-backed
 - **Security first** — encrypted credentials, session auth, strict CSP
-- **Operational simplicity** — single JAR + PostgreSQL, minimal moving parts
+- **Operational simplicity** — single JAR + a single SQLite file, minimal moving parts. One backend instance only (SQLite allows a single writer process); scaling out would mean moving back to a server database (the last PostgreSQL state is the git tag `pre-sqlite`).
 - **Auditability** — insert-only audit log, permanent history
 
 ---
@@ -35,6 +35,14 @@ A web-based administration tool for managing BPL (and future PCL) order applicat
 ---
 
 ## 3. Data Model
+
+> **The database is now SQLite.** The authoritative schema is
+> `backend/src/main/resources/db/migration/V1__sqlite_baseline.sql` (the old PostgreSQL migrations are
+> archived in `db/migration-postgres-archive/`). The PostgreSQL DDL in §3.1 below is the original design
+> and is kept for the data-model reasoning only; types differ in SQLite: timestamps are `INTEGER` epoch
+> milliseconds, UUIDs and IPs are `TEXT`, booleans are `INTEGER` 0/1, JSON is `TEXT` guarded by
+> `json_valid()`, ids are `INTEGER PRIMARY KEY AUTOINCREMENT` (never reused). Enum values (`users.role`,
+> `audit_logs.action_type`) have no DB `CHECK`; Java enforces them. See `DB-OPERATIONS.md`.
 
 ### 3.1 Tables
 
@@ -158,7 +166,7 @@ SHELLCHECK_UNAVAILABLE
 ```
 
 ### 3.3 Constraints & Conventions
-- **All timestamps:** `TIMESTAMPTZ` (UTC in DB)
+- **All timestamps:** UTC instants, stored as `INTEGER` epoch milliseconds in SQLite (set by Java, no DB defaults)
 - **Soft delete:** `deleted_at` on `users` only; all user queries filter `WHERE deleted_at IS NULL`
 - **Hard delete:** `applications` has no `deleted_at` column — DELETE removes the row; dependent `user_application_assignments` and `application_log_lines` rows cascade via `ON DELETE CASCADE`
 - **Application names:** `^[a-zA-Z0-9_-]{1,64}$`, case-insensitive unique
@@ -338,7 +346,7 @@ tail -n "$LINES" "$LOG_FILE" 2>/dev/null | awk '{printf "%d %s\n", systime()*100
 ## 8. Security
 
 ### 8.1 Authentication
-- **Session-based** (Spring Session JDBC → PostgreSQL)
+- **Session-based** (Spring Session JDBC → SQLite)
 - **Cookie:** `HttpOnly`, `Secure` (prod), `SameSite=Strict`, `Path=/`, 8h TTL
 - **Password hash:** bcrypt (Spring Security default)
 - **Must-change-password:** Forced on first login after creation/reset
@@ -443,8 +451,7 @@ BPL-Order-Application-Admin/
 ### 11.1 Docker Compose (Production)
 ```yaml
 services:
-  postgres:     postgres:16-alpine (SSL, scram-sha-256)
-  backend:      Distroless Java 25, read-only, non-root
+  backend:      Distroless Java 25, read-only, non-root; SQLite file on the bplData volume (/data), nightly backups on bplBackups (/backups)
   frontend:     Nginx + Brotli, read-only
   caddy:        TLS termination, security headers, rate limit
 ```
@@ -452,7 +459,6 @@ services:
 ### 11.2 Secrets (External)
 | Secret | Rotation |
 |---|---|
-| `DB_PASSWORD` | 90 days |
 | `JASYPT_PASSWORD` | 180 days |
 | `KEYSTORE_PASSWORD` | 180 days |
 | TLS certs | 90 days (Caddy auto) |
@@ -503,7 +509,7 @@ services:
 
 ### 12.4 Backup/Restore
 - **Application:** None (Flyway forward-only)
-- **Database:** Infra responsibility (pg_dump / WAL-G / managed PG)
+- **Database:** nightly `VACUUM INTO` backups written by the app to `/backups` (14 days kept), plus an off-host copy that infra must arrange. Restore procedure and rules: `DB-OPERATIONS.md`
 
 ---
 
@@ -526,14 +532,20 @@ spring:
       http-only: true
       same-site: strict
   datasource:
+    # DB_PATH has no default in prod (fails fast). Pragmas are per connection, set in the URL.
+    url: jdbc:sqlite:${DB_PATH}?foreign_keys=on&busy_timeout=10000&journal_mode=WAL&synchronous=NORMAL&transaction_mode=IMMEDIATE
     hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
-      connection-timeout: 5000
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 15000   # must exceed busy_timeout
   flyway:
     baseline-on-migrate: true
     validate-on-migrate: true
     out-of-order: false
+app:
+  backup:
+    dir: ${BACKUP_DIR:/backups}
+    retention-days: 14
 management:
   endpoints:
     web:
