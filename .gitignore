@@ -29,3 +29,10 @@ temp
 caddy_certs/
 frontend/dist-tsbuild/
 *.tsbuildinfo
+
+# SQLite data and backups
+data/
+*.db
+*.db-wal
+*.db-shm
+backups/

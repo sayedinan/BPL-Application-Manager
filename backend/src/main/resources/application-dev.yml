@@ -1,22 +1,26 @@
-# Dev profile — local Windows-native PostgreSQL on localhost:5432
-# (SPEC §1, "no mock mode").
+# Dev profile — local SQLite file (SPEC §1, "no mock mode").
 #
-# Connects to database `bpl_dev` as the non-superuser role `bpl_app`.
-# The password is NOT defaulted here — supply it via the DB_PASSWORD
-# environment variable.
+# The database is a single file, ./data/bpl.db by default (override with
+# DB_PATH). Pragmas are set per connection through the JDBC URL:
+#   foreign_keys=on        cascades only work when this is on, per connection
+#   journal_mode=WAL       readers do not block the writer
+#   busy_timeout=10000     wait up to 10 s for the write lock
+#   synchronous=NORMAL     safe with WAL
+#   transaction_mode=IMMEDIATE  take the write lock at BEGIN (no read->write upgrade failures)
+# No username or password: SQLite has none.
 
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/bpl_dev}
-    username: ${DB_USER:bpl_app}
-    password: ${DB_PASSWORD:}
+    url: jdbc:sqlite:${DB_PATH:./data/bpl.db}?foreign_keys=on&busy_timeout=10000&journal_mode=WAL&synchronous=NORMAL&transaction_mode=IMMEDIATE
     hikari:
       maximum-pool-size: 5
       minimum-idle: 1
-      connection-timeout: 5000
+      # Must be larger than busy_timeout (10 s).
+      connection-timeout: 15000
   jpa:
     hibernate:
-      ddl-auto: validate
+      # Schema validation is unreliable on SQLite; Flyway plus tests are the guard.
+      ddl-auto: none
     show-sql: true
     properties:
       hibernate:

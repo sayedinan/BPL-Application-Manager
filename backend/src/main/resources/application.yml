@@ -7,6 +7,10 @@ spring:
     open-in-view: false
     properties:
       hibernate:
+        dialect: org.hibernate.community.dialect.SQLiteDialect
+        # UUIDs are stored as 36-char TEXT in SQLite.
+        type:
+          preferred_uuid_jdbc_type: CHAR
         jdbc:
           time_zone: UTC
   flyway:

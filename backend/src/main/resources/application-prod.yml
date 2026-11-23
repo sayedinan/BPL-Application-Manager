@@ -1,5 +1,5 @@
-# Prod profile — matches SPEC §13.1 verbatim. Secrets (DB_PASSWORD,
-# SSH_CIPHER_KEY, etc.) are injected from the environment.
+# Prod profile — matches SPEC §13.1 verbatim. Secrets (SSH_CIPHER_KEY,
+# etc.) and DB_PATH are injected from the environment.
 server:
   port: 8443
   ssl:
@@ -8,16 +8,17 @@ server:
 
 spring:
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USER}
-    password: ${DB_PASSWORD}
+    # DB_PATH has no default on purpose: prod fails fast if it is unset.
+    # Pragma meanings are documented in application-dev.yml.
+    url: jdbc:sqlite:${DB_PATH}?foreign_keys=on&busy_timeout=10000&journal_mode=WAL&synchronous=NORMAL&transaction_mode=IMMEDIATE
     hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
-      connection-timeout: 5000
+      maximum-pool-size: 5
+      minimum-idle: 1
+      # Must be larger than busy_timeout (10 s).
+      connection-timeout: 15000
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
     show-sql: false
   session:
     jdbc:

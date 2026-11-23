@@ -1,19 +1,21 @@
-# Test profile — used by @ActiveProfiles("test") in unit/integration tests.
-# H2 in Postgres-compatibility mode is the default; switch to Testcontainers
-# Postgres for tests that exercise PostgreSQL-specific features (JSONB, INET,
-# partial unique indexes, etc. — see SPEC §3.1).
+# Test profile — used by @ActiveProfiles("test") in integration tests.
+# Each context gets its own temp-file SQLite database and Flyway runs the
+# real baseline, so tests exercise the production schema. Do not use
+# `:memory:` with a connection pool: every pooled connection would get its
+# own empty database.
 spring:
   datasource:
-    url: jdbc:h2:mem:bpl_admin_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
-    username: sa
-    password:
-    driver-class-name: org.h2.Driver
+    url: jdbc:sqlite:${java.io.tmpdir}/bpl-test-${random.uuid}.db?foreign_keys=on&busy_timeout=10000&journal_mode=WAL&synchronous=NORMAL&transaction_mode=IMMEDIATE
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 15000
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: none
     show-sql: false
   flyway:
-    enabled: false
+    enabled: true
+    locations: classpath:db/migration
   session:
     jdbc:
       initialize-schema: never
