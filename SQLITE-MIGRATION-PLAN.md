@@ -759,3 +759,9 @@ can be interleaved because each gate is a test.
 | D7 | Keep manual `AuditWriter` (REQUIRES_NEW), never inside a write tx | An aspect would recreate the nested-lock deadlock | Small change | Depends on discipline and tests |
 | D8 | Migration script is generic: columns matched by name from the SQLite schema, one transaction, `--dry-run` | Survives schema tweaks, all-or-nothing | Less to maintain | Untested against real data until rehearsal |
 | D9 | I did not touch staging, dumps or the cutover | Irreversible, outward-facing | No risk to shared environment | Operator must run those steps |
+
+### Update 2026-11-23 (verification run)
+- **G7 passed**: `docker compose build/up` of the backend on a scratch project: native lib loads under `read_only` + exec tmpfs, Flyway applied V1, Sys.Admin seeded, restart = "No migration necessary", copied `/data/bpl.db` passes `integrity_check`.
+- **G8 rehearsed** against a throwaway Postgres 16 built from the archived V1–V27 with sample rows: counts match, types `text/integer/integer`, `integrity_check` ok. Still needs a rehearsal on the real staging dump.
+- Found and fixed: `gradlew`/`run.sh` were checked out with CRLF on Windows (`autocrlf`), breaking the Docker build (exit 127). Added `.gitattributes` forcing LF.
+- Decision D10: pin LF for shell scripts in `.gitattributes` rather than disabling autocrlf (advantage: fixes it for every contributor; disadvantage: one more repo file).
