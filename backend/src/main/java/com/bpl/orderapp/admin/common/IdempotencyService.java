@@ -9,7 +9,8 @@ import java.util.UUID;
 
 /**
  * Deliberately NOT @Transactional: after a unique-index violation the
- * transaction is unusable on PostgreSQL, so each repository call runs
+ * transaction should not be reused (it was unusable on the former
+ * PostgreSQL setup and is rolled back here too), so each repository call runs
  * in its own short transaction. The unique index is the single source
  * of truth, which also makes concurrent identical requests race-safe.
  */

@@ -58,3 +58,13 @@ itself is verified by `SqliteBackupServiceTest` (`integrity_check` ok, data pres
 
 Log lines are capped at 500 per application and health history is pruned nightly (03:30), so the file
 stays small. `audit_logs` is the only table that grows without bound.
+
+## One-off: copying staging data from PostgreSQL (cutover)
+
+1. `pg_dump -Fc` the staging database and copy it off the server (rollback source). Keep the old `pgdata` volume. Never run `docker compose down -v`.
+2. Start the new backend once on an empty `DB_PATH` (Flyway creates the schema), then stop it.
+3. Rehearse first on a restored copy of the dump, then run for real (Postgres still running):
+   `docker run --rm -v "$PWD":/w -w /w --network <compose network> python:3.12-slim sh -c "pip install -q psycopg2-binary && python tools/pg_to_sqlite.py --pg postgresql://USER:PASS@postgres/DB --sqlite /w/bpl.db --dry-run"`
+   Remove `--dry-run` to commit. Add `--with-log-lines` to keep the last log lines. Sessions are not copied (everyone logs in once).
+4. The script prints per-table row counts (must match), then checks `foreign_key_check`, `sqlite_sequence` and `integrity_check`.
+5. Rollback within two weeks: stop, `git checkout pre-sqlite`, `docker compose up -d`.

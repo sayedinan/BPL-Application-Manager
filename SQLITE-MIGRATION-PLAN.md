@@ -1,6 +1,6 @@
 # SQLITE-MIGRATION-PLAN.md — PostgreSQL → SQLite for BPL Application Manager
 
-> Status: proposed. Written from a static audit of `BPL-Application-Manager-db_change.zip`
+> Status: implemented on `feature/sqlite`; cutover (Phase 12) and live data copy (Phase 8) still to run on staging. Written from a static audit of `BPL-Application-Manager-db_change.zip`
 > (nothing was built or run). Every "VERIFY" marker is something I could not prove from
 > reading code; each one has a gate in the phase where it matters.
 > Execution style (from `ways-of-working`): one file at a time, exact path + full content,
@@ -733,3 +733,29 @@ can be interleaved because each gate is a test.
 3. ~~H7~~ Resolved in the baseline: `sms_send_log.application_id` is `ON DELETE SET NULL`. TL to veto if needed.
 4. ~~CHECK drop~~ Resolved: both `action_type` and `role` DB CHECKs are dropped; Java enums are the guard.
    TL to veto if needed.
+
+---
+
+## 8. Implementation status and gate results (recorded 2026-11-23)
+
+| Phase / gate | Result |
+|---|---|
+| 0 tag `pre-sqlite` | done. Staging `pg_dump` and row counts: **not done, needs the operator** |
+| 1–6, 9, 10, 11 (G1–G6) | implemented; full `./gradlew test --rerun-tasks` passed (29 result files, 0 failures) |
+| 7 Docker/compose (G7) | files changed; **not verified**, Docker daemon was not running |
+| 8 data copy (G8) | `tools/pg_to_sqlite.py` written, **not run or tested** (no Python or Postgres locally); rehearse on a dump first |
+| 12 cutover | runbook in `DB-OPERATIONS.md`; to be run by the operator |
+
+## 9. Decision log (decided without asking the TL, in line with the user's instruction)
+
+| # | Decision | Why | Advantage | Disadvantage |
+|---|---|---|---|---|
+| D1 | Single backend instance | Matches today's deployment | One file, simple ops | No horizontal scaling |
+| D2 | Replace Postgres, no dual support | Dual support doubles every migration | Less code and CI | Going back means the `pre-sqlite` tag |
+| D3 | Keep staging data through a copy script | `audit_logs` is permanent | No history loss | Needs rehearsal |
+| D4 | Epoch-ms integer timestamps | Cheap range and bucket queries | Fast, unambiguous | Hard to read by hand |
+| D5 | Drop role and action_type CHECKs, guard in Java | SQLite cannot alter CHECKs without a table rebuild | Easy future changes | DB alone accepts bad values |
+| D6 | `sms_send_log.application_id` ON DELETE SET NULL | History must not block app delete | Fixes a latent bug | SMS rows lose their app link |
+| D7 | Keep manual `AuditWriter` (REQUIRES_NEW), never inside a write tx | An aspect would recreate the nested-lock deadlock | Small change | Depends on discipline and tests |
+| D8 | Migration script is generic: columns matched by name from the SQLite schema, one transaction, `--dry-run` | Survives schema tweaks, all-or-nothing | Less to maintain | Untested against real data until rehearsal |
+| D9 | I did not touch staging, dumps or the cutover | Irreversible, outward-facing | No risk to shared environment | Operator must run those steps |
