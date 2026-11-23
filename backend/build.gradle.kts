@@ -35,8 +35,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.flywaydb:flyway-core")
-    implementation("org.flywaydb:flyway-database-postgresql")
-    runtimeOnly("org.postgresql:postgresql")
+    // SQLite (single-file DB). Versions are managed by the Spring Boot BOM.
+    runtimeOnly("org.xerial:sqlite-jdbc")
+    implementation("org.hibernate.orm:hibernate-community-dialects")
 
     // WebSocket / STOMP (SPEC §5)
     implementation("org.springframework.boot:spring-boot-starter-websocket")
@@ -67,8 +68,6 @@ dependencies {
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")
-    testImplementation("org.testcontainers:postgresql")
-    testImplementation("org.testcontainers:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
