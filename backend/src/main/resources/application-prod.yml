@@ -39,6 +39,12 @@ spring:
     validate-on-migrate: true
     out-of-order: false
 
+# Nightly SQLite backups (VACUUM INTO) go here; compose mounts the bplBackups volume.
+app:
+  backup:
+    dir: ${BACKUP_DIR:/backups}
+    retention-days: 14
+
 # SSH credential encryption key (SPEC §8.3). 32+ char master key from
 # the secrets manager. No default — fail fast if SSH_CIPHER_KEY is
 # unset in the environment.
