@@ -21,12 +21,21 @@ RUN chmod +x ./gradlew && ./gradlew --no-daemon dependencies > /dev/null 2>&1 ||
 COPY src ./src
 RUN ./gradlew --no-daemon clean bootJar
 
+# Writable directories for the SQLite database and its backups. Created here
+# (distroless has no shell to mkdir/chown) and copied below owned by uid 65532,
+# so a fresh named volume mounted on /data or /backups inherits that ownership.
+# The placeholder file makes sure the directory is copied even though it is empty.
+RUN mkdir -p /out/data /out/backups && touch /out/data/.keep /out/backups/.keep
+
 # --- runtime ---
 FROM gcr.io/distroless/java25-debian13:nonroot
 WORKDIR /app
 
 # Spring Boot's layered jar extracts more efficiently than a fat jar.
 COPY --from=build /src/build/libs/*.jar /app/app.jar
+
+COPY --from=build --chown=65532:65532 /out/data /data
+COPY --from=build --chown=65532:65532 /out/backups /backups
 
 # Distroless nonroot uid = 65532.
 USER 65532:65532

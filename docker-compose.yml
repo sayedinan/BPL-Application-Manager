@@ -1,128 +1,65 @@
-
 version: "3.8"
 
 services:
 
-  postgres:
-
-    image: postgres:16-alpine
-
-    environment:
-
-      POSTGRES_USER: bpl
-
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-
-      POSTGRES_DB: bpl_prod
-
-    volumes:
-
-      - pgdata:/var/lib/postgresql/data
-
-    expose:
-
-      - "5432"
-
-    ports:
-
-      - "127.0.0.1:15432:5432"
-
   backend:
-
     build: ./backend
-
     image: bpl-backend:prod
-
     environment:
-
       SPRING_PROFILES_ACTIVE: prod
-
-      DB_URL: jdbc:postgresql://postgres:5432/bpl_prod
-
-      DB_USER: bpl
-
-      DB_PASSWORD: ${DB_PASSWORD}
-
+      # SQLite database file. The prod profile fails fast if this is unset.
+      DB_PATH: /data/bpl.db
       SSH_CIPHER_KEY: ${SSH_CIPHER_KEY}
-
       # Optional — notification module no-ops (no emails sent) if
-      # these are unset on the host. Not required like DB_PASSWORD.
+      # these are unset on the host. Not required like SSH_CIPHER_KEY.
       MAIL_USERNAME: ${MAIL_USERNAME}
-
       MAIL_PASSWORD: ${MAIL_PASSWORD}
-
       # Optional — SMS notification module (Durbar) no-ops if unset,
       # same reasoning as MAIL_USERNAME/MAIL_PASSWORD above.
       SMS_USER_ID: ${SMS_USER_ID}
-
       SMS_PASSWORD: ${SMS_PASSWORD}
-
       CORS_ORIGIN: ${CORS_ORIGIN}
-
       SERVER_PORT: 8080
-
       SERVER_SSL_ENABLED: "false"
-
     expose:
-
       - "8080"
-
-    depends_on:
-
-      - postgres
-
+    volumes:
+      # SQLite database (bpl.db plus its -wal/-shm files). Local named volume only:
+      # never put this on NFS/SMB, SQLite file locking is unreliable there.
+      - bplData:/data
+      # Nightly VACUUM INTO copies.
+      - bplBackups:/backups
     read_only: true
-
     tmpfs:
-
-      - /tmp
-
+      # exec: the SQLite JDBC driver extracts a native library into java.io.tmpdir
+      # and loads it from there; Docker tmpfs mounts are noexec by default.
+      - /tmp:rw,exec,mode=1777
     user: "65532:65532"
-
     restart: unless-stopped
 
   frontend:
-
     build: ./frontend
-
     image: bpl-frontend:nginx
-
     expose:
-
       - "80"
-
     depends_on:
-
       - backend
-
     restart: unless-stopped
 
   caddy:
-
     image: caddy:2
-
     ports:
-
       - "8443:443"
-
     volumes:
-
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-
       - caddy_data:/data
       - ./caddy_certs:/certs:ro
-
     depends_on:
-
       - backend
-
       - frontend
-
     restart: unless-stopped
 
 volumes:
-
-  pgdata:
-
+  bplData:
+  bplBackups:
   caddy_data:
-

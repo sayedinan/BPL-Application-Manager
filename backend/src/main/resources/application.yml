@@ -24,7 +24,7 @@ spring:
   # and password come from the environment and default to empty so
   # the app still boots with the mail feature simply inactive (see
   # NotificationConfig — it's @ConditionalOnProperty on
-  # spring.mail.username, unlike DB_PASSWORD/SSH_CIPHER_KEY which are
+  # spring.mail.username, unlike SSH_CIPHER_KEY/DB_PATH (prod) which are
   # required). Timeouts are set explicitly because Spring Boot's
   # defaults are infinite, which would let a hung SMTP connection
   # block a thread forever.
