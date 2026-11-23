@@ -86,7 +86,8 @@ class SqliteTypeRoundTripTest {
         assertTrue(back.isMustChangePassword());
 
         Map<String, Object> row = jdbc.queryForMap(
-                "select typeof(id) a, typeof(created_at) b, typeof(must_change_password) c from users");
+                "select typeof(id) a, typeof(created_at) b, typeof(must_change_password) c from users where id = ?",
+                id.toString());
         assertEquals("text", row.get("a"));
         assertEquals("integer", row.get("b"));
         assertEquals("integer", row.get("c"));
@@ -104,13 +105,13 @@ class SqliteTypeRoundTripTest {
         reload();
 
         assertEquals("10.1.2.3", applications.findById(appId).orElseThrow().getServerIp().getHostAddress());
-        assertEquals("text", jdbc.queryForObject("select typeof(server_ip) from applications", String.class));
+        assertEquals("text", jdbc.queryForObject("select typeof(server_ip) from applications where id = ?", String.class, appId));
 
         AuditLog back = em.find(AuditLog.class, logId);
         assertEquals(Instant.parse("2026-01-02T03:04:05.678Z"), back.getTimestamp());
         assertEquals("10.1.2.3", back.getDetail().get("serverIp"));
         assertEquals(Map.of("k", 1), back.getDetail().get("nested"));
-        assertEquals(1, jdbc.queryForObject("select json_valid(detail) from audit_logs", Integer.class));
+        assertEquals(1, jdbc.queryForObject("select json_valid(detail) from audit_logs where id = ?", Integer.class, logId));
     }
 
     @Test
@@ -127,7 +128,8 @@ class SqliteTypeRoundTripTest {
         assertEquals(payload, back.getPayload());
         assertTrue(back.isReachable());
         assertEquals(1, jdbc.queryForObject(
-                "select json_valid(payload) from application_health_latest", Integer.class));
+                "select json_valid(payload) from application_health_latest where application_id = ?",
+                Integer.class, appId));
     }
 
     @Test
