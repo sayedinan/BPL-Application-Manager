@@ -8,6 +8,17 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.*;
 
+/**
+ * Writes audit rows. Every write is REQUIRES_NEW (a separate transaction), and the
+ * database is SQLite, which has a single writer.
+ *
+ * <p>RULE: never call this from inside an open write transaction. The caller's
+ * transaction holds the write lock, the audit insert waits for it on another
+ * connection, and fails with SQLITE_BUSY after busy_timeout. Do the database work in
+ * a {@code @Transactional} service method, let it return (commit and release its
+ * connection), then audit from the caller. See UserUpdateService / UserController
+ * and AuditTransactionHazardTest.
+ */
 public class AuditWriter {
     private final AuditLogRepository auditLogRepository;
     private final ApplicationRepository applicationRepository;

@@ -36,4 +36,7 @@ public final class ErrorCode {
     // (which means the remote command errored) and SSH_CONNECTION_FAILED/
     // SSH_AUTH_FAILED (which mean we couldn't even reach/authenticate).
     public static final String STATUS_CONFIRMATION_TIMEOUT = "STATUS_CONFIRMATION_TIMEOUT";
+    // SQLite allows one writer. A request that waited out busy_timeout for the
+    // write lock gets 503 so the UI can say "busy, retry" instead of a 500.
+    public static final String DATABASE_BUSY               = "DATABASE_BUSY";
 }

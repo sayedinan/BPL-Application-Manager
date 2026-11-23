@@ -202,6 +202,7 @@ SHELLCHECK_UNAVAILABLE
 | `SELF_DELETE_FORBIDDEN` | 403 | Self-account deletion |
 | `DUPLICATE_NAME` | 409 | User/application name conflict |
 | `IDEMPOTENCY_CONFLICT` | 409 | Duplicate idempotency key |
+| `DATABASE_BUSY` | 503 | SQLite write lock not available within busy_timeout; retry (`Retry-After: 1`) |
 
 ### 4.3 Endpoints
 

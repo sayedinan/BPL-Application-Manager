@@ -291,6 +291,26 @@ public class GlobalExceptionHandler {
             .body(pd);
     }
 
+    // More specific than the catch-all below, but DataIntegrityViolationException
+    // (a DataAccessException subtype) still goes to its own handler above.
+    @ExceptionHandler({
+        org.springframework.dao.DataAccessException.class,
+        org.springframework.transaction.TransactionException.class,
+        jakarta.persistence.PersistenceException.class
+    })
+    public ResponseEntity<ProblemDetail> handleDataAccess(Exception ex) {
+        if (SqliteLock.isLockTimeout(ex)) {
+            log.warn("Database busy (write lock timeout): {}", ex.toString());
+            ProblemDetail pd = baseProblem(ErrorCode.DATABASE_BUSY, HttpStatus.SERVICE_UNAVAILABLE,
+                "The service is busy. Please retry in a moment.");
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header("Retry-After", "1")
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(pd);
+        }
+        return handleAny(ex);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> handleAny(Exception ex) {
         // Last-resort handler. Logs the full stack trace server-side
