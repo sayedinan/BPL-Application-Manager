@@ -1,17 +1,19 @@
 ---
 name: audit-log-coverage
-description: Which actions must write an audit log entry, how audit entries are written (aspect-based, not manual calls), and the permanence rules that keep the audit log trustworthy.
+description: Which actions must write an audit log entry, how audit entries are written (explicit `auditWriter.write(...)` calls, outside the caller's transaction), and the permanence rules that keep the audit log trustworthy.
 ---
 
 # Audit log coverage
 
-## Mechanism: aspect/annotation-based, not manual calls
+## Mechanism: explicit `auditWriter.write(...)` calls
 
-State-changing methods are marked with an annotation (e.g. `@Audited(action = START_ENGINE)`). A single aspect wraps every annotated method, extracts the current actor from the session, captures whether the action succeeded or failed, and writes the audit row automatically.
+The codebase has no aspect. Each state-changing controller/service method calls `AuditWriter` explicitly (about 20 call sites), recording the actor, the action type, and SUCCESS or FAILURE. `AuditWriter` methods are `@Transactional(propagation = REQUIRES_NEW)` so a failure audit survives a rolled-back business transaction.
 
-**Do NOT write audit-log calls manually inside individual service methods.** The whole point of the aspect approach is that no state-changing action can be accidentally left out of the audit trail because a developer forgot to add a call — new annotated methods are covered automatically.
+**Rule: never call `AuditWriter` from inside an open write transaction.** Commit the business change first (own `@Transactional` service method or `TransactionTemplate`), then audit; write the failure audit in a `catch` outside the transaction. Nested REQUIRES_NEW deadlocks on SQLite (the outer transaction holds the single write lock).
 
-## What counts as a state-changing action requiring the annotation
+Because calls are manual, every new state-changing action must add its own audit call, and a test must prove it (see below).
+
+## What counts as a state-changing action requiring an audit call
 
 - Engine: create, edit, delete, start, stop
 - User: create, edit (role or assigned-engines change), delete
@@ -27,12 +29,12 @@ Read-only actions (viewing the dashboard, viewing logs, viewing the audit log it
 
 ## Anti-patterns to avoid
 
-- Do NOT write audit rows via scattered manual calls in service code — use the annotation + aspect mechanism.
+- Do NOT leave a state-changing action without an audit call, and do NOT call `AuditWriter` inside an open write transaction.
 - Do NOT add any code path that edits or deletes an existing audit row.
 - Do NOT cascade-delete audit rows when an engine or user is deleted.
 - Do NOT rely solely on a foreign key / ID reference for readability — always also store the plain-text name snapshot.
 
 ## Testing and when to stop
 
-- Write a test proving each anti-pattern above does NOT happen — e.g. a test that every annotated state-changing endpoint produces exactly one audit row per call, a test that deleting an engine leaves its existing audit rows completely intact (row count and content unchanged), and a test that no code path can edit or delete an existing audit row.
+- Write a test proving each anti-pattern above does NOT happen — e.g. a test that every state-changing endpoint produces exactly one audit row per call, a test that deleting an engine leaves its existing audit rows completely intact (row count and content unchanged), and a test that no code path can edit or delete an existing audit row.
 - If you hit an error, an ambiguous case, a failing test you can't explain, or a situation this skill doesn't clearly answer while working in this area: **stop coding.** Do not guess and keep going. Report the exact error or ambiguity, propose your best suggested fix or interpretation, and wait for confirmation before proceeding.

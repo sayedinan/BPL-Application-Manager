@@ -24,7 +24,7 @@ Confirm these before Phase 1 (they change the work):
 | D1 | Is a **single backend instance** acceptable? SQLite = one file, one process. | Yes (it is one instance today). Write it into SPEC. |
 | D2 | **Replace** Postgres or support both? | Replace. Tag the last Postgres commit (`pre-sqlite`) so rollback is possible. Supporting both doubles every migration. |
 | D3 | Keep staging data? | Yes — `audit_logs` is permanent by design (SPEC §3). Needs the Phase 8 data migration. |
-| D4 | Timestamps stored as epoch-millis `INTEGER` or ISO text? | Epoch-millis (xerial driver default; cheap range queries and bucketing). Gate G3 proves it. |
+| D4 | Timestamps stored as epoch-millis `INTEGER` or ISO text? | Epoch-millis (xerial driver default; cheap range queries and bucketing). Gate G3 proves it. Add a documented query / small view using `datetime(ts/1000,'unixepoch')` for people inspecting the file by hand. |
 
 ---
 
@@ -51,10 +51,17 @@ Confirm these before Phase 1 (they change the work):
   from `UserController.updateUser`, which is itself `@Transactional` and has already written
   (assignment DELETE / role UPDATE). On Postgres the second connection just works. On SQLite the
   outer transaction holds the write lock, the audit insert waits on a different connection, and
-  fails with `SQLITE_BUSY`. 19 audit call sites exist (ApplicationController 5, AuthController 5,
-  UserController 4, and 1 each in ApplicationGroupController, HealthController, MaintenanceController,
-  StatusPollingOrchestrator, WebSocketAccessInterceptor). `updateUser` is confirmed; the others must be
-  checked individually (Phase 5).
+  fails with `SQLITE_BUSY`. 20 audit call sites exist (ApplicationController 6, incl. the
+  `SHELLCHECK_UNAVAILABLE` call, AuthController 5, UserController 4, and 1 each in
+  ApplicationGroupController, HealthController, MaintenanceController, StatusPollingOrchestrator,
+  WebSocketAccessInterceptor). `UserController:328` is the only controller-level `@Transactional`
+  and `updateUser` is confirmed nested. `WebSocketAccessInterceptor` has four `@Transactional`
+  methods (lines 105, 116, 155, 162) and also calls `auditWriter`, so check it first; the rest are
+  checked individually (Phase 5). Audits are written by manual `auditWriter.write(...)` calls
+  (there is no `@Aspect`); that is the intended design, see Phase 5 step 3.
+- **H9 — `IMMEDIATE` holds the write lock for the whole transaction.** Any `@Transactional` method
+  that does SSH, health HTTP or SMS inside the transaction blocks every other writer for the length
+  of the call, and they fail with BUSY after `busy_timeout`. Phase 5 step 4 audits for this.
 - **H2 — foreign keys are OFF by default in SQLite.** All `ON DELETE CASCADE` (application delete,
   user delete) silently stop working unless `PRAGMA foreign_keys=ON` is set on *every* connection.
 - **H3 — IDs must never be reused.** `audit_logs.target_application_id` has no FK and relies on
@@ -71,7 +78,7 @@ Confirm these before Phase 1 (they change the work):
   unique indexes, or queries work on any database. (VERIFY by running `./gradlew test` first.)
 - **H7 — pre-existing, not SQLite-caused:** `sms_send_log.application_id` has an FK **without** cascade,
   so deleting an application that has SMS log rows violates the FK on Postgres too. With SQLite and
-  `foreign_keys=ON` it behaves the same. Decide in Phase 2 whether to add `ON DELETE SET NULL`.
+  `foreign_keys=ON` it behaves the same. Resolved in the Phase 2 baseline: `ON DELETE SET NULL`.
 - **H8 — schema drift:** `users.deleted_at` still exists in Postgres after V19 but the `User` entity
   has no such field. The baseline omits it.
 
@@ -135,7 +142,12 @@ Estimates assume one person working alongside QA duties.
    `docker compose exec postgres psql -U bpl bpl_prod -c "select relname, n_live_tup from pg_stat_user_tables order by 1;"`
    Prefer exact `count(*)` per table for the tables listed in Phase 8.
 
-**Gate G0:** tag exists, dump exists off-server, test result recorded, row counts saved.
+5. **Spike before committing to the full effort** (throwaway branch, ≈2 h): run Gate G1 (bare Hikari + xerial
+   pragmas) and a minimal G3 (`Instant`, `UUID`, boolean round-trip through Hibernate's community SQLite
+   dialect on a temp file). If either fails in a way that is not fixable by a URL property or a
+   `@JdbcTypeCode`, stop and re-plan before Phase 1.
+
+**Gate G0:** tag exists, dump exists off-server, test result recorded, row counts saved, spike result recorded.
 
 ### Phase 1 — Dependencies and config (≈1 h)
 
@@ -150,22 +162,31 @@ Files: `backend/build.gradle.kts`, `backend/src/main/resources/application*.yml`
      stable `sqlite-jdbc`.
    - Keep `flyway-core`. VERIFY Flyway's SQLite support ships with your Flyway version; if startup says
      the database is unsupported, check that version's release notes for a separate SQLite module.
+   - JDK 25 may print native-access warnings when xerial loads its library. They are harmless.
 2. `application.yml` (shared): keep `jpa.open-in-view: false`; add under `spring.jpa.properties.hibernate`:
    `type.preferred_uuid_jdbc_type: CHAR`; keep `jdbc.time_zone: UTC`.
 3. `application-dev.yml` and `application-prod.yml`: replace the datasource block with the URL above,
    no username/password, Hikari values above; set `spring.jpa.database-platform` to the SQLite dialect,
    `ddl-auto: none`; keep `flyway.enabled: true`, `locations: classpath:db/migration`.
    `DB_PATH` replaces `DB_URL/DB_USER/DB_PASSWORD`; the prod profile must fail fast if `DB_PATH` is unset
-   (no default), dev defaults to `./data/bpl.db`.
+   (no default), dev defaults to `./data/bpl.db`. Also set `spring.session.jdbc.initialize-schema: never`
+   (Flyway owns the session tables).
 4. `.gitignore`: add `data/`, `*.db`, `*.db-wal`, `*.db-shm`, `backups/`.
 5. Delete `temp/application-dev.yml` if it is just an old copy (it is git-ignored; ignore otherwise).
+6. `application-test.yml` (moved here from Phase 6): replace the H2 config with a per-test temp-file SQLite DB
+   with Flyway **enabled** (so tests run the real baseline). Do not use `:memory:` with a pool — each
+   connection would get its own empty database; use a temp file or `file:memdb1?mode=memory&cache=shared`.
+   Needed early because G2/G3/G4/G5 all depend on it. Note: with Flyway enabled, Spring-context tests fail
+   until the Phase 2 baseline exists. Until then only G1 (no Spring context), the Phase 0 spike (create its
+   tables by hand) and the existing `@WebMvcTest`s can run.
 
 Commits: `Swap PostgreSQL driver for SQLite and community dialect`, `Point dev and prod profiles at SQLite file`.
 
-**Gate G1 (connection pragmas):** write a throwaway test (kept later as `SqlitePragmaTest`) that opens a
-connection from the app's DataSource and asserts: `PRAGMA foreign_keys` = 1, `PRAGMA journal_mode` = `wal`,
-`PRAGMA busy_timeout` = 10000. Run it against **two different pooled connections** — foreign_keys is
-per-connection and this is where it silently fails.
+**Gate G1 (connection pragmas):** a plain JUnit test (kept later as `SqlitePragmaTest`) with **no Spring
+context**: build a bare `HikariDataSource` from the same JDBC URL and Hikari settings against a temp file,
+and assert `PRAGMA foreign_keys` = 1, `PRAGMA journal_mode` = `wal`, `PRAGMA busy_timeout` = 10000. Run it
+against **two different pooled connections** — foreign_keys is per-connection and this is where it silently
+fails. No Spring context means it can run before the baseline (Phase 2) and entities (Phase 3) exist.
 
 ### Phase 2 — New baseline schema (≈3 h)
 
@@ -180,14 +201,15 @@ state is all that matters for a new database. Future changes use additive SQLite
 column-by-column before accepting it (Phase 3 step 1).**
 
 ```sql
-PRAGMA foreign_keys = ON;   -- Flyway runs on one connection; the URL also sets it
+-- No PRAGMA here: PRAGMA foreign_keys is a no-op inside Flyway's transaction. The JDBC URL sets it.
 
 CREATE TABLE users (
     id                   TEXT    PRIMARY KEY,                       -- UUID, 36 chars
     username             TEXT    NOT NULL,
     full_name            TEXT,
     password_hash        TEXT    NOT NULL,
-    role                 TEXT    NOT NULL CHECK (role IN ('SYS_ADMIN','ADMIN','USER')),
+    role                 TEXT    NOT NULL,   -- SYS_ADMIN | ADMIN | USER; enum CHECK dropped (a new role would need a
+                                             -- table rebuild in SQLite); enforced by the Java enum (Phase 3 step 7)
     email                TEXT,
     phone_number         TEXT    CHECK (phone_number IS NULL OR
                                   (length(phone_number) = 13 AND
@@ -217,7 +239,7 @@ CREATE TABLE applications (
     sms_stop_message                TEXT CHECK (sms_stop_message IS NULL OR length(sms_stop_message) <= 160),
     sms_external_online_message     TEXT CHECK (sms_external_online_message IS NULL OR length(sms_external_online_message) <= 160),
     sms_external_offline_message    TEXT CHECK (sms_external_offline_message IS NULL OR length(sms_external_offline_message) <= 160),
-    deleted_at                      INTEGER,                              -- kept only if Application entity still maps it
+    -- no deleted_at: V2's header records it as a deliberate deviation and no Java code maps it (hard delete)
     created_at                      INTEGER NOT NULL,
     updated_at                      INTEGER NOT NULL
 );
@@ -248,7 +270,8 @@ CREATE TABLE audit_logs (
 CREATE INDEX idx_audit_timestamp   ON audit_logs(timestamp DESC);
 CREATE INDEX idx_audit_actor       ON audit_logs(actor_username);
 CREATE INDEX idx_audit_application ON audit_logs(target_application_id);
--- Optional hardening (recommended): make "insert-only" a DB guarantee.
+-- Optional hardening (recommended): make "insert-only" a DB guarantee. Side effects: test cleanup cannot
+-- use deleteAll() on audit_logs, and any future retention purge must drop these triggers in its migration.
 CREATE TRIGGER audit_logs_no_update BEFORE UPDATE ON audit_logs
 BEGIN SELECT RAISE(ABORT, 'audit_logs is insert-only'); END;
 CREATE TRIGGER audit_logs_no_delete BEFORE DELETE ON audit_logs
@@ -310,7 +333,7 @@ CREATE TABLE application_status_streak (
 
 CREATE TABLE sms_send_log (
     id                     INTEGER PRIMARY KEY AUTOINCREMENT,
-    application_id         INTEGER REFERENCES applications(id),   -- H7: decide SET NULL vs keep as-is
+    application_id         INTEGER REFERENCES applications(id) ON DELETE SET NULL,   -- H7 resolved: SMS history must not block app delete
     recipient_phone_number TEXT    NOT NULL,
     event_type             TEXT    NOT NULL,
     is_error               INTEGER NOT NULL CHECK (is_error IN (0,1)),
@@ -370,7 +393,7 @@ CREATE TABLE application_maintenance (
     CONSTRAINT application_maintenance_window_order CHECK (ends_at > starts_at)
 );
 
--- Spring Session JDBC (V6). Prefer the jar's own schema-sqlite.sql if it exists:
+-- Spring Session JDBC (V6). Confirm first whether the jar ships schema-sqlite.sql; prefer it if it exists:
 --   unzip -p ~/.gradle/caches/**/spring-session-jdbc-*.jar org/springframework/session/jdbc/schema-sqlite.sql
 -- Otherwise this adaptation (BYTEA -> BLOB):
 CREATE TABLE SPRING_SESSION (
@@ -396,7 +419,8 @@ CREATE TABLE SPRING_SESSION_ATTRIBUTES (
 Notes:
 - Case-insensitive name uniqueness stays at DB level via `lower(name)` (ASCII-only, and names are
   restricted to `[a-zA-Z0-9_-]`).
-- Removed DB checks (action_type enum) are re-asserted in Java (Phase 3).
+- Removed DB checks (`action_type` and `role` enums) are re-asserted in Java (Phase 3 step 7).
+- G2 and everything after it need this baseline and the Phase 1 test config in place first.
 - Commit: `Add SQLite baseline schema replacing PostgreSQL migrations`.
 
 **Gate G2:** with the app *not* started, apply the baseline to an empty file using Flyway through the app
@@ -409,7 +433,7 @@ install). Then check `PRAGMA foreign_key_check;` returns nothing and `PRAGMA int
 Do one file at a time.
 
 1. **Entity ↔ DDL diff.** For each `@Entity` list `@Column` names/nullability against the DDL in Phase 2
-   (esp. `Application`: confirm whether `deletedAt` is mapped; `User`, `IdempotencyKey`,
+   (esp. `Application`: confirm `deletedAt` is not mapped, as the baseline has no such column; `User`, `IdempotencyKey`,
    `WebSocketConnection/Subscription`, `ApplicationMaintenance`, `ApplicationHealthConfig`). Fix whichever is wrong.
 2. **No DB-default dependence.** Every column I removed a `DEFAULT now()` from must be set by Java:
    check `IdempotencyKey.expiresAt` (was `now()+24h`), `WebSocketConnection.connectedAt`,
@@ -431,7 +455,8 @@ Do one file at a time.
    `IdempotencyKey.userId`): covered by `hibernate.type.preferred_uuid_jdbc_type=CHAR`. If Gate G3 shows
    it does not apply to `@EmbeddedId` or `GenerationType.UUID`, add `@JdbcTypeCode(SqlTypes.CHAR)`
    on those fields explicitly.
-7. **Action type guard in Java.** `action_type` no longer has a DB CHECK. Confirm `AuditWriter` callers pass
+7. **Enum guards in Java.** `users.role` (use the `Role` enum with `@Enumerated(STRING)`; check the entity does)
+   and `audit_logs.action_type` no longer have DB CHECKs. Confirm `AuditWriter` callers pass
    constants from one enum/constant class; if they pass raw strings, add a `Set<String> ALLOWED` check in
    `AuditWriter.insert` that throws `IllegalArgumentException`. The list is in V13 (17 values incl.
    `UPDATE_USER`, `APPLICATION_ONLINE`, `APPLICATION_OFFLINE`).
@@ -447,7 +472,7 @@ on a temp file DB):**
 - `UserApplicationAssignment` with `@EmbeddedId` round-trips; `findAssignedApplicationIds` and
   `findAssignedUserEmails` native queries return expected rows.
 - If `typeof(created_at)` is `text` instead of `integer`, stop: either set xerial `date_class=INTEGER`
-  in the URL or switch the whole plan to ISO text (Phase 6's bucketing SQL changes).
+  in the URL or switch the whole plan to ISO text (Phase 4's bucketing SQL changes).
 
 ### Phase 4 — Health queries (≈2 h)
 
@@ -487,9 +512,9 @@ asserts exact bucket counts, failed counts and averages; asserts `select sqlite_
 
 ### Phase 5 — Transactions and concurrency (≈4 h)
 
-This is the highest-risk phase (H1, H4).
+This is the highest-risk phase (H1, H4, H9).
 
-1. **Inventory the 19 `auditWriter` call sites** (list in §1). For each, write down: is the calling method
+1. **Inventory the 20 `auditWriter` call sites** (list in §1; start with `WebSocketAccessInterceptor`). For each, write down: is the calling method
    inside an active transaction that has already written? Command: `grep -rn "auditWriter\." backend/src/main/java`.
 2. **`UserController.updateUser`** (confirmed nested): remove method-level `@Transactional`; move the DB
    changes (role update + assignment delete/insert) into a small `@Transactional` method on a service bean
@@ -498,17 +523,25 @@ This is the highest-risk phase (H1, H4).
    Behaviour preserved: failure rows are still recorded, because the audit write is no longer coupled to the
    rolled-back transaction.
 3. Fix any other site found in step 1 the same way. Rule going forward: **never call `AuditWriter` from
-   inside an open write transaction.** Add a comment on `AuditWriter` and update the
-   `audit-log-coverage` skill/reviewer docs in `.claude/` with the rule.
-4. `LogPollingOrchestrator` / `StatusPollingOrchestrator` save per line / per transition. At one commit per
+   inside an open write transaction.** Decision: keep the manual `auditWriter.write(...)` calls with
+   `REQUIRES_NEW`; do not introduce an aspect (it would widen this migration and its ordering against the
+   transaction advice would recreate H1). Add a comment on `AuditWriter` with the rule, and fix the
+   `audit-log-coverage` skill (it wrongly says "aspect-based") and reviewer docs in `.claude/` to match.
+4. **Audit every `@Transactional` for network I/O (H9).** List all `@Transactional` methods, including the
+   repository-level ones (IdempotencyKeyRepository, ApplicationHealthHistoryRepository,
+   ApplicationLogLineRepository, ApplicationMaintenanceRepository, UserApplicationAssignmentRepository,
+   WebSocket*Repository) and `WebSocketAccessInterceptor`. None may span SSH, health HTTP or SMS calls.
+   Check `StatusPollingOrchestrator` and the log/health pollers first. Fix by doing the I/O first and
+   opening the transaction only for the DB write. Rule going forward: no network I/O inside a transaction.
+5. `LogPollingOrchestrator` / `StatusPollingOrchestrator` save per line / per transition. At one commit per
    line this is slow on SQLite with `synchronous=NORMAL` under WAL only if lines arrive in large batches.
    VERIFY with a batch of 500 lines in G5; if > 1 s, wrap each poll tick's saves in one transaction
    (`TransactionTemplate`) — one commit per tick.
-5. **Concurrency error mapping.** In `GlobalExceptionHandler`, map lock timeouts
+6. **Concurrency error mapping.** In `GlobalExceptionHandler`, map lock timeouts
    (`CannotAcquireLockException`, or `SQLException` with SQLite BUSY code) to HTTP 503 with a stable error
    code (add to `ErrorCode` and SPEC §4.2) so the UI shows "busy, retry" rather than a 500.
-6. Spring Session writes happen at request end (outside the controller transaction) — no change, but G5 covers it.
-7. `@Async` notification threads write `sms_send_log`: short transactions, no change.
+7. Spring Session writes happen at request end (outside the controller transaction) — no change, but G5 covers it.
+8. `@Async` notification threads write `sms_send_log`: short transactions, no change.
 
 Commits: `Run user update DB work in its own transaction before auditing`, `Map SQLite lock timeout to 503`.
 
@@ -524,9 +557,7 @@ time within a sane bound (record it as the baseline).
    one-time password, login works from the frontend (`http://localhost:5173`).
 2. Confirm the `flyway_schema_history` table exists in the file and `validate-on-migrate` passes on a
    second boot.
-3. `application-test.yml`: replace H2 config with a per-test temp-file SQLite DB + Flyway **enabled**
-   (so tests run the real baseline). Do not use `:memory:` with a pool — each connection would get its own
-   empty database; use a temp file or `file:memdb1?mode=memory&cache=shared`.
+3. `application-test.yml`: done in Phase 1 step 6 (moved earlier because the gates depend on it).
 4. Remove the `read_only`-unfriendly assumption: `server.port` etc. unchanged.
 
 **Gate G6:** clean boot twice in a row (second boot = no migration), login + change-password + create user +
@@ -549,7 +580,7 @@ Files: `backend/Dockerfile`, `docker-compose.yml`, `.gitlab-ci.yml`, `run.sh`, `
      `tmpfs: - /tmp:rw,exec,mode=1777`. VERIFY it boots; if it still cannot load the native library, set
      `JAVA_TOOL_OPTIONS=-Dorg.sqlite.tmpdir=/data/tmp` and create that directory in the image.
    - Remove port `127.0.0.1:15432`.
-   - ⚠ Do **not** run `docker compose down -v` at any point until Phase 9 sign-off: `-v` deletes volumes
+   - ⚠ Do **not** run `docker compose down -v` at any point until the Phase 12 sign-off (2 weeks after cutover): `-v` deletes volumes
      (including the old `pgdata`, your only copy besides the dump).
 3. `.gitlab-ci.yml`: add `SSH_CIPHER_KEY` as a CI variable for `test-backend` if it is not already (tests refuse
    to run without it). No database service needed any more.
@@ -589,8 +620,12 @@ Steps:
 2. Run the script with `INSERT` into the existing tables inside **one transaction** (all-or-nothing).
 3. `AUTOINCREMENT` counters: inserting explicit ids updates `sqlite_sequence` automatically; verify with
    `select name, seq from sqlite_sequence` that each `seq` ≥ the Postgres `max(id)`.
-4. Timestamps: convert with `int(dt.timestamp()*1000)`; psycopg2 returns timezone-aware datetimes for
-   `timestamptz`, so this is exact.
+4. Timestamps: convert with integer arithmetic, `(dt - datetime(1970,1,1,tzinfo=timezone.utc)) // timedelta(milliseconds=1)`,
+   not `int(dt.timestamp()*1000)` (the float path can be off by 1 ms). psycopg2 returns timezone-aware
+   datetimes for `timestamptz`.
+5. `users.deleted_at` is not copied: V19 already deleted every soft-deleted user, so assert
+   `select count(*) from users where deleted_at is not null` = 0 before the copy. `applications.deleted_at`
+   is likewise dropped.
 
 **Gate G8 (verification, all must pass):**
 - Row count per copied table equals the Postgres count from Phase 0 (script prints a table).
@@ -623,7 +658,10 @@ CI runs all of these on every push (they need no external database).
 1. Nightly backup inside the app (no shell/sqlite3 in distroless): a `@Scheduled(cron = "0 15 3 * * *")` job that runs
    `VACUUM INTO '/backups/bpl-YYYYMMDD.db'` through `JdbcTemplate`, then deletes files older than 14 days.
    `VACUUM INTO` produces a consistent copy while the app is running (a plain file copy of a WAL database can be
-   corrupt). Add a test that the produced file passes `PRAGMA integrity_check`.
+   corrupt). The job must run **outside any transaction** (`VACUUM` cannot run inside one) — do not annotate it
+   `@Transactional`. Add a test that the produced file passes `PRAGMA integrity_check`.
+   Backups on the same disk do not survive disk or host loss: document an off-host pull (e.g. a scheduled
+   `docker compose cp backend:/backups/<latest> <remote location>`) as part of the runbook.
 2. Restore procedure (document in README): stop backend → copy the chosen backup over `/data/bpl.db`, delete
    `bpl.db-wal` and `bpl.db-shm` → start backend.
 3. Never put `/data` on NFS/SMB (SQLite file locking is unreliable there). Local disk / Docker named volume only.
@@ -636,7 +674,8 @@ CI runs all of these on every push (they need no external database).
 
 Update: `SPEC.md` (line 16 "single JAR + PostgreSQL", line 340 "Spring Session JDBC → PostgreSQL", §3 DDL,
 §8.3, §13.1 env vars, add D1 single-instance constraint), `STATUS-REDESIGN.md` references, `db/migration/README.md`,
-`.claude/skills/*` and `.claude/agents/*` mentions of PostgreSQL/Flyway rules, and `PLANNING-NOTES.md` (append-only:
+`.claude/skills/*` and `.claude/agents/*` mentions of PostgreSQL/Flyway rules (including
+`audit-log-coverage`, which wrongly says audits are aspect-based), and `PLANNING-NOTES.md` (append-only:
 record the decision and why). Commit: `Document SQLite as the database in SPEC and runbooks`.
 
 ### Phase 12 — Cutover and rollback (≈1 h on the day)
@@ -664,6 +703,7 @@ after cutover would be lost on rollback unless exported first; note the cutover 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Nested audit transaction deadlock (H1) | certain if untouched | writes fail | Phase 5 step 2–3, G5 |
+| Transaction spanning SSH/HTTP/SMS holds the write lock (H9) | medium | stalls and 503s for all writers | Phase 5 step 4 audit, G5 |
 | Foreign keys off on some connection (H2) | medium | orphaned rows, cascades dead | URL param + G1 + real cascade test |
 | Timestamp stored as text/mixed formats | medium | wrong range queries | no DB defaults, G3 `typeof()` check |
 | `FILTER`/driver version mismatch | low | health charts break | G4 asserts version |
@@ -690,5 +730,6 @@ can be interleaved because each gate is a test.
 
 1. Confirm D1 (single instance) and D2 (replace, not dual-support).
 2. Is the staging data worth preserving beyond `audit_logs`, or can health history/log lines start fresh?
-3. Should deleting an application with SMS log rows be allowed (H7: `ON DELETE SET NULL`)?
-4. Is dropping the DB-level `action_type` CHECK acceptable (Java enum becomes the only guard)?
+3. ~~H7~~ Resolved in the baseline: `sms_send_log.application_id` is `ON DELETE SET NULL`. TL to veto if needed.
+4. ~~CHECK drop~~ Resolved: both `action_type` and `role` DB CHECKs are dropped; Java enums are the guard.
+   TL to veto if needed.
