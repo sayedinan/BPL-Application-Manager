@@ -39,7 +39,7 @@ import com.bpl.orderapp.admin.common.GlobalExceptionHandler;
 
 @WebMvcTest(UserController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, UserUpdateService.class})
 class UserControllerTest {
 
     @Autowired private MockMvc mvc;
