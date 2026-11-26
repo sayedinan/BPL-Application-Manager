@@ -328,8 +328,9 @@ public class UserController {
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SYS_ADMIN')")
     // Deliberately NOT @Transactional. The DB work runs (and commits) inside
-    // UserUpdateService.update; the audit row is written only afterwards. AuditWriter is
-    // REQUIRES_NEW and SQLite has one writer, so it must never run inside an open transaction.
+    // UserUpdateService.update; sessions are revoked and the audit row is written only
+    // afterwards. Both use their own transaction and SQLite has one writer, so neither may
+    // run inside an open transaction.
     public ResponseEntity<Void> updateUser(@PathVariable java.util.UUID id,
             @Valid @RequestBody UpdateUserRequest req,
             HttpServletRequest httpRequest) {
@@ -337,7 +338,10 @@ public class UserController {
         boolean callerIsSysAdmin = updateAuth.getAuthorities().stream()
             .anyMatch(a -> a.getAuthority().equals("ROLE_SYS_ADMIN"));
 
-        java.util.Map<String, Object> detail = userUpdateService.update(id, req, callerIsSysAdmin);
+        UserUpdateService.Result result = userUpdateService.update(id, req, callerIsSysAdmin);
+        // Must run after the update has committed (see the note above).
+        revokeSessions(result.usernameToRevoke());
+        java.util.Map<String, Object> detail = result.auditDetail();
 
         try {
             // Only write a row if something actually changed. A PUT

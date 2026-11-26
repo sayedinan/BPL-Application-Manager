@@ -5,7 +5,6 @@ import com.bpl.orderapp.admin.common.NotFoundException;
 import com.bpl.orderapp.admin.user.dto.UpdateUserRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,27 +24,29 @@ public class UserUpdateService {
 
     private static final Logger log = LoggerFactory.getLogger(UserUpdateService.class);
 
-    private final FindByIndexNameSessionRepository<?> sessionRepository;
     private final UserRepository userRepository;
     private final ApplicationRepository applicationRepository;
     private final UserApplicationAssignmentRepository assignmentRepository;
 
-    public UserUpdateService(FindByIndexNameSessionRepository<?> sessionRepository,
-                             UserRepository userRepository,
+    /**
+     * {@code auditDetail} is empty when there is nothing to audit.
+     * {@code usernameToRevoke} is the principal whose sessions must end, or null.
+     */
+    public record Result(Map<String, Object> auditDetail, String usernameToRevoke) {}
+
+    public UserUpdateService(UserRepository userRepository,
                              ApplicationRepository applicationRepository,
                              UserApplicationAssignmentRepository assignmentRepository) {
-        this.sessionRepository = sessionRepository;
         this.userRepository = userRepository;
         this.applicationRepository = applicationRepository;
         this.assignmentRepository = assignmentRepository;
     }
 
     /**
-     * Applies the update and returns the audit detail (empty when nothing
-     * changed, so the caller writes no audit row).
+     * Applies the update. See {@link Result} for what the caller must do next.
      */
     @Transactional
-    public Map<String, Object> update(java.util.UUID id, UpdateUserRequest req, boolean callerIsSysAdmin) {
+    public Result update(java.util.UUID id, UpdateUserRequest req, boolean callerIsSysAdmin) {
 
         // Snapshot BEFORE state so the audit row can show a diff,
         // not just the new values. Must happen before either the
@@ -150,13 +151,13 @@ public class UserUpdateService {
         userRepository.save(user);
 
         // The session carries the role (ROLE_<role>) and principal username from login
-        // time, and a "remember me" session lives up to 30 days. Revoke so a demoted or
-        // renamed user re-authenticates and picks up the current role and name.
+        // time, and a "remember me" session lives up to 30 days. A demoted or renamed
+        // user must re-authenticate to pick up the current role and name. The caller does
+        // the revoking after this transaction commits: Spring Session uses its own
+        // transaction, which cannot get SQLite's write lock while this one is open.
         boolean roleChanged = req.role() != null && !req.role().equals(oldRole);
         boolean usernameChanged = req.username() != null && !req.username().equals(oldUsername);
-        if (roleChanged || usernameChanged) {
-            revokeSessions(oldUsername);
-        }
+        String usernameToRevoke = roleChanged || usernameChanged ? oldUsername : null;
 
         try {
             java.util.Map<String, Object> detail = new java.util.HashMap<>();
@@ -198,19 +199,12 @@ public class UserUpdateService {
                 if (!removedIds.isEmpty()) detail.put("unassignedApplications", resolveAppNames(removedIds));
             }
 
-            return detail;
+            return new Result(detail, usernameToRevoke);
         } catch (Exception detailEx) {
             // Same as before: a failure while building the audit detail never fails the update.
             log.warn("Building UPDATE_USER audit detail failed (user id={})", id, detailEx);
-            return Map.of();
+            return new Result(Map.of(), usernameToRevoke);
         }
-    }
-
-    /** Deletes every live session whose principal is {@code username}. No-op for null. */
-    private void revokeSessions(String username) {
-        if (username == null) return;
-        new java.util.ArrayList<>(sessionRepository.findByPrincipalName(username).keySet())
-            .forEach(sessionRepository::deleteById);
     }
 
     /** Resolves application ids to "id:name" strings for readable audit details. */
