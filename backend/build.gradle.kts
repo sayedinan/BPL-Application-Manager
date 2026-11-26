@@ -1,6 +1,6 @@
 plugins {
     java
-    id("org.springframework.boot") version "3.5.7"
+    id("org.springframework.boot") version "3.5.16"
     id("io.spring.dependency-management") version "1.1.7"
 }
 
@@ -17,6 +17,12 @@ java {
         languageVersion.set(JavaLanguageVersion.of(25))
     }
 }
+
+// Security patches newer than what the Spring Boot version above manages.
+// Drop each line once Boot manages that version or a later one.
+extra["tomcat.version"] = "10.1.62"
+extra["jackson-bom.version"] = "2.21.9"
+extra["log4j2.version"] = "2.25.5"
 
 repositories {
     mavenCentral()
@@ -94,4 +100,10 @@ tasks.withType<Test> {
             )
         }
     }
+}
+
+// Pins every dependency version (gradle.lockfile) so builds repeat and CI can scan them.
+// After changing a dependency: ./gradlew dependencies --write-locks
+dependencyLocking {
+    lockAllConfigurations()
 }

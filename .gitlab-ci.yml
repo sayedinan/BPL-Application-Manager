@@ -15,4 +15,35 @@ test-frontend:
   script:
     - cd frontend
     - npm ci
+    - npm run lint
+    - npm run typecheck
     - npm test
+    - npm run build
+
+audit-frontend-dependencies:
+  stage: test
+  image: node:22
+  script:
+    - cd frontend
+    - npm audit --audit-level=moderate
+
+audit-backend-dependencies:
+  stage: test
+  image:
+    name: ghcr.io/google/osv-scanner:v2.7.1@sha256:a70ffffc2bfd33482953e5d6b64c6fcdb30239717a07b0f0d3ab2859ce3e4cde
+    entrypoint: [""]
+  script:
+    - /osv-scanner scan source --config=backend/osv-scanner.toml --lockfile=backend/gradle.lockfile
+
+scan-secrets:
+  stage: test
+  image:
+    name: zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+    entrypoint: [""]
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - gitleaks git --redact --verbose .
+  # TODO: remove once the committed TLS key (caddy_certs/server.key) is rotated and
+  # dealt with in history; until then this job reports it on every run.
+  allow_failure: true

@@ -1,0 +1,12 @@
+# Advisories accepted for now. Each needs a reason and an expiry, after which CI
+# fails again so it gets another look.
+
+[[IgnoredVulns]]
+id = "GHSA-j9f9-w8pj-32f8"
+ignoreUntil = 2027-03-01
+reason = "Needs Server-Sent Events with view fragments; this app uses neither. No 6.2.x fix listed."
+
+[[IgnoredVulns]]
+id = "GHSA-pc63-qcmh-9cmg"
+ignoreUntil = 2027-03-01
+reason = "Needs XsltView; this app renders no views. No 6.2.x fix listed."

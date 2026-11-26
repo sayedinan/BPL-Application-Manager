@@ -14,7 +14,6 @@ class ResizeObserverStub {
   unobserve(): void {}
   disconnect(): void {}
 }
-// @ts-ignore — assigning a stub to a readonly global
 globalThis.ResizeObserver = ResizeObserverStub;
 
 // matchMedia is similarly missing from jsdom. Some component
