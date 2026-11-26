@@ -32,7 +32,7 @@ public class UserUpdateService {
      * {@code auditDetail} is empty when there is nothing to audit.
      * {@code usernameToRevoke} is the principal whose sessions must end, or null.
      */
-    public record Result(Map<String, Object> auditDetail, String usernameToRevoke) {}
+    public record Result(Map<String, Object> auditDetail, String usernameToRevoke, String usernameToDisconnect) {}
 
     public UserUpdateService(UserRepository userRepository,
                              ApplicationRepository applicationRepository,
@@ -159,6 +159,10 @@ public class UserUpdateService {
         boolean usernameChanged = req.username() != null && !req.username().equals(oldUsername);
         String usernameToRevoke = roleChanged || usernameChanged ? oldUsername : null;
 
+        boolean assignmentsChanged = !new java.util.HashSet<>(oldAssignedIds)
+            .equals(new java.util.HashSet<>(assignmentRepository.findApplicationIdsByUserId(id)));
+        String usernameToDisconnect = assignmentsChanged ? oldUsername : null;
+
         try {
             java.util.Map<String, Object> detail = new java.util.HashMap<>();
 
@@ -199,11 +203,11 @@ public class UserUpdateService {
                 if (!removedIds.isEmpty()) detail.put("unassignedApplications", resolveAppNames(removedIds));
             }
 
-            return new Result(detail, usernameToRevoke);
+            return new Result(detail, usernameToRevoke, usernameToDisconnect);
         } catch (Exception detailEx) {
             // Same as before: a failure while building the audit detail never fails the update.
             log.warn("Building UPDATE_USER audit detail failed (user id={})", id, detailEx);
-            return new Result(Map.of(), usernameToRevoke);
+            return new Result(Map.of(), usernameToRevoke, usernameToDisconnect);
         }
     }
 

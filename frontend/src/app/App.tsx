@@ -13,8 +13,8 @@ import { ApplicationDetailsPage } from '@/app/ApplicationDetailsPage';
 import { UsersPage } from '@/app/UsersPage';
 import { LogsPage } from '@/app/LogsPage';
 import { PresenceConnection } from '@/app/PresenceConnection';
+import { RequireAuth } from '@/app/RequireAuth';
 import { Shell } from '@/app/Shell';
-import { LoadingBlock } from '@/components/ui/Spinner';
 import { ToastProvider } from '@/components/ui/Toast';
 
 const queryClient = new QueryClient();
@@ -40,17 +40,6 @@ function ForbiddenPage() {
       </Link>
     </div>
   );
-}
-
-function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { status } = useAuth();
-  if (status === 'unknown') {
-    return (
-      <LoadingBlock className="min-h-[70vh]" />
-    );
-  }
-  if (status !== 'authenticated') return <Navigate to="/login" replace />;
-  return <>{children}</>;
 }
 
 function SysAdminOnly({ children }: { children: React.ReactNode }) {

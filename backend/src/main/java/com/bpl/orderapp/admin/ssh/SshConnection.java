@@ -32,6 +32,11 @@ public class SshConnection {
     }
 
     public Session connect(String host, String user, String pass, String fingerprint, String purpose) throws Exception {
+        // Without a pinned host key, whoever answers on this address would get the saved password.
+        if (fingerprint == null || fingerprint.isBlank()) {
+            throw new SecurityException("SSH_AUTH_FAILED: no host key fingerprint saved for this server; "
+                + "run Test Connection on the application and save it");
+        }
         String key = cacheKey(host, user, fingerprint, purpose);
         Session session = sessionCache.get(key);
         if (session != null && session.isConnected()) {

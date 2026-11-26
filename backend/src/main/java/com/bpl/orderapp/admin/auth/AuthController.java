@@ -1,5 +1,6 @@
 package com.bpl.orderapp.admin.auth;
 
+import com.bpl.orderapp.admin.websocket.LiveSocketRegistry;
 import com.bpl.orderapp.admin.user.UserApplicationAssignmentRepository;
 import com.bpl.orderapp.admin.user.User;
 import com.bpl.orderapp.admin.user.UserRepository;
@@ -116,6 +117,7 @@ public class AuthController {
     private final UserRepository userRepository;
     private final FindByIndexNameSessionRepository<?> sessionRepository;
     private final LoginAttemptLimiter attemptLimiter;
+    private final LiveSocketRegistry liveSockets;
 
     public AuthController(
         UserApplicationAssignmentRepository assignmentRepository,
@@ -124,8 +126,10 @@ public class AuthController {
         AuditWriter auditWriter,
         UserRepository userRepository,
         FindByIndexNameSessionRepository<?> sessionRepository,
-        LoginAttemptLimiter attemptLimiter
+        LoginAttemptLimiter attemptLimiter,
+        LiveSocketRegistry liveSockets
     ) {
+        this.liveSockets = liveSockets;
         this.attemptLimiter = attemptLimiter;
         this.sessionRepository = sessionRepository;
         this.assignmentRepository = assignmentRepository;
@@ -374,6 +378,8 @@ public class AuthController {
             .stream()
             .filter(sid -> !sid.equals(keepSessionId))
             .forEach(sessionRepository::deleteById);
+        // Includes this tab's socket, which reconnects on the session that was kept.
+        liveSockets.closeForUser(username);
 
         try {
             auditWriter.write("CHANGE_PASSWORD", username, role, null, null, id,
@@ -549,7 +555,9 @@ public class AuthController {
             // SessionRepositoryFilter (on the way out, when the
             // response is committed) deletes the matching
             // SPRING_SESSION and SPRING_SESSION_ATTRIBUTES rows.
+            String sessionId = session.getId();
             session.invalidate();
+            liveSockets.closeForHttpSession(sessionId);
         } else {
             log.info("Logout: no active session (idempotent 204)");
         }

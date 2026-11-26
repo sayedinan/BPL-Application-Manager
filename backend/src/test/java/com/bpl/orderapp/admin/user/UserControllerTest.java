@@ -45,6 +45,7 @@ class UserControllerTest {
     @Autowired private MockMvc mvc;
 
     @MockBean private FindByIndexNameSessionRepository<?> sessionRepository;
+    @MockBean private com.bpl.orderapp.admin.websocket.LiveSocketRegistry liveSockets;
     @MockBean private BCryptPasswordEncoder encoder;
     @MockBean private UserRepository userRepository;
     @MockBean private AuditWriter auditWriter;

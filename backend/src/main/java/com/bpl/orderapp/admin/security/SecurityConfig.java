@@ -1,5 +1,7 @@
 package com.bpl.orderapp.admin.security;
 
+import com.bpl.orderapp.admin.user.UserRepository;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import com.bpl.orderapp.admin.ratelimit.ClientAddress;
 import com.bpl.orderapp.admin.ratelimit.RateLimitFilter;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,10 +45,6 @@ import org.springframework.security.web.header.writers.StaticHeadersWriter;
  *
  * <h2>What this configuration does NOT do</h2>
  * <ul>
- *   <li>It does not enforce the mustChangePassword lock. That
- *       rule is fundamentally a frontend concern (route guard);
- *       server-side enforcement is forward-looking and lands
- *       with a more complete filter chain.</li>
  *   <li>It does not enforce Admin+ on the user-management
  *       endpoints. The reset-password controller documents this
  *       gap; a future filter chain will add role-based access
@@ -83,6 +81,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             ClientAddress clientAddress,
+            UserRepository userRepository,
             @Value("${rate-limit.login-per-second:10}") int loginPerSecond,
             @Value("${rate-limit.api-per-ip-per-minute:6000}") int apiPerAddressPerMinute,
             @Value("${rate-limit.api-per-user-per-minute:1200}") int apiPerUserPerMinute) throws Exception {
@@ -144,6 +143,8 @@ public class SecurityConfig {
             // After the session's user is loaded, so limits can be per user.
             .addFilterAfter(new RateLimitFilter(clientAddress, loginPerSecond,
                 apiPerAddressPerMinute, apiPerUserPerMinute), SecurityContextHolderFilter.class)
+
+            .addFilterBefore(new PasswordChangeRequiredFilter(userRepository), AuthorizationFilter.class)
 
             // Absolute 90-day cap on any login, including sliding
             // "remember me" sessions. Runs before the context is loaded,

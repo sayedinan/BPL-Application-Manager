@@ -78,6 +78,7 @@ class AuthControllerTest {
     @MockBean private UserRepository userRepository;
     @MockBean private AuditWriter auditWriter;
     @MockBean private FindByIndexNameSessionRepository<?> sessionRepository;
+    @MockBean private com.bpl.orderapp.admin.websocket.LiveSocketRegistry liveSockets;
 
     private static final String TEST_PASSWORD = "The-real-password1";
     private static final String TEST_HASH = new BCryptPasswordEncoder(10).encode(TEST_PASSWORD);

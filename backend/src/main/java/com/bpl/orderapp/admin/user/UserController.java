@@ -8,6 +8,7 @@ import com.bpl.orderapp.admin.user.dto.UpdateUserRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import com.bpl.orderapp.admin.websocket.LiveSocketRegistry;
 import com.bpl.orderapp.admin.websocket.WebSocketConnectionRepository;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -101,12 +102,15 @@ public class UserController {
     private final UserApplicationAssignmentRepository assignmentRepository;
     private final WebSocketConnectionRepository connectionRepository;
     private final UserUpdateService userUpdateService;
+    private final LiveSocketRegistry liveSockets;
 
     public UserController(FindByIndexNameSessionRepository<?> sessionRepository, BCryptPasswordEncoder encoder, AuditWriter auditWriter,
                           UserRepository userRepository, ApplicationRepository applicationRepository,
                           UserApplicationAssignmentRepository assignmentRepository,
                           WebSocketConnectionRepository connectionRepository,
-                          UserUpdateService userUpdateService) {
+                          UserUpdateService userUpdateService,
+                          LiveSocketRegistry liveSockets) {
+        this.liveSockets = liveSockets;
         this.userUpdateService = userUpdateService;
         this.connectionRepository = connectionRepository;
         this.sessionRepository = sessionRepository;
@@ -216,6 +220,7 @@ public class UserController {
         if (username == null) return;
         new java.util.ArrayList<>(sessionRepository.findByPrincipalName(username).keySet())
             .forEach(sessionRepository::deleteById);
+        liveSockets.closeForUser(username);
     }
 
     @DeleteMapping("/{id}")
@@ -341,6 +346,8 @@ public class UserController {
         UserUpdateService.Result result = userUpdateService.update(id, req, callerIsSysAdmin);
         // Must run after the update has committed (see the note above).
         revokeSessions(result.usernameToRevoke());
+        // New assignments do not sign the user out, but the live stream must be re-checked.
+        liveSockets.closeForUser(result.usernameToDisconnect());
         java.util.Map<String, Object> detail = result.auditDetail();
 
         try {

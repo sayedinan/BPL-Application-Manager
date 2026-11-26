@@ -1,5 +1,9 @@
 package com.bpl.orderapp.admin.websocket;
 
+import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.handler.WebSocketHandlerDecorator;
+import org.springframework.web.socket.server.support.HttpSessionHandshakeInterceptor;
 import com.bpl.orderapp.admin.log.WebSocketLimits;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,15 +23,20 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private final WebSocketAccessInterceptor accessInterceptor;
     private final String allowedOrigin;
 
-    public WebSocketConfig(WebSocketAccessInterceptor accessInterceptor,
+    private final LiveSocketRegistry liveSockets;
+
+    public WebSocketConfig(WebSocketAccessInterceptor accessInterceptor, LiveSocketRegistry liveSockets,
                            @Value("${spring.cors.allowed-origins}") String allowedOrigin) {
         this.accessInterceptor = accessInterceptor;
+        this.liveSockets = liveSockets;
         this.allowedOrigin = allowedOrigin;
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws").setAllowedOrigins(allowedOrigin);
+        registry.addEndpoint("/ws").setAllowedOrigins(allowedOrigin)
+            // Records which login opened each socket (see LiveSocketRegistry).
+            .addInterceptors(new HttpSessionHandshakeInterceptor());
     }
 
     @Override
@@ -45,6 +54,19 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
+        registration.addDecoratorFactory(handler -> new WebSocketHandlerDecorator(handler) {
+            @Override
+            public void afterConnectionEstablished(WebSocketSession socket) throws Exception {
+                liveSockets.add(socket);
+                super.afterConnectionEstablished(socket);
+            }
+
+            @Override
+            public void afterConnectionClosed(WebSocketSession socket, CloseStatus status) throws Exception {
+                liveSockets.remove(socket.getId());
+                super.afterConnectionClosed(socket, status);
+            }
+        });
     }
 
     @Bean

@@ -277,6 +277,12 @@ public class ApplicationController {
         String smsExternalOnlineMessage = (String) req.get("smsExternalOnlineMessage");
         String smsExternalOfflineMessage = (String) req.get("smsExternalOfflineMessage");
         rejectIfAnySmsTooLong(smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage);
+        String fingerprint = (String) req.get("sshHostKeyFingerprint");
+        if (fingerprint == null || fingerprint.isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST,
+                "SSH host key fingerprint is required: run Test Connection first");
+        }
         String encPassword = cipher.encrypt(sshPassword);
         validateScripts(httpRequest, startScript, stopScript, logScript);
 
@@ -285,7 +291,7 @@ public class ApplicationController {
         newApp.setServerIp(serverAddress);
         newApp.setSshUsername(sshUsername);
         newApp.setSshPasswordEnc(encPassword);
-        newApp.setSshHostKeyFingerprint((String) req.get("sshHostKeyFingerprint"));
+        newApp.setSshHostKeyFingerprint(fingerprint.trim());
         newApp.setStartScript(startScript);
         newApp.setStopScript(stopScript);
         newApp.setLogScript(logScript);

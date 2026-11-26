@@ -7,15 +7,17 @@ import { startLiveStream, stopLiveStream } from '@/lib/liveStream';
 // audit), and pages follow live updates over the same connection (see
 // lib/liveStream.ts) instead of opening their own.
 export function PresenceConnection(): null {
-  const { status } = useAuth();
+  const { status, user } = useAuth();
+  // The server refuses the connection until a forced password change is done.
+  const locked = Boolean(user?.mustChangePassword);
 
   useEffect(() => {
-    if (status !== 'authenticated') return;
+    if (status !== 'authenticated' || locked) return;
     startLiveStream();
     return () => {
       stopLiveStream();
     };
-  }, [status]);
+  }, [status, locked]);
 
   return null;
 }

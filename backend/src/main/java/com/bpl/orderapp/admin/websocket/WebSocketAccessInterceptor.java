@@ -84,7 +84,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
         StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
         if (accessor == null || accessor.getCommand() == null) return message;
         switch (accessor.getCommand()) {
-            case CONNECT -> handleConnect(accessor);
+            case CONNECT, STOMP -> handleConnect(accessor);
             case SUBSCRIBE -> handleSubscribe(accessor);
             case DISCONNECT -> cleanupSession(accessor.getSessionId());
             case UNSUBSCRIBE -> handleUnsubscribe(accessor);
@@ -93,11 +93,14 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
                 // Anything else would let a client publish straight onto
                 // broker topics (/topic/...) and forge logs/status/audit events.
                 String dest = accessor.getDestination();
-                if (dest == null || !dest.startsWith("/app")) {
+                if (dest == null || !dest.startsWith("/app/")) {
                     throw new MessageDeliveryException("SEND to this destination is not allowed");
                 }
             }
-            default -> {}
+            case ACK, NACK -> {}
+            // Everything else is refused. The broker treats a client's MESSAGE frame like
+            // SEND, so letting it through would let anyone publish to any topic.
+            default -> throw new MessageDeliveryException("This STOMP command is not allowed");
         }
         return message;
     }
