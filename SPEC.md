@@ -211,6 +211,7 @@ SHELLCHECK_UNAVAILABLE
 | `DUPLICATE_NAME` | 409 | User/application name conflict |
 | `IDEMPOTENCY_CONFLICT` | 409 | Duplicate idempotency key |
 | `DATABASE_BUSY` | 503 | SQLite write lock not available within busy_timeout; retry (`Retry-After: 1`) |
+| `RATE_LIMITED` | 429 | Too many requests or password attempts; wait for `Retry-After` seconds |
 
 ### 4.3 Endpoints
 
@@ -373,15 +374,25 @@ script-src 'self';
 style-src 'self' 'unsafe-inline';
 img-src 'self' data:;
 font-src 'self';
-connect-src 'self' wss:;
+connect-src 'self';
+object-src 'none';
 frame-ancestors 'none';
 base-uri 'self';
 form-action 'self'
 ```
 
 ### 8.6 Rate Limiting
-- **Login:** 10 req/s per IP (Caddy)
-- **API:** Bucket4j per-user + per-IP (configurable)
+All limits are enforced by the backend (Bucket4j, in memory); the stock Caddy image has no rate limiter. A blocked request gets `429`, code `RATE_LIMITED`, and `Retry-After`.
+
+| Limit | Default | Setting (`rate-limit.*`) |
+|---|---|---|
+| Sign-in requests per address | 10 per second | `login-per-second` |
+| Password attempts per username + address (sign-in and change-password); a correct password resets it | 10, refilled over 15 minutes | `login-failures`, `login-failure-window` |
+| API and WebSocket handshakes per user | 1200 per minute | `api-per-user-per-minute` |
+| API and WebSocket handshakes per address | 6000 per minute | `api-per-ip-per-minute` |
+
+- `rate-limit.trust-forwarded-for` (default `false`): take the client address from the last `X-Forwarded-For` entry. Turn on only when the backend is reachable solely through the proxy (docker-compose does).
+- Not covered: guessing spread across many addresses. `/actuator/*` is not limited.
 - **WS:** Connection limits (§5.4)
 
 ---
@@ -453,7 +464,7 @@ BPL-Order-Application-Admin/
 services:
   backend:      Distroless Java 25, read-only, non-root; SQLite file on the bplData volume (/data), nightly backups on bplBackups (/backups)
   frontend:     Nginx + Brotli, read-only
-  caddy:        TLS termination, security headers, rate limit
+  caddy:        TLS termination, security headers
 ```
 
 ### 11.2 Secrets (External)

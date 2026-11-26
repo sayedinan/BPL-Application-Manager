@@ -10,6 +10,7 @@ import com.bpl.orderapp.admin.auth.dto.MeResponse;
 import com.bpl.orderapp.admin.common.InvalidCredentialsException;
 import com.bpl.orderapp.admin.audit.AuditWriter;
 import com.bpl.orderapp.admin.security.SessionConfig;
+import com.bpl.orderapp.admin.ratelimit.LoginAttemptLimiter;
 import jakarta.servlet.http.HttpSession;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
@@ -114,6 +115,7 @@ public class AuthController {
     private final AuditWriter auditWriter;
     private final UserRepository userRepository;
     private final FindByIndexNameSessionRepository<?> sessionRepository;
+    private final LoginAttemptLimiter attemptLimiter;
 
     public AuthController(
         UserApplicationAssignmentRepository assignmentRepository,
@@ -121,8 +123,10 @@ public class AuthController {
         SecurityContextRepository securityContextRepository,
         AuditWriter auditWriter,
         UserRepository userRepository,
-        FindByIndexNameSessionRepository<?> sessionRepository
+        FindByIndexNameSessionRepository<?> sessionRepository,
+        LoginAttemptLimiter attemptLimiter
     ) {
+        this.attemptLimiter = attemptLimiter;
         this.sessionRepository = sessionRepository;
         this.assignmentRepository = assignmentRepository;
         this.encoder = encoder;
@@ -136,6 +140,10 @@ public class AuthController {
             @Valid @RequestBody LoginRequest request,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
+        // Throws 429 once this username has had too many tries from this address.
+        // Applies to unknown usernames too, so it reveals nothing about them.
+        attemptLimiter.acquire(request.username(), httpRequest);
+
         // 1. Look up the user through the repository.
         java.util.Optional<User> found = userRepository.findByUsername(request.username());
 
@@ -179,6 +187,7 @@ public class AuthController {
             }
             throw new InvalidCredentialsException();
         }
+        attemptLimiter.succeeded(request.username(), httpRequest);
 
         // 3. Success. Establish the server-side session:
         //    a) Build a SecurityContext with the user's identity
@@ -321,6 +330,9 @@ public class AuthController {
         String role = user.getRole();
         String currentHash = user.getPasswordHash();
 
+        // A signed-in session must not be a way to guess the password quickly.
+        attemptLimiter.acquire(username, httpRequest);
+
         // 2. Re-validate the current password. This is the
         //    no-session identity check; the SPA also enforces it
         //    (mustChangePassword routes to here, and the user
@@ -331,6 +343,7 @@ public class AuthController {
                 username);
             throw new InvalidCredentialsException();
         }
+        attemptLimiter.succeeded(username, httpRequest);
 
         // 3. Reject new password = old password. This is a UX
         //    guard, not a security one (the hash is bcrypt, so

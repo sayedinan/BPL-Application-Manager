@@ -41,6 +41,17 @@ public class GlobalExceptionHandler {
 
     private static final String ERROR_TYPE_BASE = "https://errors.bpl-orderapp.com/";
 
+    @ExceptionHandler(com.bpl.orderapp.admin.ratelimit.TooManyRequestsException.class)
+    public ResponseEntity<ProblemDetail> handleTooManyRequests(
+            com.bpl.orderapp.admin.ratelimit.TooManyRequestsException ex) {
+        ProblemDetail pd = baseProblem(ErrorCode.RATE_LIMITED, HttpStatus.TOO_MANY_REQUESTS,
+            "Too many attempts. Please wait a few minutes and try again.");
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .header("Retry-After", Long.toString(ex.retryAfterSeconds()))
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(pd);
+    }
+
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<ProblemDetail> handleInvalidCredentials(InvalidCredentialsException ex) {
         // The detail message is generic by design — never reveal

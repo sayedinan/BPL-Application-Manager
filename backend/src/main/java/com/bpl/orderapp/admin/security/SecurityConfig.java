@@ -1,5 +1,8 @@
 package com.bpl.orderapp.admin.security;
 
+import com.bpl.orderapp.admin.ratelimit.ClientAddress;
+import com.bpl.orderapp.admin.ratelimit.RateLimitFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -9,6 +12,8 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
+import org.springframework.security.web.header.writers.StaticHeadersWriter;
 
 /**
  * Spring Security filter chain (SPEC §8.1, §8.2).
@@ -62,9 +67,25 @@ import org.springframework.security.web.context.SecurityContextRepository;
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
+    /**
+     * SPEC §8.5. The Caddyfile sends this same policy for the web page itself; a
+     * test fails if the two drift apart. {@code 'self'} also covers the same-origin
+     * WebSocket.
+     */
+    static final String CONTENT_SECURITY_POLICY =
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        + "font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; "
+        + "base-uri 'self'; form-action 'self'";
+
+    static final String PERMISSIONS_POLICY = "camera=(), microphone=(), geolocation=(), payment=(), usb=()";
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            ClientAddress clientAddress,
+            @Value("${rate-limit.login-per-second:10}") int loginPerSecond,
+            @Value("${rate-limit.api-per-ip-per-minute:6000}") int apiPerAddressPerMinute,
+            @Value("${rate-limit.api-per-user-per-minute:1200}") int apiPerUserPerMinute) throws Exception {
         http
             // CSRF is disabled for the API endpoints. The session
             // cookie is HttpOnly + SameSite=Strict, which means
@@ -112,6 +133,17 @@ public class SecurityConfig {
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
             )
+
+            // Browser security headers. Spring already adds nosniff,
+            // X-Frame-Options: DENY and, over HTTPS, HSTS.
+            .headers(headers -> headers
+                .contentSecurityPolicy(csp -> csp.policyDirectives(CONTENT_SECURITY_POLICY))
+                .referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.NO_REFERRER))
+                .addHeaderWriter(new StaticHeadersWriter("Permissions-Policy", PERMISSIONS_POLICY)))
+
+            // After the session's user is loaded, so limits can be per user.
+            .addFilterAfter(new RateLimitFilter(clientAddress, loginPerSecond,
+                apiPerAddressPerMinute, apiPerUserPerMinute), SecurityContextHolderFilter.class)
 
             // Absolute 90-day cap on any login, including sliding
             // "remember me" sessions. Runs before the context is loaded,

@@ -39,4 +39,6 @@ public final class ErrorCode {
     // SQLite allows one writer. A request that waited out busy_timeout for the
     // write lock gets 503 so the UI can say "busy, retry" instead of a 500.
     public static final String DATABASE_BUSY               = "DATABASE_BUSY";
+    // Too many requests or password attempts; the response carries Retry-After.
+    public static final String RATE_LIMITED                = "RATE_LIMITED";
 }

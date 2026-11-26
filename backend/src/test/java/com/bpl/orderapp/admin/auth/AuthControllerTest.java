@@ -64,7 +64,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 @WebMvcTest(AuthController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class,
+    com.bpl.orderapp.admin.ratelimit.LoginAttemptLimiter.class,
+    com.bpl.orderapp.admin.ratelimit.ClientAddress.class})
 class AuthControllerTest {
 
     @Autowired private MockMvc mvc;
@@ -559,5 +561,69 @@ class AuthControllerTest {
             .andExpect(status().isNoContent())
             .andExpect(cookie().exists("SESSION"))
             .andExpect(cookie().maxAge("SESSION", 0));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions tryLogin(String username, String password)
+            throws Exception {
+        return mvc.perform(post("/api/v1/auth/login")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(new LoginRequest(username, password))));
+    }
+
+    @Test
+    void login_afterTooManyFailures_isBlocked_withoutCheckingThePassword() throws Exception {
+        when(userRepository.findByUsername("guessed")).thenReturn(
+            Optional.of(testUser(ALICE_ID, "guessed", "USER", TEST_HASH, false)));
+        for (int i = 0; i < 10; i++) {
+            tryLogin("guessed", "wrong").andExpect(status().isUnauthorized());
+        }
+        org.mockito.Mockito.clearInvocations(encoder);
+        when(encoder.matches(TEST_PASSWORD, TEST_HASH)).thenReturn(true);
+
+        // Even the right password is refused while blocked.
+        tryLogin("guessed", TEST_PASSWORD)
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.code").value("RATE_LIMITED"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                .header().exists("Retry-After"));
+        verify(encoder, never()).matches(anyString(), anyString());
+    }
+
+    @Test
+    void login_success_clearsTheFailureCount() throws Exception {
+        when(userRepository.findByUsername("clumsy")).thenReturn(
+            Optional.of(testUser(ALICE_ID, "clumsy", "USER", TEST_HASH, false)));
+        when(encoder.matches(TEST_PASSWORD, TEST_HASH)).thenReturn(true);
+
+        for (int round = 0; round < 2; round++) {
+            for (int i = 0; i < 9; i++) {
+                tryLogin("clumsy", "wrong").andExpect(status().isUnauthorized());
+            }
+            tryLogin("clumsy", TEST_PASSWORD).andExpect(status().isOk());
+        }
+    }
+
+    @Test
+    void changePassword_guessingTheCurrentPassword_isBlocked() throws Exception {
+        when(userRepository.findByUsername("victim")).thenReturn(
+            Optional.of(testUser(ALICE_ID, "victim", "USER", TEST_HASH, false)));
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(new UsernamePasswordAuthenticationToken(
+            "victim", null, List.of(new SimpleGrantedAuthority("ROLE_USER"))));
+        SecurityContextHolder.setContext(context);
+        String body = "{\"username\":\"victim\",\"oldPassword\":\"wrong-guess-1A!\","
+            + "\"newPassword\":\"Brand-new-pass1!\"}";
+        try {
+            for (int i = 0; i < 10; i++) {
+                mvc.perform(post("/api/v1/auth/change-password")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isUnauthorized());
+            }
+            mvc.perform(post("/api/v1/auth/change-password")
+                    .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isTooManyRequests());
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
     }
 }

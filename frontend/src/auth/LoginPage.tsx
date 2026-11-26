@@ -55,6 +55,8 @@ export function LoginPage(): JSX.Element {
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setError('Incorrect username or password.');
+      } else if (err instanceof ApiError && err.status === 429) {
+        setError('Too many sign-in attempts. Please wait a few minutes and try again.');
       } else {
         setError('Something went wrong. Please try again.');
       }

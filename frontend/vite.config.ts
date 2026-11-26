@@ -10,6 +10,11 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    // The CSP allows fonts only from our own files (font-src 'self'), so never
+    // embed a small font into the CSS as a data: URL.
+    assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf)$/.test(file) ? false : undefined),
+  },
   server: {
     port: 5173,
     proxy: {

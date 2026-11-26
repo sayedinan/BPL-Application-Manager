@@ -1,6 +1,20 @@
 :443 {
 	tls /certs/server.crt /certs/server.key
 
+	# Browser security headers (SPEC 8.5). "defer" applies them after the
+	# upstream replies, replacing its copies instead of adding duplicates.
+	# Keep the policy identical to SecurityConfig.CONTENT_SECURITY_POLICY.
+	header {
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		-Server
+		defer
+	}
+
 	handle /api/* {
 		reverse_proxy backend:8080
 	}
