@@ -345,7 +345,7 @@ export function DashboardPlaceholder(): JSX.Element {
               </span>
               <ul className="flex flex-wrap gap-x-4 gap-y-1">
                 {attentionRows.slice(0, ATTENTION_NAMED).map(({ app, state }) => (
-                  <li key={app.id}>
+                  <li key={app.id} className="min-w-0 [overflow-wrap:anywhere]">
                     <Link to={appPath(app.name)} className="font-medium text-ink hover:underline">
                       {app.name}
                     </Link>{' '}

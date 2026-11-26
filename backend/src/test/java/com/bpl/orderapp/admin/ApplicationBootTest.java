@@ -9,8 +9,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -21,6 +24,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
  * boot on the same file migrates nothing, and the session created before the
  * restart is still valid afterwards (proves SPRING_SESSION works on SQLite).
  */
+@ExtendWith(OutputCaptureExtension.class)
 class ApplicationBootTest {
 
     @TempDir
@@ -48,7 +52,7 @@ class ApplicationBootTest {
     }
 
     @Test
-    void bootsTwiceOnTheSameFileAndKeepsTheSession() throws Exception {
+    void bootsTwiceOnTheSameFileAndKeepsTheSession(CapturedOutput output) throws Exception {
         String cookie;
 
         try (ConfigurableApplicationContext ctx = boot()) {
@@ -88,6 +92,9 @@ class ApplicationBootTest {
             assertEquals(1, jdbc.queryForObject(
                     "select count(*) from users where role = 'SYS_ADMIN'", Integer.class),
                     "seeder must not create a second Sys.Admin");
+            // Spring's default in-memory user is unused here and must not log a password.
+            assertTrue(!output.getAll().contains("Using generated security password"),
+                    "a generated Spring password was logged");
 
             HttpResponse<String> me = send(HttpRequest.newBuilder(URI.create(base(ctx) + "/api/v1/auth/me"))
                     .header("Cookie", cookie).build());

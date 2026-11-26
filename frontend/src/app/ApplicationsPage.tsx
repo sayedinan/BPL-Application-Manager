@@ -414,23 +414,29 @@ export function ApplicationsPage(): JSX.Element {
           </Card>
         ) : (
           <Card className="overflow-x-auto">
-            <table className="w-full min-w-[20rem] text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-rule bg-sunken text-left text-xs font-semibold uppercase tracking-wider text-muted">
-                  <th className="px-4 py-3 font-semibold">Name</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 font-semibold text-right">Actions</th>
+                  <th className="px-3 py-3 font-semibold sm:px-4">Name</th>
+                  <th className="hidden px-4 py-3 font-semibold sm:table-cell">Status</th>
+                  <th className="px-3 py-3 font-semibold text-right sm:px-4">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-panel">
                 {apps.map((app) => (
                   <tr key={app.id} className="border-b border-rule transition-theme last:border-0 hover:bg-sunken">
-                    <td className="px-4 py-3 font-medium text-ink">{app.name}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3 [overflow-wrap:anywhere] sm:[overflow-wrap:normal] font-medium text-ink sm:px-4">
+                      {app.name}
+                      {/* Phones have no room for a Status column. */}
+                      <div className="mt-1 sm:hidden">
+                        <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>
+                      </div>
+                    </td>
+                    <td className="hidden px-4 py-3 sm:table-cell">
                       <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-2">
+                    <td className="px-3 py-3 sm:px-4">
+                      <div className="ml-auto grid w-36 grid-cols-2 gap-2 sm:flex sm:w-auto sm:justify-end">
                         <Button size="sm" variant="secondary" onClick={() => setHealthApp(app)}>
                           Health
                         </Button>

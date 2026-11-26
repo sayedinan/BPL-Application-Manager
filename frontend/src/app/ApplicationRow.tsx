@@ -109,16 +109,16 @@ export function ApplicationRow({
     >
       {/* DOM order is name, action, strip so keyboard and screen-reader order reads
           "name, Start/Stop" first; md:order-* puts the status column first visually.
-          On phones the badge sits on the name line (saves a row); on wide screens
-          it is its own column. */}
+          On phones the badge sits above the name, which wraps so similar names stay
+          distinct next to Start/Stop; on wide screens the badge is its own column. */}
       <div className="min-w-0 md:order-2">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-col items-start gap-1 md:flex-row md:items-center md:gap-2">
           <span className="shrink-0 md:hidden">
             <Badge tone={badge.tone}>{badge.label}</Badge>
           </span>
           <Link
             to={appPath(app.name)}
-            className="block truncate font-semibold text-ink hover:text-accent hover:underline"
+            className="block max-w-full [overflow-wrap:anywhere] font-semibold text-ink hover:text-accent hover:underline md:truncate"
             title={`${app.name}: open details`}
           >
             {app.name}
