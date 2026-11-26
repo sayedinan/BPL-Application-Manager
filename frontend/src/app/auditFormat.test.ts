@@ -8,8 +8,7 @@ import {
   filterOptions,
   hasActiveFilters,
   targetLabel,
-  type AuditLogRow,
-} from './auditFormat';
+  type AuditLogRow, isReversedRange } from './auditFormat';
 
 function row(over: Partial<AuditLogRow>): AuditLogRow {
   return {
@@ -100,5 +99,16 @@ describe('filterOptions', () => {
     expect(o.apps).toEqual(['invoice-api', 'ledger-sync', 'reports']);
     // Sorted by the label people see, not by the raw code.
     expect(o.actions).toEqual(['RESET_PASSWORD', 'STOP_APPLICATION', 'UPDATE_APPLICATION', 'APPLICATION_OFFLINE']);
+  });
+});
+
+describe('isReversedRange', () => {
+  const range = (from: string, to: string) => isReversedRange({ ...EMPTY_AUDIT_FILTERS, from, to });
+
+  it('is true only when both dates are set and From is after To', () => {
+    expect(range('2026-11-20', '2026-11-19')).toBe(true);
+    expect(range('2026-11-19', '2026-11-19')).toBe(false);
+    expect(range('2026-11-20', '')).toBe(false);
+    expect(range('', '2026-11-19')).toBe(false);
   });
 });

@@ -36,7 +36,8 @@ public class LoginAttemptLimiter {
     public void acquire(String username, HttpServletRequest request) {
         long wait = attempts.tryAcquire(key(username, request));
         if (wait > 0) {
-            log.warn("Password attempts blocked for user '{}' from {}", username, clientAddress.of(request));
+            // No username: this runs before the lookup, so it may be a mistyped password.
+            log.warn("Password attempts blocked from {}", clientAddress.of(request));
             throw new TooManyRequestsException(wait);
         }
     }

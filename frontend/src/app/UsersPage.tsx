@@ -477,15 +477,15 @@ export function UsersPage(): JSX.Element {
         <Card className="p-8 text-center text-sm text-muted">No users yet.</Card>
       ) : (
         <Card className="overflow-x-auto">
-          <table className="w-full min-w-[38rem] text-sm">
+          <table className="w-full text-sm sm:min-w-[38rem]">
             <thead>
               <tr className="border-b border-rule bg-sunken text-left text-xs font-semibold uppercase tracking-wider text-muted">
-                <th className="px-3 py-3 font-semibold w-12">#</th>
-                <th className="px-4 py-3 font-semibold">Username</th>
-                <th className="px-4 py-3 font-semibold">Applications</th>
-                <th className="px-4 py-3 font-semibold">Role</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
-                <th className="px-4 py-3 font-semibold text-right">Actions</th>
+                <th className="hidden px-3 py-3 font-semibold w-12 sm:table-cell">#</th>
+                <th className="px-2 py-3 font-semibold sm:px-4">Username</th>
+                <th className="hidden px-4 py-3 font-semibold sm:table-cell">Applications</th>
+                <th className="px-2 py-3 font-semibold sm:px-4">Role</th>
+                <th className="hidden px-4 py-3 font-semibold sm:table-cell">Status</th>
+                <th className="px-2 py-3 font-semibold text-right sm:px-4">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-panel">
@@ -495,12 +495,12 @@ export function UsersPage(): JSX.Element {
                 const canManageRow = canManageUser(currentUser?.role, u.role);
                 return (
                   <tr key={u.id} className="border-b border-rule transition-theme last:border-0 hover:bg-sunken">
-                    <td className="px-3 py-3 text-xs text-muted">{rowNum}</td>
-                    <td className="px-4 py-3 font-medium text-ink">
+                    <td className="hidden px-3 py-3 text-xs text-muted sm:table-cell">{rowNum}</td>
+                    <td className="break-all px-2 py-3 font-medium text-ink sm:break-normal sm:px-4">
                       {u.username}
                       {isSelf && <span className="ml-2 text-xs font-normal text-muted">(you)</span>}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="hidden px-4 py-3 sm:table-cell">
                       {u.role !== 'USER' ? (
                         <span className="text-xs text-muted">All applications</span>
                       ) : (u.assignedApplicationIds ?? []).length === 0 ? (
@@ -515,10 +515,10 @@ export function UsersPage(): JSX.Element {
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-2 py-3 sm:px-4">
                       <Badge tone={roleTone(u.role)} dot={false}>{roleLabel(u.role)}</Badge>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="hidden px-4 py-3 sm:table-cell">
                       {u.must_change_password ? (
                         <Badge tone="pending">Must change password</Badge>
                       ) : (
@@ -527,8 +527,8 @@ export function UsersPage(): JSX.Element {
                         </Badge>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-2">
+                    <td className="px-2 py-3 sm:px-4">
+                      <div className="flex flex-col items-end gap-2 sm:flex-row sm:justify-end">
                         <Button
                           size="sm"
                           variant="secondary"

@@ -263,7 +263,7 @@ public class ApplicationController {
         String serverIp = (String) req.get("serverIp");
         java.net.InetAddress serverAddress = IpAddresses.parseIpv4(serverIp);
         if (name != null && applicationRepository.existsByNameIgnoreCase(name)) {
-            throw new com.bpl.orderapp.admin.common.DuplicateNameException(name);
+            throw com.bpl.orderapp.admin.common.DuplicateNameException.application(name);
         }
         String sshUsername = (String) req.get("sshUsername");
         String sshPassword = (String) req.get("sshPassword");
@@ -584,7 +584,7 @@ public class ApplicationController {
         rejectIfAnySmsTooLong(smsStartMessage, smsStopMessage, smsExternalOnlineMessage, smsExternalOfflineMessage);
         java.net.InetAddress serverAddress = IpAddresses.parseIpv4(serverIp);
         if (name != null && applicationRepository.existsByNameIgnoreCaseAndIdNot(name, id)) {
-            throw new com.bpl.orderapp.admin.common.DuplicateNameException(name);
+            throw com.bpl.orderapp.admin.common.DuplicateNameException.application(name);
         }
         Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
 

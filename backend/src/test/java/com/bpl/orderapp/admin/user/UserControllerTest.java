@@ -162,6 +162,87 @@ class UserControllerTest {
     }
 
     @Test
+    void createUser_nameDifferingOnlyInCase_isRejected() throws Exception {
+        when(userRepository.existsByUsernameIgnoreCase("BOT")).thenReturn(true);
+
+        mvc.perform(post("/api/v1/users")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"BOT\",\"fullName\":\"Bot\",\"role\":\"USER\","
+                    + "\"email\":\"bot@example.com\",\"phoneNumber\":\"8801712345678\"}"))
+            .andExpect(status().isConflict());
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void updateUser_renameToAnotherNameDifferingOnlyInCase_isRejected() throws Exception {
+        aliceWithLiveSessions();
+        when(userRepository.existsByUsernameIgnoreCaseAndIdNot("BOT", TEST_USER_ID)).thenReturn(true);
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .put("/api/v1/users/" + TEST_USER_ID)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"BOT\"}"))
+            .andExpect(status().isConflict());
+
+        verify(userRepository, never()).save(any());
+    }
+
+    // The edit form always sends the username, so accounts that already differ
+    // only in case must stay editable while the name is left alone.
+    @Test
+    void updateUser_unchangedNameWithAnExistingCaseTwin_isStillSaved() throws Exception {
+        aliceWithLiveSessions();
+        when(userRepository.existsByUsernameIgnoreCaseAndIdNot("alice", TEST_USER_ID)).thenReturn(true);
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .put("/api/v1/users/" + TEST_USER_ID)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"alice\",\"email\":\"alice@example.com\"}"))
+            .andExpect(status().isOk());
+
+        verify(userRepository).save(any(User.class));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"bot ", " bot", "b ot", "bоt"})
+    void createUser_nameWithSpacesOrLookalikeLetters_isRejected(String name) throws Exception {
+        mvc.perform(post("/api/v1/users")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"" + name + "\",\"fullName\":\"Bot\",\"role\":\"USER\","
+                    + "\"email\":\"bot@example.com\",\"phoneNumber\":\"8801712345678\"}"))
+            .andExpect(status().isBadRequest());
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void updateUser_renameToANameWithSpaces_isRejected() throws Exception {
+        aliceWithLiveSessions();
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .put("/api/v1/users/" + TEST_USER_ID)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"al ice\"}"))
+            .andExpect(status().isBadRequest());
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void updateUser_existingNameWithSpaces_canStillBeSaved() throws Exception {
+        aliceWithLiveSessions().setUsername("Alice Smith");
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .put("/api/v1/users/" + TEST_USER_ID)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"Alice Smith\",\"email\":\"a@example.com\"}"))
+            .andExpect(status().isOk());
+
+        verify(userRepository).save(any(User.class));
+    }
+
+    @Test
     void resetPassword_userNotFound_returns404() throws Exception {
         UUID missing = UUID.randomUUID();
         when(userRepository.findById(missing)).thenReturn(Optional.empty());

@@ -40,7 +40,7 @@ class FlywayFromScratchTest {
     @Test
     void baselineAppliesAndSecondRunIsNoOp() throws Exception {
         var first = flyway().migrate();
-        assertEquals(1, first.migrationsExecuted, "only the baseline should be on the classpath");
+        assertEquals(2, first.migrationsExecuted, "V1 baseline and V2 username triggers");
 
         var second = flyway().migrate();
         assertEquals(0, second.migrationsExecuted, "second run must be a no-op");

@@ -166,7 +166,8 @@ public class UserController {
         if (!"USER".equals(role) && !callerIsSysAdmin) {
             throw new com.bpl.orderapp.admin.common.AdminCeilingException();
         }
-        if (userRepository.existsByUsername(username)) {
+        UserUpdateService.requireValidNewUsername(username);
+        if (userRepository.existsByUsernameIgnoreCase(username)) {
             throw new com.bpl.orderapp.admin.common.DuplicateNameException(username);
         }
         java.security.SecureRandom rng = new java.security.SecureRandom();

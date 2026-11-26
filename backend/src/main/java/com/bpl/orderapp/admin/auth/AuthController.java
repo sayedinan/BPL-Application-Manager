@@ -161,10 +161,12 @@ public class AuthController {
             // No such user. To avoid leaking which usernames exist,
             // run a real bcrypt comparison against a dummy hash so the
             // timing matches the "user exists, wrong password" path.
-            log.info("Login attempt for unknown user: '{}'", request.username());
+            // The typed name is deliberately left out of both logs: people sometimes type
+            // their password into the username box. The audit row keeps the source address.
+            log.info("Login attempt for an unknown user");
             encoder.matches(request.password(), DUMMY_BCRYPT_HASH);
             try {
-                auditWriter.write("LOGIN", request.username(), "UNKNOWN", null, null, null,
+                auditWriter.write("LOGIN", "(unknown user)", "UNKNOWN", null, null, null,
                     java.util.Map.of(), "FAILURE", httpRequest);
             } catch (Exception auditEx) {
                 log.warn("Audit write failed for failed LOGIN (unknown user)", auditEx);

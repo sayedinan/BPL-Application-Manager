@@ -564,6 +564,28 @@ class AuthControllerTest {
             .andExpect(cookie().maxAge("SESSION", 0));
     }
 
+    // People sometimes type a password into the username box, so a name that
+    // matches no account is never written down, in the audit log or the server log.
+    @Test
+    @org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
+    void login_unknownUsername_isNeverRecordedAsTyped(
+            org.springframework.boot.test.system.CapturedOutput output) throws Exception {
+        when(userRepository.findByUsername(anyString())).thenReturn(Optional.empty());
+
+        // Enough tries to also reach the "attempts blocked" warning.
+        for (int i = 0; i < 11; i++) {
+            tryLogin("Hunter2-Secret!", "wrong");
+        }
+
+        org.assertj.core.api.Assertions.assertThat(output.getAll())
+            .contains("Password attempts blocked")
+            .doesNotContainIgnoringCase("Hunter2-Secret!");
+        verify(auditWriter, org.mockito.Mockito.atLeastOnce()).write(
+            eq("LOGIN"), eq("(unknown user)"), eq("UNKNOWN"), org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.anyMap(), eq("FAILURE"), org.mockito.ArgumentMatchers.any());
+    }
+
     private org.springframework.test.web.servlet.ResultActions tryLogin(String username, String password)
             throws Exception {
         return mvc.perform(post("/api/v1/auth/login")

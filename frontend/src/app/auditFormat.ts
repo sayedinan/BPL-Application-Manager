@@ -84,6 +84,9 @@ export const EMPTY_AUDIT_FILTERS: AuditFilters = { user: '', action: '', app: ''
 
 export const hasActiveFilters = (f: AuditFilters): boolean => Object.values(f).some((v) => v !== '');
 
+/** No date can satisfy such a range; the page says so instead of just showing nothing. */
+export const isReversedRange = (f: AuditFilters): boolean => f.from !== '' && f.to !== '' && f.from > f.to;
+
 export function filterAuditRows(rows: AuditLogRow[], f: AuditFilters): AuditLogRow[] {
   const fromMs = f.from ? new Date(`${f.from}T00:00:00`).getTime() : null;
   // Inclusive end date: everything before the start of the following day.

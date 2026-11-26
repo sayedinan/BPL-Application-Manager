@@ -118,11 +118,11 @@ public class SysAdminSeeder implements ApplicationRunner {
     }
 
     private String freeUsername() {
-        if (!userRepository.existsByUsername(username)) {
+        if (!userRepository.existsByUsernameIgnoreCase(username)) {
             return username;
         }
         String candidate = username + "-recovery";
-        for (int i = 2; userRepository.existsByUsername(candidate); i++) {
+        for (int i = 2; userRepository.existsByUsernameIgnoreCase(candidate); i++) {
             candidate = username + "-recovery-" + i;
         }
         return candidate;

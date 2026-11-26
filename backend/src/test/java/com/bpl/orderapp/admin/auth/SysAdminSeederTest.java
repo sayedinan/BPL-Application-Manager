@@ -97,8 +97,8 @@ class SysAdminSeederTest {
 
     @Test
     void withNoSysAdminLeftAndTheNameTakenARecoveryAccountIsCreated(CapturedOutput output) throws Exception {
-        when(users.existsByUsername("admin")).thenReturn(true);
-        when(users.existsByUsername("admin-recovery")).thenReturn(true);
+        when(users.existsByUsernameIgnoreCase("admin")).thenReturn(true);
+        when(users.existsByUsernameIgnoreCase("admin-recovery")).thenReturn(true);
 
         seeder(dir.resolve("pw.txt")).run(null);
 

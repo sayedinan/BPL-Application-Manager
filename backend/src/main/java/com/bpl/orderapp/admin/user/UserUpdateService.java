@@ -52,6 +52,18 @@ public class UserUpdateService {
         }
     }
 
+    /**
+     * For new names and renames only, so older accounts stay editable. Spaces and
+     * letters from other alphabets can make one account pass for another.
+     */
+    static void requireValidNewUsername(String username) {
+        if (!username.matches("[A-Za-z0-9._@-]+")) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST,
+                "Username may contain only letters, numbers and . _ - @ (no spaces)");
+        }
+    }
+
     /** Safe against two requests at once: SQLite runs write transactions one at a time. */
     private void requireAnotherSysAdmin() {
         if (userRepository.countByRole("SYS_ADMIN") <= 1) {
@@ -112,7 +124,11 @@ public class UserUpdateService {
                 throw new org.springframework.web.server.ResponseStatusException(
                     org.springframework.http.HttpStatus.BAD_REQUEST, "username cannot be blank");
             }
-            if (userRepository.existsByUsernameAndIdNot(req.username(), id)) {
+            if (!req.username().equals(oldUsername)) {
+                requireValidNewUsername(req.username());
+            }
+            if (!req.username().equals(oldUsername)
+                    && userRepository.existsByUsernameIgnoreCaseAndIdNot(req.username(), id)) {
                 throw new com.bpl.orderapp.admin.common.DuplicateNameException(req.username());
             }
         }

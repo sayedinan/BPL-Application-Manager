@@ -53,7 +53,7 @@ class ApplicationBootTest {
 
         try (ConfigurableApplicationContext ctx = boot()) {
             JdbcTemplate jdbc = ctx.getBean(JdbcTemplate.class);
-            assertEquals(1, jdbc.queryForObject(
+            assertEquals(2, jdbc.queryForObject(
                     "select count(*) from flyway_schema_history where success = 1", Integer.class));
             assertEquals(1, jdbc.queryForObject(
                     "select count(*) from users where role = 'SYS_ADMIN'", Integer.class));
@@ -82,7 +82,7 @@ class ApplicationBootTest {
         // Second boot on the same file.
         try (ConfigurableApplicationContext ctx = boot()) {
             JdbcTemplate jdbc = ctx.getBean(JdbcTemplate.class);
-            assertEquals(1, jdbc.queryForObject(
+            assertEquals(2, jdbc.queryForObject(
                     "select count(*) from flyway_schema_history where success = 1", Integer.class),
                     "second boot must not apply any migration");
             assertEquals(1, jdbc.queryForObject(

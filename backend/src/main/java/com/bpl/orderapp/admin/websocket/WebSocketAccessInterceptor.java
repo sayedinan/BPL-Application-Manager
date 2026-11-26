@@ -60,6 +60,8 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
             t.setDaemon(true);
             return t;
         });
+    /** The one pending browser-closed check per username. */
+    private final ConcurrentHashMap<String, java.util.concurrent.ScheduledFuture<?>> pendingCloseChecks = new ConcurrentHashMap<>();
 
     public WebSocketAccessInterceptor(FindByIndexNameSessionRepository<?> sessionRepository, AuditWriter auditWriter,
                                       ApplicationEventPublisher events, UserRepository userRepository,
@@ -120,6 +122,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
         AtomicInteger userCount = perUserConnections.computeIfAbsent(username, k -> new AtomicInteger(0));
         if (userCount.get() >= maxPerUser) throw new MessageDeliveryException("Per-user connection limit reached");
         globalConnections.incrementAndGet(); userCount.incrementAndGet(); sessionUsers.put(sessionId, username);
+        cancelBrowserClosedCheck(username);
         connectionRepository.save(new WebSocketConnection(sessionId, username));
     }
 
@@ -197,14 +200,22 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
     // The user's last live connection dropped. Wait a grace period (covers page
     // refresh / reconnect), then log LOGOUT at the disconnect time if they are
     // still gone AND still have a live session (a manual logout already removed it).
+    // Reconnecting cancels the check, so the grace period always counts from the
+    // latest drop: a timer left from an earlier one must not fire during a later one.
     private void scheduleBrowserClosedCheck(String username, java.time.Instant disconnectedAt) {
-        closeScheduler.schedule(() -> {
+        cancelBrowserClosedCheck(username);
+        pendingCloseChecks.put(username, closeScheduler.schedule(() -> {
             try {
                 recordBrowserClosed(username, disconnectedAt);
             } catch (Exception e) {
                 log.warn("Browser-closed check failed for '{}'", username, e);
             }
-        }, CLOSE_GRACE_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+        }, CLOSE_GRACE_SECONDS, java.util.concurrent.TimeUnit.SECONDS));
+    }
+
+    private void cancelBrowserClosedCheck(String username) {
+        var pending = pendingCloseChecks.remove(username);
+        if (pending != null) pending.cancel(false);
     }
 
     void recordBrowserClosed(String username, java.time.Instant disconnectedAt) {

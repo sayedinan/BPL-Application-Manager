@@ -281,7 +281,8 @@ export function ApplicationsPage(): JSX.Element {
       {formOpen && (
         <Modal
           widthClass="max-w-xl"
-          onClose={() => { if (editingId !== null) cancelEdit(); else setShowForm(false); }}
+          // Closing discards what was typed, so the SSH password does not stay in memory.
+          onClose={() => { cancelEdit(); setShowForm(false); }}
         >
           <form onSubmit={editingId !== null ? handleUpdate : handleCreate} noValidate>
             <div className="border-b border-rule px-5 py-3.5">

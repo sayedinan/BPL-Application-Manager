@@ -13,6 +13,7 @@ import {
   filterAuditRows,
   filterOptions,
   hasActiveFilters,
+  isReversedRange,
   type AuditFilters,
   type AuditLogRow,
 } from '@/app/auditFormat';
@@ -357,7 +358,9 @@ export function LogsBox({ role }: { role?: string }) {
                   <p className="px-4 py-10 text-center text-sm text-muted">
                     {historyLoading
                       ? 'Loading entries…'
-                      : filtering
+                      : isReversedRange(filters)
+                        ? 'The From date is after the To date. Change one of them to see entries.'
+                        : filtering
                         ? 'No entries match these filters.'
                         : 'No audit entries yet.'}
                   </p>

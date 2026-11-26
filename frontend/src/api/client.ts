@@ -65,6 +65,7 @@ interface ProblemDetail {
   title?: string;
   status?: number;
   detail?: string;
+  message?: string;
   instance?: string;
   code?: string;
   details?: unknown;
@@ -148,9 +149,10 @@ export async function apiFetch<T>(
     const code = isProblemDetail(parsed) && typeof parsed.code === 'string'
       ? parsed.code
       : null;
-    const detail = isProblemDetail(parsed) && typeof parsed.detail === 'string'
-      ? parsed.detail
-      : response.statusText;
+    // A few endpoints (the SSH connection test) answer with their own body
+    // shape, which explains the failure in `message` instead of `detail`.
+    const detail = [parsed?.detail, parsed?.message].find((text) => typeof text === 'string')
+      ?? response.statusText;
     const details = isProblemDetail(parsed) ? parsed.details ?? null : null;
     throw new ApiError(
       detail || `HTTP ${response.status}`,

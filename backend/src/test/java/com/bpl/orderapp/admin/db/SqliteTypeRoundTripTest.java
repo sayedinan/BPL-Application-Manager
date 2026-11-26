@@ -74,6 +74,35 @@ class SqliteTypeRoundTripTest {
     }
 
     @Test
+    void usernameDuplicateChecksIgnoreCase() {
+        UUID id = users.save(newUser("casebot", "c@example.com", null)).getId();
+        reload();
+        org.assertj.core.api.Assertions.assertThat(users.existsByUsernameIgnoreCase("CaseBOT")).isTrue();
+        org.assertj.core.api.Assertions.assertThat(users.existsByUsernameIgnoreCase("casebot2")).isFalse();
+        // Changing only the case of your own name is not a clash.
+        org.assertj.core.api.Assertions.assertThat(users.existsByUsernameIgnoreCaseAndIdNot("CaseBot", id)).isFalse();
+        org.assertj.core.api.Assertions.assertThat(users.existsByUsernameIgnoreCaseAndIdNot("CaseBot", UUID.randomUUID())).isTrue();
+    }
+
+    // The app checks first, but two requests at once could both pass that check.
+    @Test
+    void theDatabaseItselfRefusesUsernamesDifferingOnlyInCase() {
+        users.saveAndFlush(newUser("twin", "t@example.com", null));
+        User other = users.saveAndFlush(newUser("other", "o@example.com", null));
+
+        org.assertj.core.api.Assertions
+            .assertThatThrownBy(() -> users.saveAndFlush(newUser("TWIN", "u@example.com", null)))
+            .hasStackTraceContaining("username already exists");
+        em.clear();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> em
+                .createNativeQuery("update users set username = 'Twin' where username = 'other'").executeUpdate())
+            .hasStackTraceContaining("username already exists");
+        // Changing only the case of your own name is allowed.
+        em
+            .createNativeQuery("update users set username = 'Other' where username = 'other'").executeUpdate();
+    }
+
+    @Test
     void userRoundTripAndStorageClasses() {
         User saved = users.save(newUser("alice", "a@example.com", "8801712345678"));
         UUID id = saved.getId();

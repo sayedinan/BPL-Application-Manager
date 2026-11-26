@@ -12,9 +12,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByUsername(String username);
 
-    boolean existsByUsername(String username);
+    /** For duplicate checks: names that differ only in case would pass for each other. */
+    boolean existsByUsernameIgnoreCase(String username);
 
-    boolean existsByUsernameAndIdNot(String username, UUID id);
+    boolean existsByUsernameIgnoreCaseAndIdNot(String username, UUID id);
 
     @Query("select u.email from User u "
          + "where u.role in ('SYS_ADMIN','ADMIN') and u.email is not null")

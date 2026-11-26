@@ -125,6 +125,18 @@ describe('apiFetch — non-401 error handling', () => {
     expect(err.details).toEqual({ newPassword: 'must be at least 12 characters' });
   });
 
+  it('uses `message` when the error body has no `detail` (SSH connection test)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ status: 'SSH_CONNECTION_FAILED', message: 'SSH host key fingerprint mismatch' }),
+        { status: 502, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    await expect(apiFetch('/applications/test-connection', { method: 'POST', body: {} }))
+      .rejects.toMatchObject({ status: 502, message: 'SSH host key fingerprint mismatch' });
+  });
+
   it('returns the parsed body on a 200 response', async () => {
     const payload = {
       id: 1,
