@@ -44,7 +44,7 @@ export function Sparkline({
   return (
     <div>
       <div className="mb-1 flex justify-between gap-2 text-xs">
-        <span className="font-medium text-ink/80">{label}</span>
+        <span className="font-medium text-ink">{label}</span>
         <span className="text-muted">
           {current === null ? 'no reading' : `${current.toFixed(decimals)}${unit}`}
         </span>
@@ -59,7 +59,7 @@ export function Sparkline({
         <path
           d={path}
           fill="none"
-          className="stroke-brand-500"
+          className="stroke-accent"
           strokeWidth={1.5}
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"

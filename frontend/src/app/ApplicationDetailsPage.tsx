@@ -71,7 +71,7 @@ function BackLink(): JSX.Element {
   return (
     <Link
       to="/"
-      className="mb-4 inline-block text-sm font-medium text-muted hover:text-ink/80"
+      className="mb-3 inline-block py-1 text-sm font-semibold text-accent hover:underline"
     >
       ← Dashboard
     </Link>
@@ -154,10 +154,10 @@ export function ApplicationDetailsPage(): JSX.Element {
 
   if (app === null) {
     return (
-      <div className="mx-auto max-w-6xl p-6 sm:p-8">
+      <div className="page">
         <BackLink />
         <Card className="p-8 text-center">
-          <h1 className="text-lg font-semibold text-ink dark:text-white">Application not found</h1>
+          <h1 className="text-lg font-semibold text-ink">Application not found</h1>
           <p className="mt-1 text-sm text-muted">
             It may have been deleted, or it isn't assigned to you.
           </p>
@@ -168,7 +168,7 @@ export function ApplicationDetailsPage(): JSX.Element {
 
   if (app === undefined) {
     return error ? (
-      <div className="mx-auto max-w-6xl p-6 sm:p-8">
+      <div className="page">
         <BackLink />
         <Alert>{error}</Alert>
       </div>
@@ -180,7 +180,7 @@ export function ApplicationDetailsPage(): JSX.Element {
   const runningTime = app.online ? formatRunningTime(app.startedAt) : null;
 
   return (
-    <div className="mx-auto max-w-6xl p-6 sm:p-8">
+    <div className="page">
       <BackLink />
       <PageHeader
         title={app.name}

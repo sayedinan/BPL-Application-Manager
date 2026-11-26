@@ -25,8 +25,8 @@ export function RangeButtons<K extends string>({
             className={
               'px-2.5 py-1 text-xs font-medium transition-colors ' +
               (active
-                ? 'bg-brand-500 text-white'
-                : 'bg-panel text-muted hover:bg-sunken dark:bg-sunken')
+                ? 'bg-brand-600 text-white'
+                : 'bg-panel text-muted hover:bg-sunken')
             }
           >
             {o.label}

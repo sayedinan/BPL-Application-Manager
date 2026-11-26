@@ -50,7 +50,7 @@ export function Modal({ onClose, children, widthClass = 'max-w-md' }: ModalProps
 
   return (
     <Dialog open onClose={onClose} className="relative z-40">
-      <DialogBackdrop className="fixed inset-0 bg-ink/50 backdrop-blur-[2px]" />
+      <DialogBackdrop className="fixed inset-0 bg-black/55 backdrop-blur-[2px]" />
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <DialogPanel
           ref={wirePanel}

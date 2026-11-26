@@ -17,7 +17,8 @@ export default {
         sunken: token('sunken'), // inset surfaces: table headers, code, inputs
         ink: token('ink'), // primary text
         muted: token('muted'), // secondary text (>= 4.5:1 on canvas and panel)
-        rule: token('rule'), // borders and dividers
+        rule: token('rule'), // card borders and dividers
+        field: token('field'), // input and control borders (>= 3:1)
         accent: token('accent'), // brand blue, interactive
         ok: { DEFAULT: token('ok'), bg: token('ok-bg') },
         warn: { DEFAULT: token('warn'), bg: token('warn-bg') },
@@ -25,17 +26,17 @@ export default {
         idle: { DEFAULT: token('idle'), bg: token('idle-bg') },
         maint: { DEFAULT: token('maint'), bg: token('maint-bg') },
         brand: {
-          50: '#eef6ff',
-          100: '#d9ecff',
-          200: '#b7dcff',
-          300: '#84c5ff',
-          400: '#4aa8ff',
-          500: '#1f8bfa',
-          600: '#0f6fdb', // primary action color
-          700: '#0f59ad',
-          800: '#134a8a',
-          900: '#0f2f52', // logo navy
-          950: '#0a1d33',
+          50: '#f0f4fb',
+          100: '#dfe7f6',
+          200: '#c3d2ee',
+          300: '#9bb3e2',
+          400: '#7190d0',
+          500: '#5379c0',
+          600: '#466ab3', // logo blue; primary actions
+          700: '#3a5793',
+          800: '#324a79',
+          900: '#1f3157',
+          950: '#0e1a33', // sidebar navy
         },
       },
       fontFamily: {
@@ -61,11 +62,19 @@ export default {
         '2xl': '0.875rem',
       },
       boxShadow: {
-        card: '0 1px 2px 0 rgb(14 27 44 / 0.04), 0 2px 8px -2px rgb(14 27 44 / 0.06)',
-        'card-hover': '0 2px 6px -1px rgb(14 27 44 / 0.10), 0 1px 2px -1px rgb(14 27 44 / 0.06)',
-        popover: '0 10px 30px -5px rgb(14 27 44 / 0.22)',
+        // A tight contact shadow plus a wide soft one: cards sit above the page.
+        card: '0 1px 2px 0 rgb(14 26 51 / 0.10), 0 6px 12px -6px rgb(14 26 51 / 0.14), 0 22px 40px -22px rgb(14 26 51 / 0.38)',
+        // Dark mode: a lit top edge and a deeper drop.
+        'card-dark': 'inset 0 1px 0 0 rgb(255 255 255 / 0.06), 0 18px 36px -18px rgb(0 0 0 / 0.75)',
+        hero: '0 2px 4px 0 rgb(14 26 51 / 0.18), 0 24px 44px -22px rgb(14 26 51 / 0.65)',
+        'card-hover': '0 2px 4px 0 rgb(14 26 51 / 0.12), 0 12px 20px -8px rgb(14 26 51 / 0.20), 0 28px 48px -22px rgb(14 26 51 / 0.45)',
+        popover: '0 16px 40px -10px rgb(14 26 51 / 0.34)',
       },
       keyframes: {
+        rise: {
+          from: { opacity: 0, transform: 'translateY(6px)' },
+          to: { opacity: 1, transform: 'translateY(0)' },
+        },
         pulseSoft: {
           '0%, 100%': { opacity: 1 },
           '50%': { opacity: 0.55 },
@@ -80,6 +89,7 @@ export default {
         },
       },
       animation: {
+        rise: 'rise 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) both',
         'pulse-soft': 'pulseSoft 1.8s ease-in-out infinite',
         'fade-in': 'fadeIn 0.18s ease-out',
         shimmer: 'shimmer 1.6s linear infinite',

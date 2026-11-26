@@ -20,7 +20,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps): JSX.Element {
   return (
     <Modal onClose={loading ? () => undefined : onCancel} widthClass="max-w-sm">
-      <div className="border-b border-rule bg-sunken px-5 py-3 pr-12">
+      <div className="border-b border-rule px-5 py-3.5 pr-12">
         <h2 className="text-base font-semibold text-ink">{title}</h2>
       </div>
       <div className="p-5">

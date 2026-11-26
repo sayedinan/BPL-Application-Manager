@@ -231,7 +231,7 @@ export function LogsBox({ role }: { role?: string }) {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rule bg-sunken px-4 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rule px-4 py-3">
         <Select
           aria-label="Log source"
           value={selectValue}
@@ -329,7 +329,7 @@ export function LogsBox({ role }: { role?: string }) {
           onScroll={handleScroll}
           tabIndex={0}
           aria-label={source === 'audit' ? 'Audit log entries' : 'Application log output'}
-          className="h-[60vh] min-h-[20rem] overflow-y-auto bg-panel transition-theme"
+          className={`h-[60vh] min-h-[20rem] overflow-y-auto ${source === 'audit' ? 'bg-panel' : 'bg-brand-950'}`}
         >
           {/* Measured by the ResizeObserver above to keep following as content grows. */}
           <div ref={contentRef}>
@@ -349,7 +349,7 @@ export function LogsBox({ role }: { role?: string }) {
                 )}
               </>
             ) : (
-              <pre className="whitespace-pre-wrap break-all bg-sunken px-4 py-3 font-mono text-xs leading-relaxed text-ink">
+              <pre className="whitespace-pre-wrap break-all px-4 py-3 font-mono text-xs leading-relaxed text-brand-100">
                 {lines.length > 0 ? lines.join('\n') : historyLoading ? 'Loading log…' : 'No log lines yet.'}
               </pre>
             )}

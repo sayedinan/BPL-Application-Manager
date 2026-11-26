@@ -1,13 +1,17 @@
 import { useTheme } from '@/lib/theme';
 
-export function ThemeToggle(): JSX.Element {
+export function ThemeToggle({
+  className = 'text-muted hover:bg-sunken hover:text-ink',
+}: {
+  className?: string;
+}): JSX.Element {
   const { theme, toggleTheme } = useTheme();
   return (
     <button
       type="button"
       onClick={toggleTheme}
       aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-theme hover:bg-sunken hover:text-ink"
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-theme ${className}`}
     >
       {theme === 'dark' ? (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">

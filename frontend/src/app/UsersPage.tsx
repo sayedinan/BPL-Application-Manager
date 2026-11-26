@@ -1,3 +1,4 @@
+import { CONTROL } from '@/components/ui/Field';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
@@ -28,11 +29,8 @@ interface Application {
   name: string;
 }
 
-const inputClass =
-  'w-full rounded-xl border border-rule bg-panel shadow-sm px-3 py-2 text-sm text-ink ' +
-  'placeholder:text-muted/70 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
-  ' dark:bg-sunken';
-const labelClass = 'mb-1 block text-sm font-medium text-ink/80';
+const inputClass = CONTROL;
+const labelClass = 'mb-1 block text-sm font-medium text-ink';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function roleTone(role: User['role']): BadgeTone {
@@ -344,7 +342,7 @@ export function UsersPage(): JSX.Element {
   const detailsUser = detailsUserId !== null ? users.find((u) => u.id === detailsUserId) ?? null : null;
 
   return (
-    <div className="p-6 sm:p-8 max-w-6xl mx-auto">
+    <div className="page">
       <PageHeader
         title="Users"
         description="Manage accounts, roles, and application assignments."
@@ -358,14 +356,14 @@ export function UsersPage(): JSX.Element {
       {error && <Alert className="mb-4">{error}</Alert>}
 
       {createdResult && (
-        <Card className="mb-6 max-w-xl border-ok/30 bg-ok-bg/60 p-5 dark:border-green-500/20 dark:bg-green-500/5">
-          <p className="mb-1 font-semibold text-ok dark:text-green-400">
+        <Card className="mb-6 max-w-xl border-l-4 border-l-ok p-5">
+          <p className="mb-1 font-semibold text-ok">
             User &quot;{createdResult.username}&quot; created.
           </p>
-          <p className="mb-2 text-sm text-ink/80">
+          <p className="mb-2 text-sm text-ink">
             Temporary password (shown once — deliver this out-of-band; it cannot be retrieved again):
           </p>
-          <code className="block break-all rounded-lg border border-rule bg-panel px-3 py-2 font-mono text-sm dark:bg-sunken">
+          <code className="block break-all rounded-lg border border-rule bg-panel px-3 py-2 font-mono text-sm">
             {createdResult.temporaryPassword}
           </code>
           <div className="mt-3 flex gap-2">
@@ -382,8 +380,8 @@ export function UsersPage(): JSX.Element {
       {showForm && (
         <Modal onClose={() => { setShowForm(false); resetForm(); }}>
           <form onSubmit={handleCreate} noValidate>
-            <div className="border-b border-rule bg-sunken px-5 py-3">
-              <h2 className="text-base font-semibold text-ink dark:text-white">New User</h2>
+            <div className="border-b border-rule px-5 py-3.5">
+              <h2 className="text-base font-semibold text-ink">New User</h2>
             </div>
             <div className="bg-panel p-5">
             <label className="mb-3 block">
@@ -395,7 +393,7 @@ export function UsersPage(): JSX.Element {
                 required
               />
               {fullNameError && (
-                <span className="mt-1 block text-xs text-red-500">{fullNameError}</span>
+                <span className="mt-1 block text-xs text-danger">{fullNameError}</span>
               )}
             </label>
             <label className="mb-3 block">
@@ -407,7 +405,7 @@ export function UsersPage(): JSX.Element {
                 required
               />
               {usernameError && (
-                <span className="mt-1 block text-xs text-red-500">{usernameError}</span>
+                <span className="mt-1 block text-xs text-danger">{usernameError}</span>
               )}
             </label>
             <label className="mb-3 block">
@@ -420,7 +418,7 @@ export function UsersPage(): JSX.Element {
                 required
               />
               {emailError && (
-                <span className="mt-1 block text-xs text-red-500">{emailError}</span>
+                <span className="mt-1 block text-xs text-danger">{emailError}</span>
               )}
             </label>
 
@@ -442,7 +440,7 @@ export function UsersPage(): JSX.Element {
                 />
               </div>
               {phoneError && (
-                <span className="mt-1 block text-xs text-red-500">{phoneError}</span>
+                <span className="mt-1 block text-xs text-danger">{phoneError}</span>
               )}
             </label>
 
@@ -480,13 +478,13 @@ export function UsersPage(): JSX.Element {
         <Card className="overflow-x-auto">
           <table className="w-full min-w-[38rem] text-sm">
             <thead>
-              <tr className="border-b border-rule bg-sunken text-left text-xs font-medium text-muted">
-                <th className="px-3 py-3 font-medium w-12">#</th>
-                <th className="px-4 py-3 font-medium">Username</th>
-                <th className="px-4 py-3 font-medium">Applications</th>
-                <th className="px-4 py-3 font-medium">Role</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
+              <tr className="border-b border-rule bg-sunken text-left text-xs font-semibold uppercase tracking-wider text-muted">
+                <th className="px-3 py-3 font-semibold w-12">#</th>
+                <th className="px-4 py-3 font-semibold">Username</th>
+                <th className="px-4 py-3 font-semibold">Applications</th>
+                <th className="px-4 py-3 font-semibold">Role</th>
+                <th className="px-4 py-3 font-semibold">Status</th>
+                <th className="px-4 py-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-panel">
@@ -497,17 +495,17 @@ export function UsersPage(): JSX.Element {
                 const viewerIsSysAdmin = currentUser?.role === 'SYS_ADMIN';
                 const canManageRow = viewerIsSysAdmin || !isSysAdminRow;
                 return (
-                  <tr key={u.id} className="border-b border-rule last:border-0">
+                  <tr key={u.id} className="border-b border-rule transition-theme last:border-0 hover:bg-sunken">
                     <td className="px-3 py-3 text-xs text-muted">{rowNum}</td>
-                    <td className="px-4 py-3 font-medium text-ink dark:text-white">
+                    <td className="px-4 py-3 font-medium text-ink">
                       {u.username}
-                      {isSelf && <span className="ml-2 text-xs font-normal text-muted/70">(you)</span>}
+                      {isSelf && <span className="ml-2 text-xs font-normal text-muted">(you)</span>}
                     </td>
                     <td className="px-4 py-3">
                       {u.role !== 'USER' ? (
                         <span className="text-xs text-muted">All applications</span>
                       ) : (u.assignedApplicationIds ?? []).length === 0 ? (
-                        <span className="text-xs italic text-muted/70">None assigned</span>
+                        <span className="text-xs italic text-muted">None assigned</span>
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {u.assignedApplicationIds.map((appId) => (
@@ -556,7 +554,7 @@ export function UsersPage(): JSX.Element {
                             </Button>
                             <Button
                               size="sm"
-                              variant="danger"
+                              variant="dangerOutline"
                               loading={deletingId === u.id}
                               disabled={isSelf}
                               onClick={() => handleDelete(u)}
@@ -593,23 +591,23 @@ export function UsersPage(): JSX.Element {
 
       {detailsUser && (
         <Modal onClose={() => setDetailsUserId(null)} widthClass="max-w-lg">
-          <div className="border-b border-rule bg-sunken px-5 py-3">
-            <h2 className="text-base font-semibold text-ink dark:text-white">User details</h2>
+          <div className="border-b border-rule px-5 py-3.5">
+            <h2 className="text-base font-semibold text-ink">User details</h2>
           </div>
           <div className="bg-panel p-5">
             <dl className="divide-y divide-rule text-sm">
               <DetailRow label="Full name">
-                {detailsUser.full_name ?? <span className="font-normal italic text-muted/70">Not set</span>}
+                {detailsUser.full_name ?? <span className="font-normal italic text-muted">Not set</span>}
               </DetailRow>
               <DetailRow label="Username">{detailsUser.username}</DetailRow>
               <DetailRow label="Email">
-                {detailsUser.email ?? <span className="font-normal italic text-muted/70">none</span>}
+                {detailsUser.email ?? <span className="font-normal italic text-muted">none</span>}
               </DetailRow>
               <DetailRow label="Phone">
                 {detailsUser.phone_number ? (
                   <span className="font-mono text-xs">{detailsUser.phone_number}</span>
                 ) : (
-                  <span className="font-normal italic text-muted/70">none</span>
+                  <span className="font-normal italic text-muted">none</span>
                 )}
               </DetailRow>
               <DetailRow label="Role">
@@ -628,7 +626,7 @@ export function UsersPage(): JSX.Element {
                 {detailsUser.role !== 'USER' ? (
                   <span className="font-normal">All applications</span>
                 ) : (detailsUser.assignedApplicationIds ?? []).length === 0 ? (
-                  <span className="font-normal italic text-muted/70">None assigned</span>
+                  <span className="font-normal italic text-muted">None assigned</span>
                 ) : (
                   <span className="inline-flex flex-wrap justify-end gap-1">
                     {detailsUser.assignedApplicationIds.map((appId) => (
@@ -649,8 +647,8 @@ export function UsersPage(): JSX.Element {
 
       {editingUser && (
         <Modal onClose={() => setEditingUser(null)}>
-          <div className="border-b border-rule bg-sunken px-5 py-3">
-            <h2 className="text-base font-semibold text-ink dark:text-white">
+          <div className="border-b border-rule px-5 py-3.5">
+            <h2 className="text-base font-semibold text-ink">
               Edit &quot;{editingUser.username}&quot;
             </h2>
           </div>
@@ -664,7 +662,7 @@ export function UsersPage(): JSX.Element {
               className={inputClass}
               required
             />
-            {editErrors.fullName && <span className="mt-1 block text-xs text-red-500">{editErrors.fullName}</span>}
+            {editErrors.fullName && <span className="mt-1 block text-xs text-danger">{editErrors.fullName}</span>}
           </label>
           <label className="mb-3 block">
             <span className={labelClass}>Username</span>
@@ -674,7 +672,7 @@ export function UsersPage(): JSX.Element {
               className={inputClass}
               required
             />
-            {editErrors.username && <span className="mt-1 block text-xs text-red-500">{editErrors.username}</span>}
+            {editErrors.username && <span className="mt-1 block text-xs text-danger">{editErrors.username}</span>}
           </label>
 
           <label className="mb-3 block">
@@ -686,7 +684,7 @@ export function UsersPage(): JSX.Element {
               className={inputClass}
               required
             />
-            {editErrors.email && <span className="mt-1 block text-xs text-red-500">{editErrors.email}</span>}
+            {editErrors.email && <span className="mt-1 block text-xs text-danger">{editErrors.email}</span>}
           </label>
 
           <label className="mb-3 block">
@@ -705,7 +703,7 @@ export function UsersPage(): JSX.Element {
                 className={inputClass}
               />
             </div>
-            {editErrors.phoneNumber && <span className="mt-1 block text-xs text-red-500">{editErrors.phoneNumber}</span>}
+            {editErrors.phoneNumber && <span className="mt-1 block text-xs text-danger">{editErrors.phoneNumber}</span>}
           </label>
 
           <label className="mb-4 block">
@@ -746,10 +744,10 @@ export function UsersPage(): JSX.Element {
                           onClick={() => toggleAssigned(app.id)}
                           className={[
                             'rounded-full border px-3.5 py-1 text-sm transition-colors duration-150',
-                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
+                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                             selected
-                              ? 'border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-500/40 dark:bg-brand-500/15 dark:text-brand-300'
-                              : 'border-rule bg-panel text-muted hover:border-rule hover:bg-sunken dark:bg-panel',
+                              ? 'border-accent bg-accent/10 font-semibold text-accent'
+                              : 'border-field bg-panel text-muted hover:bg-sunken',
                           ].join(' ')}
                         >
                           {app.name}

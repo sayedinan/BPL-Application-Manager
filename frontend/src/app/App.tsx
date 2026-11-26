@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Link, Route, Routes, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Link, Route, Routes, Navigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
 
 import { AuthHydrator } from '@/app/AuthHydrator';
@@ -14,11 +13,7 @@ import { ApplicationDetailsPage } from '@/app/ApplicationDetailsPage';
 import { UsersPage } from '@/app/UsersPage';
 import { LogsPage } from '@/app/LogsPage';
 import { PresenceConnection } from '@/app/PresenceConnection';
-import { api } from '@/api/client';
-import { API } from '@/api/endpoints';
-import { Logo } from '@/components/ui/Logo';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
-import { UserMenu } from '@/components/ui/UserMenu';
+import { Shell } from '@/app/Shell';
 import { LoadingBlock } from '@/components/ui/Spinner';
 import { ToastProvider } from '@/components/ui/Toast';
 
@@ -39,7 +34,7 @@ function ForbiddenPage() {
       </p>
       <Link
         to="/"
-        className="mt-5 rounded-lg border border-rule bg-panel px-4 py-2 text-sm font-medium text-ink transition-theme hover:bg-sunken"
+        className="mt-5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-theme hover:bg-brand-700"
       >
         Back to dashboard
       </Link>
@@ -68,110 +63,6 @@ function AdminPlus({ children }: { children: React.ReactNode }) {
 }
 
 
-function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
-  // The application details pages (/apps/:name) belong to the Dashboard tab.
-  const { pathname } = useLocation();
-  const active = pathname === to || (to === '/' && pathname.startsWith('/apps/'));
-  return (
-    <Link
-      to={to}
-      aria-current={active ? 'page' : undefined}
-      className={[
-        // flex + items-center: the link stretches to the header's full height (so the
-        // active underline sits on the header's bottom edge) while its label stays centred.
-        'flex items-center whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-theme',
-        'max-md:rounded-lg max-md:border-b-0 max-md:py-2.5',
-        active
-          ? 'border-accent text-ink max-md:bg-sunken'
-          : 'border-transparent text-muted hover:text-ink max-md:hover:bg-sunken',
-      ].join(' ')}
-    >
-      {children}
-    </Link>
-  );
-}
-
-function NavBar() {
-  const { status, user, setUser, setStatus } = useAuth();
-  const { pathname } = useLocation();
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  // Close the mobile menu after navigating.
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname]);
-
-  if (status !== 'authenticated' || !user || pathname === '/login') return null;
-  if (user.mustChangePassword && pathname !== '/change-password') return null;
-
-  async function handleLogout() {
-    try {
-      await api.post(API.AUTH.LOGOUT, undefined, { skipAuthRedirect: true });
-    } finally {
-      setUser(null);
-      setStatus('unauthenticated');
-      // Deliberate full reload: tears down the session state and WebSocket cleanly.
-      window.location.assign('/login');
-    }
-  }
-
-  const isAdminPlus = user.role === 'SYS_ADMIN' || user.role === 'ADMIN';
-
-  const links = (
-    <>
-      <NavLink to="/">Dashboard</NavLink>
-      {user.role === 'SYS_ADMIN' && <NavLink to="/applications">Applications</NavLink>}
-      {isAdminPlus && <NavLink to="/users">Users</NavLink>}
-      {isAdminPlus && <NavLink to="/logs">Logs</NavLink>}
-    </>
-  );
-
-  return (
-    <header className="sticky top-0 z-20 border-b border-rule bg-panel transition-theme">
-      {/* Same column as the page content (max-w-6xl, px-4/sm:px-8) so the logo lines up with titles. */}
-      <div className="mx-auto flex max-w-6xl items-center gap-1 px-4 sm:px-8">
-        <Link to="/" className="mr-4 flex items-center gap-2 py-2" aria-label="BPL Admin home">
-          <Logo className="h-8 w-8" />
-          <span className="hidden text-sm font-semibold tracking-tight text-ink sm:inline">BPL Admin</span>
-        </Link>
-
-        <nav aria-label="Main" className="hidden items-stretch self-stretch md:flex">
-          {links}
-        </nav>
-
-        <div className="ml-auto flex items-center gap-1 py-2 sm:gap-3">
-          <ThemeToggle />
-          <UserMenu
-            username={user.username}
-            role={user.role}
-            email={user.email}
-            phoneNumber={user.phoneNumber}
-            onLogout={handleLogout}
-          />
-          <button
-            type="button"
-            onClick={() => setMenuOpen((o) => !o)}
-            aria-expanded={menuOpen}
-            aria-controls="mobile-nav"
-            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-sunken hover:text-ink md:hidden"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              {menuOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {menuOpen && (
-        <nav id="mobile-nav" aria-label="Main" className="flex flex-col gap-1 border-t border-rule p-2 md:hidden">
-          {links}
-        </nav>
-      )}
-    </header>
-  );
-}
-
 function AppRoutes() {
   return (
     <Routes>
@@ -197,10 +88,9 @@ export function App(): JSX.Element {
             <AuthHydrator />
             <PresenceConnection />
             <ToastProvider>
-              <div className="min-h-screen bg-canvas transition-theme">
-                <NavBar />
+              <Shell>
                 <AppRoutes />
-              </div>
+              </Shell>
             </ToastProvider>
           </AuthProvider>
         </BrowserRouter>

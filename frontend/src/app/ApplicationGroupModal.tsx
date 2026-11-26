@@ -1,3 +1,4 @@
+import { CONTROL } from '@/components/ui/Field';
 import { useState } from 'react';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
@@ -7,10 +8,7 @@ import { Modal } from '@/components/ui/Modal';
 
 const MAX_LENGTH = 60;
 
-const inputClass =
-  'w-full rounded-xl border border-rule bg-panel shadow-sm px-3 py-2 text-sm text-ink ' +
-  'placeholder:text-muted/70 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
-  ' dark:bg-sunken';
+const inputClass = CONTROL;
 
 export function ApplicationGroupModal({
   applicationId,
@@ -48,20 +46,20 @@ export function ApplicationGroupModal({
   return (
     <Modal onClose={onClose} widthClass="max-w-md">
       <div className="border-b border-rule px-6 py-4 pr-14">
-        <h2 className="text-lg font-semibold text-ink dark:text-white">Group</h2>
+        <h2 className="text-lg font-semibold text-ink">Group</h2>
         <p className="mt-1 text-xs text-muted">{applicationName}</p>
       </div>
 
       <div className="space-y-4 p-6">
         {error && <Alert>{error}</Alert>}
 
-        <p className="text-sm text-ink/80">
+        <p className="text-sm text-ink">
           Applications in the same group are shown together on the Dashboard, with a "healthy" count for the
           group. Applications without a group are listed under "Other".
         </p>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-ink/80" htmlFor="app-group">
+          <label className="mb-1 block text-sm font-medium text-ink" htmlFor="app-group">
             Group name
           </label>
           <input

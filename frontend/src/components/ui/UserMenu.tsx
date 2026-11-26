@@ -37,20 +37,20 @@ export function UserMenu({ username, role, onLogout, email, phoneNumber }: UserM
   }, [open]);
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative min-w-0 flex-1">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-2 rounded-full border border-rule bg-panel py-1 pl-1 pr-3 transition-theme hover:bg-sunken"
+        className="flex w-full items-center gap-2 rounded-lg p-1 transition-theme hover:bg-white/10"
       >
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-900 text-xs font-semibold text-white">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-xs font-semibold text-white">
           {initials}
         </span>
-        <span className="hidden text-left sm:block">
-          <span className="block text-sm font-medium leading-tight text-ink">{username}</span>
-          <span className="block text-xs leading-tight text-muted">{ROLE_LABEL[role]}</span>
+        <span className="min-w-0 flex-1 text-left">
+          <span className="block truncate text-sm font-semibold leading-tight text-white">{username}</span>
+          <span className="block truncate text-xs leading-tight text-brand-300">{ROLE_LABEL[role]}</span>
         </span>
         <svg
           width="14"
@@ -60,7 +60,7 @@ export function UserMenu({ username, role, onLogout, email, phoneNumber }: UserM
           stroke="currentColor"
           strokeWidth="2"
           aria-hidden="true"
-          className={`text-muted transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`shrink-0 text-brand-300 transition-transform ${open ? '' : 'rotate-180'}`}
         >
           <path d="M6 9l6 6 6-6" />
         </svg>
@@ -69,11 +69,11 @@ export function UserMenu({ username, role, onLogout, email, phoneNumber }: UserM
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-30 mt-2 w-72 overflow-hidden rounded-xl border border-rule bg-panel shadow-popover"
+          className="absolute bottom-full left-0 z-30 mb-2 w-60 overflow-hidden rounded-xl border border-rule bg-panel shadow-popover"
         >
           <div className="border-b border-rule bg-sunken p-4">
             <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-900 text-sm font-semibold text-white">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-sm font-semibold text-white">
                 {initials}
               </span>
               <div className="min-w-0">

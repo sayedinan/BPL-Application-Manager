@@ -16,7 +16,7 @@ export function EmptyState({
   icon?: ReactNode;
 }): JSX.Element {
   return (
-    <div className="flex flex-col items-center rounded-xl border border-dashed border-rule bg-panel px-6 py-12 text-center">
+    <div className="flex flex-col items-center rounded-xl border border-rule bg-panel shadow-card dark:shadow-card-dark px-6 py-12 text-center">
       <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-sunken text-muted" aria-hidden="true">
         {icon ?? (
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

@@ -6,7 +6,7 @@ export function LogsPage(): JSX.Element {
   const { user } = useAuth();
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:p-8">
+    <div className="page">
       <PageHeader
         title="Logs"
         description="Who did what, and what each application is writing. Updates live."

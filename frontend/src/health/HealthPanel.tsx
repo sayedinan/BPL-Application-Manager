@@ -63,8 +63,8 @@ export function Section({
   children: ReactNode;
 }): JSX.Element {
   return (
-    <section className="overflow-hidden rounded-2xl border border-rule">
-      <div className="flex items-center justify-between gap-3 border-b border-rule bg-sunken px-4 py-2.5">
+    <section className="overflow-hidden rounded-xl border border-rule bg-panel shadow-card dark:shadow-card-dark">
+      <div className="flex items-center justify-between gap-3 border-b border-rule px-4 py-3">
         <h3 className="text-sm font-semibold text-ink">{title}</h3>
         {aside && <span className="text-xs text-muted">{aside}</span>}
       </div>
@@ -117,7 +117,7 @@ function Gauge({
   return (
     <div>
       <div className="mb-1 flex justify-between gap-2 text-xs">
-        <span className="inline-flex items-center gap-1 font-medium text-ink/80">
+        <span className="inline-flex items-center gap-1 font-medium text-ink">
           {label}
           {toggle}
         </span>
@@ -189,7 +189,7 @@ function HistoryChart({
   return (
     <div>
       <div className="mb-1 flex justify-between gap-2 text-xs">
-        <span className="font-medium text-ink/80">{label}</span>
+        <span className="font-medium text-ink">{label}</span>
         <span className="text-muted">
           latest {latest.toFixed(decimals)}
           {unit} · peak {peak.toFixed(decimals)}
@@ -221,7 +221,7 @@ function HistoryChart({
         <path
           d={path}
           fill="none"
-          className="stroke-brand-500"
+          className="stroke-accent"
           strokeWidth={1.5}
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
@@ -602,7 +602,7 @@ export function HealthPanel({
                         href={href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-brand-600 hover:underline dark:text-brand-400"
+                        className="text-accent hover:underline"
                       >
                         Open
                       </a>
@@ -613,8 +613,8 @@ export function HealthPanel({
             </Section>
           )}
 
-          <details className="overflow-hidden rounded-2xl border border-rule text-sm">
-            <summary className="cursor-pointer bg-sunken px-4 py-2.5 text-sm font-semibold text-ink">
+          <details className="overflow-hidden rounded-xl border border-rule bg-panel text-sm shadow-card dark:shadow-card-dark">
+            <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-ink">
               Technical details
             </summary>
             <dl className="border-t border-rule bg-panel p-4">

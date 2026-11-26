@@ -76,6 +76,16 @@ interface ApplicationRowProps {
   onRequestStop: (app: ApplicationSummary) => void;
 }
 
+/** Status colour for the row's left edge (the badge still says it in words). */
+const EDGE: Record<string, string> = {
+  online: 'before:bg-ok',
+  offline: 'before:bg-idle',
+  pending: 'before:bg-warn',
+  error: 'before:bg-danger',
+  neutral: 'before:bg-accent',
+  maintenance: 'before:bg-maint',
+};
+
 // 44px tall on touch, compact on pointer devices.
 const ACTION_SIZE = 'min-h-11 min-w-[4.5rem] md:min-h-0';
 
@@ -94,7 +104,9 @@ export function ApplicationRow({
   const monitored = health?.monitored === true;
 
   return (
-    <li className={`${ROW_GRID} px-4 py-3 transition-theme hover:bg-sunken/50`}>
+    <li
+      className={`${ROW_GRID} relative px-4 py-3.5 transition-theme before:absolute before:inset-y-0 before:left-0 before:w-1 hover:bg-sunken ${EDGE[badge.tone]}`}
+    >
       {/* DOM order is name, action, strip so keyboard and screen-reader order reads
           "name, Start/Stop" first; md:order-* puts the status column first visually.
           On phones the badge sits on the name line (saves a row); on wide screens
@@ -106,7 +118,7 @@ export function ApplicationRow({
           </span>
           <Link
             to={appPath(app.name)}
-            className="block truncate font-medium text-ink hover:text-accent hover:underline"
+            className="block truncate font-semibold text-ink hover:text-accent hover:underline"
             title={`${app.name}: open details`}
           >
             {app.name}

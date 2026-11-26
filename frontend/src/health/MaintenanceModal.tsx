@@ -1,3 +1,4 @@
+import { CONTROL } from '@/components/ui/Field';
 import { useState } from 'react';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
@@ -5,10 +6,7 @@ import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 
-const inputClass =
-  'w-full rounded-xl border border-rule bg-panel shadow-sm px-3 py-2 text-sm text-ink ' +
-  'placeholder:text-muted/70 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
-  ' dark:bg-sunken';
+const inputClass = CONTROL;
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');
@@ -74,14 +72,14 @@ export function MaintenanceModal({
   return (
     <Modal onClose={onClose} widthClass="max-w-md">
       <div className="border-b border-rule px-6 py-4 pr-14">
-        <h2 className="text-lg font-semibold text-ink dark:text-white">Maintenance</h2>
+        <h2 className="text-lg font-semibold text-ink">Maintenance</h2>
         <p className="mt-1 text-xs text-muted">{applicationName}</p>
       </div>
 
       <div className="space-y-4 p-6">
         {error && <Alert>{error}</Alert>}
 
-        <p className="text-sm text-ink/80">
+        <p className="text-sm text-ink">
           Choose when maintenance starts and ends. Between those times this application's offline and online alerts
           (email and SMS) are held back. Changes are still recorded in the audit log, and if it is still offline when
           maintenance ends, the alert is sent then.
@@ -97,7 +95,7 @@ export function MaintenanceModal({
 
         {!current?.active && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-ink/80" htmlFor="maintenance-from">
+            <label className="mb-1 block text-sm font-medium text-ink" htmlFor="maintenance-from">
               From
             </label>
             <input
@@ -111,7 +109,7 @@ export function MaintenanceModal({
         )}
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-ink/80" htmlFor="maintenance-to">
+          <label className="mb-1 block text-sm font-medium text-ink" htmlFor="maintenance-to">
             To
           </label>
           <input
@@ -124,7 +122,7 @@ export function MaintenanceModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-ink/80" htmlFor="maintenance-note">
+          <label className="mb-1 block text-sm font-medium text-ink" htmlFor="maintenance-note">
             Note (optional)
           </label>
           <input

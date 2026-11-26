@@ -55,7 +55,7 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
             key={t.id}
             role={t.tone === 'error' ? 'alert' : 'status'}
             className={[
-              'pointer-events-auto flex items-start gap-3 rounded-lg border bg-panel px-4 py-3 text-sm shadow-popover animate-fade-in',
+              'pointer-events-auto flex items-start gap-3 rounded-lg border border-l-4 bg-panel px-4 py-3 text-sm shadow-popover animate-fade-in',
               TONE_CLASSES[t.tone],
             ].join(' ')}
           >

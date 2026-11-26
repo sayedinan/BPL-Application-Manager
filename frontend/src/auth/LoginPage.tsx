@@ -5,8 +5,8 @@ import { API } from '@/api/endpoints';
 import { useAuth, type CurrentUser } from '@/auth/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
-import { Logo } from '@/components/ui/Logo';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { CONTROL } from '@/components/ui/Field';
+import { AuthLayout } from '@/auth/AuthLayout';
 
 interface LoginResponse {
   id: string;
@@ -64,17 +64,9 @@ export function LoginPage(): JSX.Element {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas px-4 dark:bg-sunken">
-
-      <div className="absolute right-4 top-4">
-        <ThemeToggle />
-      </div>
-
-      <div className="relative w-full max-w-sm animate-fade-in rounded-2xl border border-rule bg-panel p-8 shadow-popover">
-        <div className="mb-6 flex flex-col items-center text-center">
-          <Logo className="mb-4 h-36 w-36" />
-          <h1 className="text-xl font-semibold text-ink">Sign in to BPL Admin</h1>
-        </div>
+    <AuthLayout>
+      <h1 className="mb-1 text-2xl font-bold tracking-tight text-ink">Sign in to BPL Admin</h1>
+      <p className="mb-6 text-sm text-muted">Use your account username and password.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div>
@@ -89,7 +81,7 @@ export function LoginPage(): JSX.Element {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={submitting}
-              className="mt-1 block w-full rounded-xl border border-rule bg-panel shadow-sm px-3 py-2 text-sm text-ink transition-theme placeholder:text-muted/70 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:bg-sunken"
+              className={`mt-1 ${CONTROL}`}
             />
           </div>
 
@@ -105,17 +97,17 @@ export function LoginPage(): JSX.Element {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={submitting}
-              className="mt-1 block w-full rounded-xl border border-rule bg-panel shadow-sm px-3 py-2 text-sm text-ink transition-theme placeholder:text-muted/70 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:bg-sunken"
+              className={`mt-1 ${CONTROL}`}
             />
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-ink">
+          <label className="flex min-h-6 items-center gap-2 text-sm text-ink">
             <input
               type="checkbox"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
               disabled={submitting}
-              className="h-4 w-4 rounded border-rule text-brand-500 focus:ring-brand-500"
+              className="h-4 w-4 rounded border-field accent-brand-600"
             />
             Remember me
           </label>
@@ -126,7 +118,6 @@ export function LoginPage(): JSX.Element {
             {submitting ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>
-      </div>
-    </div>
+    </AuthLayout>
   );
 }

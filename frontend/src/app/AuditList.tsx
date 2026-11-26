@@ -54,7 +54,7 @@ export function AuditListHeader(): JSX.Element {
   return (
     <div
       aria-hidden="true"
-      className={`${AUDIT_GRID} sticky top-0 z-10 hidden border-b border-rule bg-sunken px-4 py-2 text-xs font-medium text-muted md:grid`}
+      className={`${AUDIT_GRID} sticky top-0 z-10 hidden border-b border-rule bg-sunken px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted md:grid`}
     >
       <span>{zone ? `Time (${zone})` : 'Time'}</span>
       <span>Who</span>

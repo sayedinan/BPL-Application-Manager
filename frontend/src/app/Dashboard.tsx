@@ -19,8 +19,7 @@ import { onLiveStreamState, subscribeHealth, subscribeStatus } from '@/lib/liveS
 import { DayAxis } from '@/health/DayStrip';
 import type { HealthLatest } from '@/health/types';
 import { ApplicationRow, ROW_GRID, type ApplicationSummary } from '@/app/ApplicationRow';
-
-type Filter = 'all' | 'attention' | 'healthy' | 'maintenance';
+import { SummaryTiles, type Filter } from '@/app/SummaryTiles';
 
 /** How many applications the attention band names before collapsing to "and N more". */
 const ATTENTION_NAMED = 4;
@@ -204,7 +203,7 @@ export function DashboardPlaceholder(): JSX.Element {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:p-8" aria-busy="true">
+      <div className="page" aria-busy="true">
         {header}
         <p className="sr-only" role="status">
           Loading applications…
@@ -225,7 +224,7 @@ export function DashboardPlaceholder(): JSX.Element {
   // A failed first load is not an empty fleet: say so, and offer a retry.
   if (error && apps.length === 0) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:p-8">
+      <div className="page">
         {header}
         <EmptyState
           title="Couldn't load applications"
@@ -295,17 +294,11 @@ export function DashboardPlaceholder(): JSX.Element {
     };
   }
 
-  const filters: { key: Filter; label: string; count: number }[] = [
-    { key: 'all', label: 'All', count: counts.all },
-    { key: 'attention', label: 'Need attention', count: counts.attention },
-    { key: 'healthy', label: 'Healthy', count: counts.healthy },
-    { key: 'maintenance', label: 'Maintenance', count: counts.maintenance },
-  ];
 
   const stopUptime = confirmStop ? formatUptime(confirmStop.startedAt) : null;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:p-8">
+    <div className="page">
       {header}
 
       <div className="space-y-3 empty:hidden">
@@ -327,7 +320,7 @@ export function DashboardPlaceholder(): JSX.Element {
             user?.role === 'SYS_ADMIN' ? (
               <Link
                 to="/applications"
-                className="inline-flex items-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-theme hover:bg-brand-700"
+                className="inline-flex items-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-theme hover:bg-brand-700"
               >
                 Add application
               </Link>
@@ -336,8 +329,10 @@ export function DashboardPlaceholder(): JSX.Element {
         />
       ) : (
         <>
+          <SummaryTiles counts={counts} active={filter} onSelect={setFilter} />
+
           {counts.attention > 0 && (
-            <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-danger/30 bg-danger-bg px-4 py-3 text-sm">
+            <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-l-4 border-rule border-l-danger bg-panel px-4 py-3.5 text-sm shadow-card dark:shadow-card-dark">
               <span className="flex items-center gap-2 font-semibold text-danger">
                 <StatusGlyph tone="error" />
                 {counts.attention} {counts.attention === 1 ? 'needs' : 'need'} attention
@@ -364,50 +359,7 @@ export function DashboardPlaceholder(): JSX.Element {
             </div>
           )}
 
-          <details className="mb-3 text-xs text-muted">
-            <summary className="w-fit cursor-pointer select-none font-medium hover:text-ink">
-              How to read the hourly bars
-            </summary>
-            <p className="mt-2 max-w-prose">
-              One bar per hour since midnight. A tall red bar means health checks failed that hour, a short green bar
-              means every check passed, and a thin gray line means no data yet. The percentage is the share of today's
-              checks that passed.
-            </p>
-          </details>
-
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            {/* One scrolling row on phones so the filters don't push the list down. */}
-            <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:overflow-visible sm:px-0">
-              <div role="group" aria-label="Filter applications" className="flex flex-nowrap gap-1.5 sm:flex-wrap">
-                {filters.map((f) => {
-                  const active = filter === f.key;
-                  return (
-                    <button
-                      key={f.key}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => setFilter(active && f.key !== 'all' ? 'all' : f.key)}
-                      className={[
-                        'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-theme',
-                        active
-                          ? 'border-accent bg-accent/10 text-ink'
-                          : 'border-rule bg-panel text-muted hover:text-ink',
-                      ].join(' ')}
-                    >
-                      {f.label}
-                      <span
-                        className={[
-                          'tabular text-xs',
-                          f.key === 'attention' && f.count > 0 ? 'font-semibold text-danger' : 'text-muted',
-                        ].join(' ')}
-                      >
-                        {f.count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <Input
               type="search"
               value={search}
@@ -416,6 +368,17 @@ export function DashboardPlaceholder(): JSX.Element {
               aria-label="Search applications"
               className="sm:max-w-xs"
             />
+            <details className="text-xs text-muted sm:pt-2.5 sm:text-right">
+              <summary className="w-fit cursor-pointer py-1 sm:ml-auto select-none font-medium hover:text-ink">
+                How to read the hourly bars
+              </summary>
+              <p className="mt-2 max-w-prose sm:text-left">
+                One bar per hour since midnight. A tall red bar means health checks failed that hour, a short green bar
+                means every check passed, and a thin gray line means no data yet. The percentage is the share of today's
+                checks that passed.
+              </p>
+            </details>
+
           </div>
 
           {visible.length === 0 ? (
@@ -435,7 +398,7 @@ export function DashboardPlaceholder(): JSX.Element {
               }
             />
           ) : (
-            <div className="space-y-8">
+            <div className="animate-rise space-y-8 [animation-delay:220ms]">
               {sectionKeys.map((key, index) => {
                 const summary = groupSummary(key);
                 const heading = key || 'Ungrouped';
@@ -452,12 +415,12 @@ export function DashboardPlaceholder(): JSX.Element {
                         )}
                       </div>
                     )}
-                    <div className="overflow-hidden rounded-xl border border-rule bg-panel">
+                    <div className="overflow-hidden rounded-xl border border-rule bg-panel shadow-card dark:shadow-card-dark">
                       {/* Column headers once, above the first group: repeating them per group is noise. */}
                       {index === 0 && (
                         <div
                           aria-hidden="true"
-                          className={`${ROW_GRID} hidden border-b border-rule bg-sunken px-4 py-2 text-xs font-medium text-muted md:grid`}
+                          className={`${ROW_GRID} hidden border-b border-rule bg-sunken px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted md:grid`}
                         >
                           <span>Status</span>
                           <span>Application</span>

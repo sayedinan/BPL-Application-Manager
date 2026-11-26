@@ -1,3 +1,4 @@
+import { CONTROL } from '@/components/ui/Field';
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
@@ -7,11 +8,8 @@ import { Modal } from '@/components/ui/Modal';
 import { LoadingBlock } from '@/components/ui/Spinner';
 import type { HealthConfig, HealthTestResult } from './types';
 
-const inputClass =
-  'w-full rounded-xl border border-rule bg-panel shadow-sm px-3 py-2 text-sm text-ink ' +
-  'placeholder:text-muted/70 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
-  ' dark:bg-sunken';
-const labelClass = 'mb-1 block text-sm font-medium text-ink/80';
+const inputClass = CONTROL;
+const labelClass = 'mb-1 block text-sm font-medium text-ink';
 const hintClass = 'mt-1 text-xs text-muted';
 
 const MIN_INTERVAL = 3;
@@ -206,7 +204,7 @@ export function HealthSettingsModal({
   return (
     <Modal onClose={onClose} widthClass="max-w-xl">
       <div className="border-b border-rule px-6 py-4 pr-14">
-        <h2 className="text-lg font-semibold text-ink dark:text-white">Health monitoring</h2>
+        <h2 className="text-lg font-semibold text-ink">Health monitoring</h2>
         <p className="mt-1 text-xs text-muted">{applicationName}</p>
       </div>
 
@@ -219,7 +217,7 @@ export function HealthSettingsModal({
           <>
             {formError && <Alert>{formError}</Alert>}
 
-            <label className="flex items-center gap-2 text-sm text-ink/80">
+            <label className="flex items-center gap-2 text-sm text-ink">
               <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
               Monitor this application through its health endpoint
             </label>
@@ -239,13 +237,13 @@ export function HealthSettingsModal({
 
             <div>
               <div className="mb-1 flex items-center justify-between gap-2">
-                <label className="text-sm font-medium text-ink/80" htmlFor="health-key">
+                <label className="text-sm font-medium text-ink" htmlFor="health-key">
                   API key
                 </label>
                 <button
                   type="button"
                   onClick={handleGenerate}
-                  className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
+                  className="text-xs font-medium text-accent hover:underline"
                 >
                   Generate a random key
                 </button>
@@ -264,7 +262,7 @@ export function HealthSettingsModal({
                 autoComplete="new-password"
               />
               {hasApiKey && (
-                <label className="mt-2 flex items-center gap-2 text-xs text-ink/80">
+                <label className="mt-2 flex items-center gap-2 text-xs text-ink">
                   <input
                     type="checkbox"
                     checked={removeKey}
@@ -348,7 +346,7 @@ export function HealthSettingsModal({
             )}
 
             {enabled && !testPassed && (
-              <label className="flex items-start gap-2 text-xs text-ink/80">
+              <label className="flex items-start gap-2 text-xs text-ink">
                 <input
                   type="checkbox"
                   className="mt-0.5"

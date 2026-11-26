@@ -17,7 +17,10 @@ const CONTROL_CLASSES = [
 ].join(' ');
 
 const controlClass = (invalid: boolean, extra = '') =>
-  [CONTROL_CLASSES, invalid ? 'border-danger' : 'border-rule', extra].join(' ');
+  [CONTROL_CLASSES, invalid ? 'border-danger' : 'border-field', extra].join(' ');
+
+/** The shared control look, for forms that lay out their own labels. */
+export const CONTROL = controlClass(false);
 
 interface FieldProps {
   label: string;

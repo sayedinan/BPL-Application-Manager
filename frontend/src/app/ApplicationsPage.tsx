@@ -1,3 +1,4 @@
+import { CONTROL } from '@/components/ui/Field';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
@@ -45,11 +46,8 @@ const EMPTY_FORM: FormState = {
   smsStartMessage: '', smsStopMessage: '', smsExternalOnlineMessage: '', smsExternalOfflineMessage: '',
 };
 
-const inputClass =
-  'w-full rounded-xl border border-rule bg-panel shadow-sm px-3 py-2 text-sm text-ink ' +
-  'placeholder:text-muted/70 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
-  ' dark:bg-sunken';
-const labelClass = 'mb-1 block text-sm font-medium text-ink/80';
+const inputClass = CONTROL;
+const labelClass = 'mb-1 block text-sm font-medium text-ink';
 
 export function ApplicationsPage(): JSX.Element {
   const [apps, setApps] = useState<ApplicationSummary[]>([]);
@@ -222,7 +220,7 @@ export function ApplicationsPage(): JSX.Element {
   const formOpen = showForm || (editingId !== null && !loadingEdit);
 
   return (
-    <div className="p-6 sm:p-8 max-w-6xl mx-auto">
+    <div className="page">
       <PageHeader
         title="Applications"
         description="SSH-backed order applications — create, edit, and monitor."
@@ -275,8 +273,8 @@ export function ApplicationsPage(): JSX.Element {
           onClose={() => { if (editingId !== null) cancelEdit(); else setShowForm(false); }}
         >
           <form onSubmit={editingId !== null ? handleUpdate : handleCreate} noValidate>
-            <div className="border-b border-rule bg-sunken px-5 py-3">
-              <h2 className="text-base font-semibold text-ink dark:text-white">
+            <div className="border-b border-rule px-5 py-3.5">
+              <h2 className="text-base font-semibold text-ink">
                 {editingId !== null ? 'Edit Application' : 'New Application'}
               </h2>
             </div>
@@ -340,7 +338,7 @@ export function ApplicationsPage(): JSX.Element {
               <textarea value={form.logScript} onChange={(e) => updateField('logScript', e.target.value)} className={`${inputClass} font-mono`} rows={3} required />
             </label>
             <div className="mt-6 mb-5 border-t border-rule pt-4">
-              <h3 className="mb-1 text-sm font-semibold text-ink dark:text-white">Custom notification messages</h3>
+              <h3 className="mb-1 text-sm font-semibold text-ink">Custom notification messages</h3>
               <p className="mb-4 text-xs text-muted">
                 Optional. Leave blank to use the default wording. Placeholders: <code>{'{appName}'}</code>, <code>{'{actor}'}</code>, <code>{'{role}'}</code>, <code>{'{timestamp}'}</code> ({'{actor}'}/{'{role}'} only apply to Start/Stop — external events have no logged-in actor).
               </p>
@@ -406,16 +404,16 @@ export function ApplicationsPage(): JSX.Element {
           <Card className="overflow-x-auto">
             <table className="w-full min-w-[20rem] text-sm">
               <thead>
-                <tr className="border-b border-rule bg-sunken text-left text-xs font-medium text-muted">
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium text-right">Actions</th>
+                <tr className="border-b border-rule bg-sunken text-left text-xs font-semibold uppercase tracking-wider text-muted">
+                  <th className="px-4 py-3 font-semibold">Name</th>
+                  <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-4 py-3 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-panel">
                 {apps.map((app) => (
-                  <tr key={app.id} className="border-b border-rule last:border-0">
-                    <td className="px-4 py-3 font-medium text-ink dark:text-white">{app.name}</td>
+                  <tr key={app.id} className="border-b border-rule transition-theme last:border-0 hover:bg-sunken">
+                    <td className="px-4 py-3 font-medium text-ink">{app.name}</td>
                     <td className="px-4 py-3">
                       <Badge tone={app.online ? 'online' : 'offline'}>{app.online ? 'Online' : 'Offline'}</Badge>
                     </td>
@@ -438,7 +436,7 @@ export function ApplicationsPage(): JSX.Element {
                         </Button>
                         <Button
                           size="sm"
-                          variant="danger"
+                          variant="dangerOutline"
                           disabled={app.online || deletingId === app.id}
                           onClick={() => handleDelete(app)}
                           title={app.online ? 'Must be Offline to delete' : undefined}

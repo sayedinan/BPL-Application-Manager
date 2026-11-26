@@ -1,3 +1,4 @@
+import { CONTROL } from '@/components/ui/Field';
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '@/api/client';
@@ -5,6 +6,7 @@ import { API } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { AuthLayout } from '@/auth/AuthLayout';
 import { Alert } from '@/components/ui/Alert';
 
 interface ChangePasswordResponse {
@@ -14,10 +16,7 @@ interface ChangePasswordResponse {
   mustChangePassword: boolean;
 }
 
-const inputClass =
-  'mt-1 block w-full rounded-xl border border-rule bg-panel shadow-sm px-3 py-2 text-sm text-ink ' +
-  'transition-theme placeholder:text-muted/70 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ' +
-  ' dark:bg-sunken dark:text-white';
+const inputClass = `mt-1 ${CONTROL}`;
 
 export function RealChangePasswordPage(): JSX.Element {
   const { user, setUser } = useAuth();
@@ -59,25 +58,20 @@ export function RealChangePasswordPage(): JSX.Element {
     }
   }
 
-  return (
-    <div
-      data-change-password-page="real"
-      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas px-4 dark:bg-sunken"
-    >
-
-      <Card className="relative w-full max-w-sm animate-fade-in p-8 shadow-popover">
-        <div className="mb-6 text-center">
-          <h1 className="text-xl font-bold text-ink dark:text-white">Change Password</h1>
-          <p className="mt-1 text-sm text-muted">
-            {user?.mustChangePassword
-              ? 'You must set a new password before continuing.'
-              : 'Enter your current password, then choose a new one.'}
-          </p>
-        </div>
+  const content = (
+    <div data-change-password-page="real">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight text-ink">Change Password</h1>
+        <p className="mt-1 text-sm text-muted">
+          {user?.mustChangePassword
+            ? 'You must set a new password before continuing.'
+            : 'Enter your current password, then choose a new one.'}
+        </p>
+      </div>
 
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div>
-            <label htmlFor="oldPassword" className="block text-sm font-medium text-ink/80">
+            <label htmlFor="oldPassword" className="block text-sm font-medium text-ink">
               Current password
             </label>
             <input
@@ -93,7 +87,7 @@ export function RealChangePasswordPage(): JSX.Element {
           </div>
 
           <div>
-            <label htmlFor="newPassword" className="block text-sm font-medium text-ink/80">
+            <label htmlFor="newPassword" className="block text-sm font-medium text-ink">
               New password
             </label>
             <input
@@ -109,7 +103,7 @@ export function RealChangePasswordPage(): JSX.Element {
           </div>
 
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-ink/80">
+            <label htmlFor="confirmPassword" className="block text-sm font-medium text-ink">
               Confirm new password
             </label>
             <input
@@ -130,7 +124,16 @@ export function RealChangePasswordPage(): JSX.Element {
             {submitting ? 'Saving…' : 'Save new password'}
           </Button>
         </form>
-      </Card>
+    </div>
+  );
+
+  // Forced change has no sidebar, so it gets the sign-in layout. A voluntary
+  // change happens inside the app shell.
+  return user?.mustChangePassword ? (
+    <AuthLayout>{content}</AuthLayout>
+  ) : (
+    <div className="page">
+      <Card className="mx-auto max-w-md p-6 sm:p-8">{content}</Card>
     </div>
   );
 }

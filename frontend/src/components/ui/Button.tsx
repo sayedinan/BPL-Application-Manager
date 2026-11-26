@@ -11,8 +11,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANT_CLASSES: Record<Variant, string> = {
-  primary: 'bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-600/50',
-  secondary: 'border border-rule bg-panel text-ink hover:bg-sunken',
+  primary: 'btn-primary bg-brand-600 text-white hover:brightness-110 disabled:shadow-none',
+  secondary: 'border border-field/60 bg-panel text-ink hover:bg-sunken',
   // Fixed colors (not the theme token): white text must keep >= 4.5:1 in both themes.
   danger: 'bg-red-700 text-white hover:bg-red-800 dark:bg-red-600 dark:hover:bg-red-700 disabled:opacity-50',
   // For routine destructive actions (Stop): keeps solid red for confirmations only.
@@ -35,7 +35,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={disabled || loading}
       aria-busy={loading}
       className={[
-        'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium',
+        'inline-flex min-h-6 items-center justify-center gap-1.5 rounded-lg font-semibold',
         'transition-theme focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
         'focus-visible:ring-offset-2 focus-visible:ring-offset-canvas',
         'disabled:cursor-not-allowed disabled:opacity-50',
