@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Client } from '@stomp/stompjs';
+import { Client, ReconnectionTimeMode } from '@stomp/stompjs';
 import { api, ApiError } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { Button } from '@/components/ui/Button';
@@ -33,6 +33,12 @@ type LogSource = 'application' | 'audit';
 /** The audit endpoint returns at most this many rows per request. */
 const AUDIT_PAGE_SIZE = 500;
 
+/** The server keeps this many lines per application; the page keeps no more. */
+const MAX_LOG_LINES = 500;
+const FAILED_ATTEMPTS_BEFORE_BANNER = 10;
+
+const latestLines = (lines: string[]) => lines.slice(-MAX_LOG_LINES);
+
 export function LogsBox({ role }: { role?: string }) {
   const toast = useToast();
   const canViewAudit = role === 'SYS_ADMIN' || role === 'ADMIN';
@@ -49,7 +55,10 @@ export function LogsBox({ role }: { role?: string }) {
   // list reads as "loading", not "nothing here".
   const [historyLoading, setHistoryLoading] = useState(true);
   const [autoFollow, setAutoFollow] = useState(true);
-  const clientRef = useRef<Client | null>(null);
+  // Failed connection attempts since the last successful one.
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  // Bumped by "Reconnect now" to start over with a fresh client.
+  const [connectionNonce, setConnectionNonce] = useState(0);
 
   // Audit Log is always global — every user, every app, chronologically.
   // The app list below is only used to populate the per-app Application
@@ -86,7 +95,7 @@ export function LogsBox({ role }: { role?: string }) {
       try {
         if (source === 'application') {
           const rows = await api.get<LogLineRow[]>(API.APPLICATIONS.LOGS(selectedAppId as number));
-          if (!cancelled) setLines(rows.map((r) => r.content));
+          if (!cancelled) setLines(latestLines(rows.map((r) => r.content)));
         } else {
           const res = await api.get<{ items: AuditLogRow[]; total?: number }>(
             `${API.AUDIT_LOGS}?page=0&size=${AUDIT_PAGE_SIZE}`,
@@ -116,7 +125,19 @@ export function LogsBox({ role }: { role?: string }) {
     if (source === 'application' && selectedAppId === null) return;
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const brokerURL = `${wsProtocol}//${window.location.host}/ws`;
-    const client = new Client({ brokerURL, debug: () => {} });
+    // SPEC §5.3: 1, 2, 4, 8, 16, then every 30 seconds.
+    const client = new Client({
+      brokerURL,
+      debug: () => {},
+      reconnectDelay: 1000,
+      maxReconnectDelay: 30000,
+      reconnectTimeMode: ReconnectionTimeMode.EXPONENTIAL,
+    });
+    let disposed = false;
+    setReconnectAttempt(0);
+    client.onWebSocketClose = () => {
+      if (!disposed) setReconnectAttempt((a) => a + 1);
+    };
     const topic = source === 'application' ? `/topic/application-logs/${selectedAppId}` : '/topic/audit-log';
 
     client.onConnect = () => {
@@ -124,16 +145,19 @@ export function LogsBox({ role }: { role?: string }) {
       client.subscribe(topic, (msg) => {
         if (source === 'application') {
           try {
-            setLines((prev) => [...prev, JSON.parse(msg.body).content]);
+            const content = JSON.parse(msg.body).content;
+            setLines((prev) => latestLines([...prev, content]));
           } catch {
-            setLines((prev) => [...prev, msg.body]);
+            setLines((prev) => latestLines([...prev, msg.body]));
           }
           return;
         }
         try {
           const row = JSON.parse(msg.body) as AuditLogRow;
           // A row can arrive both in the history fetch and live; keep one copy.
-          setAuditRows((prev) => (row.id != null && prev.some((r) => r.id === row.id) ? prev : [...prev, row]));
+          setAuditRows((prev) =>
+            row.id != null && prev.some((r) => r.id === row.id) ? prev : [...prev, row].slice(-AUDIT_PAGE_SIZE),
+          );
           setAuditTotal((n) => n + 1);
         } catch {
           // Ignore a malformed audit message rather than showing a broken row.
@@ -142,22 +166,13 @@ export function LogsBox({ role }: { role?: string }) {
     };
 
     client.activate();
-    clientRef.current = client;
-    return () => { client.deactivate(); };
-  }, [source, selectedAppId]);
+    return () => {
+      disposed = true;
+      void client.deactivate();
+    };
+  }, [source, selectedAppId, connectionNonce]);
 
-  const reconnectDelays = [1000, 2000, 4000, 8000, 16000, 30000];
-  const [reconnectAttempt, setReconnectAttempt] = useState(0);
-
-  useEffect(() => {
-    if (!clientRef.current || !clientRef.current.connected) {
-      const delay = reconnectDelays[Math.min(reconnectAttempt, reconnectDelays.length - 1)];
-      const timer = setTimeout(() => { setReconnectAttempt((a) => a + 1); clientRef.current?.activate(); }, delay);
-      return () => clearTimeout(timer);
-    }
-  }, [reconnectAttempt]);
-
-  const showBanner = reconnectAttempt >= 10;
+  const showBanner = reconnectAttempt >= FAILED_ATTEMPTS_BEFORE_BANNER;
   // Say so as soon as the connection is retrying, not only after ten failed attempts.
   const reconnecting = reconnectAttempt >= 1 && !showBanner;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -375,7 +390,7 @@ export function LogsBox({ role }: { role?: string }) {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => { setReconnectAttempt(0); clientRef.current?.activate(); }}
+            onClick={() => setConnectionNonce((n) => n + 1)}
           >
             Reconnect now
           </Button>

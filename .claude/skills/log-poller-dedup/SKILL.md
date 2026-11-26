@@ -17,11 +17,14 @@ Don't conflate these two different mechanisms:
 The log script cannot be assumed to support "give me only new lines since last time" — it realistically returns a snapshot window (e.g. `tail -n 500 file.log`) every time it runs. The poller's job is to figure out what's new from that snapshot:
 
 1. Run the log script over SSH → get an ordered list of lines (oldest to newest), whatever window the script returns.
-2. Recall the **content of the last line** this poller previously saved for this engine.
-3. Search the new batch **from the end, backward**, for that same line content.
-   - Search backward, not forward: if that exact text repeats multiple times in the batch (e.g. a generic "heartbeat" message appearing often), matching the **most recent** occurrence minimizes the risk of re-treating already-seen content as new.
+2. Recall the lines this poller previously saved for this engine, leaving out its own `[ERROR] Log poll failed:` lines (they are not part of the remote log).
+3. Search the new batch **from the end, backward**, for the place where those saved lines end, comparing the **whole run** of saved lines that fits before that place.
+   - Matching only the last line is not enough: if it repeats (a "heartbeat" message), the newest copy would hide the new lines before it.
+   - If no run matches (a script that filters or rewrites older lines), search backward for the last saved line alone.
 4. Everything **after** the matched position is genuinely new. Append those lines to the database with an internally-assigned sequential line number (do not derive the line number from the script's output), trim the table back to 500 rows for that engine, and broadcast only the new lines over WebSocket.
 5. **Fallback:** if the last-known line's content is not found anywhere in the new batch (this happens if the log file was rotated/truncated, or enough volume occurred between polls that the old tail scrolled entirely out of the window), treat the **entire new batch as new**. Prefer risking a duplicate line over silently losing content.
+
+A failure that repeats is saved once, until a poll succeeds or the reason changes. The code is `LogDedup.newLines`.
 
 ## No special-casing needed for "engine just started"
 

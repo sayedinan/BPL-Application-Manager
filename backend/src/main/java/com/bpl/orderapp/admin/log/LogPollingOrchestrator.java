@@ -40,6 +40,9 @@ public class LogPollingOrchestrator {
     private static final int MAX_RETAINED_LINES = 500;
     private static final int LOG_POLL_INTERVAL_SECONDS = 5;
     private static final int LOG_SCRIPT_TIMEOUT_MS = 15000;
+    private static final String FAILURE_PREFIX = "[ERROR] Log poll failed: ";
+
+    private final ConcurrentHashMap<Long, String> lastFailure = new ConcurrentHashMap<>();
 
     private final SshCredentialCipher cipher;
     private final SshConnection sshConnection;
@@ -146,10 +149,16 @@ public class LogPollingOrchestrator {
         } catch (Exception e) {
             log.warn("Log poll failed for application id={}: {}", applicationId, e.getMessage());
             sshConnection.invalidateCache(host, user, fingerprint);
-            appendAndBroadcast(applicationId, "[ERROR] Log poll failed: " + e.getMessage());
+            // Recorded once per failure: the same one every few seconds would push the
+            // real log out of the retained lines.
+            String failure = FAILURE_PREFIX + e.getMessage();
+            if (!failure.equals(lastFailure.put(applicationId, failure))) {
+                appendAndBroadcast(applicationId, failure);
+            }
             return;
         }
 
+        lastFailure.remove(applicationId);
         List<String> newLines = extractNewLines(applicationId, rawOutput);
         for (String line : newLines) {
             appendAndBroadcast(applicationId, line);
@@ -161,20 +170,12 @@ public class LogPollingOrchestrator {
         int end = batch.length;
         while (end > 0 && batch[end - 1].isBlank()) end--;
 
-        java.util.Optional<ApplicationLogLine> lastLine =
-            logLineRepository.findFirstByApplicationIdOrderByLineNumberDesc(applicationId);
-
-        if (lastLine.isEmpty()) {
-            return Arrays.asList(Arrays.copyOf(batch, end));
-        }
-
-        String lastContent = lastLine.get().getContent();
-        for (int i = end - 1; i >= 0; i--) {
-            if (batch[i].equals(lastContent)) {
-                return Arrays.asList(Arrays.copyOfRange(batch, i + 1, end));
-            }
-        }
-        return Arrays.asList(Arrays.copyOf(batch, end));
+        // The poller's own error lines are not part of the remote log.
+        List<String> stored = logLineRepository.findByApplicationIdOrderByLineNumberAsc(applicationId).stream()
+            .map(ApplicationLogLine::getContent)
+            .filter(content -> !content.startsWith(FAILURE_PREFIX))
+            .toList();
+        return LogDedup.newLines(Arrays.asList(Arrays.copyOf(batch, end)), stored);
     }
 
     private void appendAndBroadcast(Long applicationId, String content) {
