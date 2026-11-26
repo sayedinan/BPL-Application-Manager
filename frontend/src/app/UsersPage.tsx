@@ -1,3 +1,4 @@
+import { canManageUser } from '@/lib/userPermissions';
 import { CONTROL } from '@/components/ui/Field';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '@/api/client';
@@ -491,9 +492,7 @@ export function UsersPage(): JSX.Element {
               {users.map((u, index) => {
                 const rowNum = index + 1;
                 const isSelf = currentUser?.id === u.id;
-                const isSysAdminRow = u.role === 'SYS_ADMIN';
-                const viewerIsSysAdmin = currentUser?.role === 'SYS_ADMIN';
-                const canManageRow = viewerIsSysAdmin || !isSysAdminRow;
+                const canManageRow = canManageUser(currentUser?.role, u.role);
                 return (
                   <tr key={u.id} className="border-b border-rule transition-theme last:border-0 hover:bg-sunken">
                     <td className="px-3 py-3 text-xs text-muted">{rowNum}</td>

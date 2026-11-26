@@ -24,6 +24,9 @@
 const API_BASE = '/api/v1';
 const LOGIN_PATH = '/login';
 
+/** The server refuses state-changing requests without this (CSRF defence). */
+export const CSRF_HEADERS = { 'X-BPL-CSRF': '1' } as const;
+
 export class ApiError extends Error {
   public readonly status: number;
   public readonly code: string | null;
@@ -94,6 +97,7 @@ export async function apiFetch<T>(
     credentials: 'include', // SPEC §8.4 — send the HttpOnly cookie
     headers: {
       Accept: 'application/json',
+      ...CSRF_HEADERS,
       ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     },
     ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),

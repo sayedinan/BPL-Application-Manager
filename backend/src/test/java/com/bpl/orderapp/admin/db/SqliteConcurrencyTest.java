@@ -60,7 +60,8 @@ class SqliteConcurrencyTest {
     static class Config {
         @Bean
         AuditWriter auditWriter(AuditLogRepository audits, ApplicationRepository apps) {
-            return new AuditWriter(audits, apps);
+            return new AuditWriter(audits, apps,
+                new com.bpl.orderapp.admin.ratelimit.ClientAddress(false));
         }
     }
 

@@ -60,6 +60,6 @@ server:
 
 # WebSocket connection limits (SPEC §5.4)
 websocket:
-  max-per-user: 5
+  max-per-user: 10
   max-per-application: 50
   max-global: 500

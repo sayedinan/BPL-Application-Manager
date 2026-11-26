@@ -67,6 +67,7 @@ class ApplicationBootTest {
 
             HttpResponse<String> login = send(HttpRequest.newBuilder(URI.create(base(ctx) + "/api/v1/auth/login"))
                     .header("Content-Type", "application/json")
+                    .header("X-BPL-CSRF", "1")
                     .POST(HttpRequest.BodyPublishers.ofString("{\"username\":\"admin\",\"password\":\"Known-Pass-123!\"}"))
                     .build());
             assertEquals(200, login.statusCode(), login.body());

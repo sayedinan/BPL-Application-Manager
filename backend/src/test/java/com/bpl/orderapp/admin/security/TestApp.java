@@ -66,13 +66,27 @@ final class TestApp implements AutoCloseable {
         return res.headers().firstValue("Set-Cookie").orElseThrow().split(";", 2)[0];
     }
 
+    /** As the web app sends it. */
     HttpResponse<String> send(String method, String path, String cookie, String json) throws Exception {
+        return send(builder(method, path, cookie, json).header("X-BPL-CSRF", "1"));
+    }
+
+    /** As another origin's form or no-preflight fetch would send it. */
+    HttpResponse<String> sendWithoutCsrfHeader(String method, String path, String cookie) throws Exception {
+        return send(builder(method, path, cookie, null));
+    }
+
+    private HttpResponse<String> send(HttpRequest.Builder b) throws Exception {
+        return http.send(b.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpRequest.Builder builder(String method, String path, String cookie, String json) {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create("http://" + hostAndPort + path))
             .method(method, json == null
                 ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(json));
         if (json != null) b.header("Content-Type", "application/json");
         if (cookie != null) b.header("Cookie", cookie);
-        return http.send(b.build(), HttpResponse.BodyHandlers.ofString());
+        return b;
     }
 
     CompletableFuture<Stomp> openSocket(String cookie) {

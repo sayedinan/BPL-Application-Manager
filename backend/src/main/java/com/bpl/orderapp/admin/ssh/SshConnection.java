@@ -152,7 +152,8 @@ public class SshConnection {
         try {
             ch.setCommand(script);
             ch.setInputStream(null);
-            ch.setErrStream(System.err);
+            // Remote error output is dropped (JSch default). It can hold secrets, and
+            // JSch closes a stream it is given, which would close the backend's own.
             java.io.InputStream in = ch.getInputStream();
             ch.connect();
             byte[] tmp = new byte[1024];

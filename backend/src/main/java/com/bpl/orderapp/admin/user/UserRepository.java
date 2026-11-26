@@ -42,4 +42,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     List<Long> findAssignedApplicationIds(@Param("username") String username);
 
     long countByRole(String role);
+
+    java.util.List<User> findByRole(String role);
 }

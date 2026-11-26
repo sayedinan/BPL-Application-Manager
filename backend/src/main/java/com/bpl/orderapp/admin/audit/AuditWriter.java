@@ -22,8 +22,11 @@ import java.util.*;
 public class AuditWriter {
     private final AuditLogRepository auditLogRepository;
     private final ApplicationRepository applicationRepository;
+    private final com.bpl.orderapp.admin.ratelimit.ClientAddress clientAddress;
 
-    public AuditWriter(AuditLogRepository auditLogRepository, ApplicationRepository applicationRepository) {
+    public AuditWriter(AuditLogRepository auditLogRepository, ApplicationRepository applicationRepository,
+            com.bpl.orderapp.admin.ratelimit.ClientAddress clientAddress) {
+        this.clientAddress = clientAddress;
         this.auditLogRepository = auditLogRepository;
         this.applicationRepository = applicationRepository;
     }
@@ -93,13 +96,8 @@ public class AuditWriter {
      * that many trusted hops from the end instead of always taking
      * the last one.
      */
+    /** Same rule as rate limiting: X-Forwarded-For counts only behind a trusted proxy. */
     private String extractSourceIp(HttpServletRequest request) {
-        if (request == null) return null;
-        String xff = request.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            String[] hops = xff.split(",");
-            return hops[hops.length - 1].trim();
-        }
-        return request.getRemoteAddr();
+        return request == null ? null : clientAddress.of(request);
     }
 }

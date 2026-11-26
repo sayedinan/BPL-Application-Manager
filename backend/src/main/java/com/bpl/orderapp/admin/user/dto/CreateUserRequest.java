@@ -7,7 +7,9 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 public record CreateUserRequest(
-    @NotBlank String username,
+    @NotBlank
+    @Pattern(regexp = "[^\\p{Cc}\\p{Zl}\\p{Zp}]*", message = "username must not contain control characters or line breaks")
+    String username,
     @NotBlank @Size(max = 150) String fullName,
     @NotBlank @Pattern(regexp = "SYS_ADMIN|ADMIN|USER", message = "role must be SYS_ADMIN, ADMIN or USER") String role,
     @NotBlank @Email String email,

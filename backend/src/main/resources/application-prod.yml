@@ -41,6 +41,10 @@ spring:
 
 # Nightly SQLite backups (VACUUM INTO) go here; compose mounts the bplBackups volume.
 app:
+  # The first Sys.Admin's password is written here once, on the first start.
+  bootstrap:
+    sysadmin:
+      password-file: ${ADMIN_PASSWORD_FILE:/data/initial-admin-password.txt}
   backup:
     dir: ${BACKUP_DIR:/backups}
     retention-days: 14
@@ -62,11 +66,14 @@ management:
       show-details: never
 
 logging:
-  pattern:
-    console: '{"ts":"%d{ISO8601}","lvl":"%level","tid":"%X{traceId}","sid":"%X{spanId}","logger":"%logger","msg":"%msg"}%n'
+  # A real JSON encoder: it escapes quotes and line breaks in messages, which
+  # a hand-built pattern does not.
+  structured:
+    format:
+      console: logstash
 
 # WebSocket connection limits (SPEC §5.4)
 websocket:
-  max-per-user: 5
+  max-per-user: 10
   max-per-application: 50
   max-global: 500

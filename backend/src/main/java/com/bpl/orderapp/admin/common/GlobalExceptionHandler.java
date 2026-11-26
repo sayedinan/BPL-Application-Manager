@@ -52,6 +52,24 @@ public class GlobalExceptionHandler {
             .body(pd);
     }
 
+    @ExceptionHandler(com.bpl.orderapp.admin.application.ApplicationBusyException.class)
+    public ResponseEntity<ProblemDetail> handleApplicationBusy(
+            com.bpl.orderapp.admin.application.ApplicationBusyException ex) {
+        return conflict("APPLICATION_BUSY",
+            "Another action is already running for this application. Try again when it finishes.");
+    }
+
+    @ExceptionHandler(com.bpl.orderapp.admin.user.LastSysAdminException.class)
+    public ResponseEntity<ProblemDetail> handleLastSysAdmin(com.bpl.orderapp.admin.user.LastSysAdminException ex) {
+        return conflict("LAST_SYS_ADMIN", "At least one Sys.Admin must remain.");
+    }
+
+    private ResponseEntity<ProblemDetail> conflict(String code, String detail) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(baseProblem(code, HttpStatus.CONFLICT, detail));
+    }
+
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<ProblemDetail> handleInvalidCredentials(InvalidCredentialsException ex) {
         // The detail message is generic by design — never reveal

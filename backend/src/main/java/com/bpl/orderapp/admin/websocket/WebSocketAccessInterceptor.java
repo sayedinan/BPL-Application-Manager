@@ -1,7 +1,6 @@
 package com.bpl.orderapp.admin.websocket;
 
 import com.bpl.orderapp.admin.common.Role;
-import com.bpl.orderapp.admin.log.WebSocketLimits;
 import com.bpl.orderapp.admin.security.SessionConfig;
 import com.bpl.orderapp.admin.user.User;
 import com.bpl.orderapp.admin.user.UserApplicationAssignmentRepository;
@@ -45,6 +44,14 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
     private final ConcurrentHashMap<String, String> subscriptionTopics = new ConcurrentHashMap<>();
 
     private static final long CLOSE_GRACE_SECONDS = 30;
+
+    // SPEC §5.4
+    @org.springframework.beans.factory.annotation.Value("${websocket.max-per-user:10}")
+    private int maxPerUser = 10;
+    @org.springframework.beans.factory.annotation.Value("${websocket.max-per-application:50}")
+    private int maxPerApplication = 50;
+    @org.springframework.beans.factory.annotation.Value("${websocket.max-global:500}")
+    private int maxGlobal = 500;
     private final AuditWriter auditWriter;
     private final ApplicationEventPublisher events;
     private final java.util.concurrent.ScheduledExecutorService closeScheduler =
@@ -109,9 +116,9 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
     protected void handleConnect(StompHeaderAccessor accessor) {
         String username = requireUsername(accessor);
         String sessionId = accessor.getSessionId();
-        if (globalConnections.get() >= WebSocketLimits.MAX_GLOBAL) throw new MessageDeliveryException("Global connection limit reached");
+        if (globalConnections.get() >= maxGlobal) throw new MessageDeliveryException("Global connection limit reached");
         AtomicInteger userCount = perUserConnections.computeIfAbsent(username, k -> new AtomicInteger(0));
-        if (userCount.get() >= WebSocketLimits.MAX_PER_USER) throw new MessageDeliveryException("Per-user connection limit reached");
+        if (userCount.get() >= maxPerUser) throw new MessageDeliveryException("Per-user connection limit reached");
         globalConnections.incrementAndGet(); userCount.incrementAndGet(); sessionUsers.put(sessionId, username);
         connectionRepository.save(new WebSocketConnection(sessionId, username));
     }
@@ -138,7 +145,7 @@ public class WebSocketAccessInterceptor implements ChannelInterceptor {
                 if (!assigned.contains(applicationId)) throw new MessageDeliveryException("Not authorized for this application's logs");
             }
             long appCount = subscriptionRepository.countByTopicKey(idPart);
-            if (appCount >= WebSocketLimits.MAX_PER_APP) throw new MessageDeliveryException("Per-application subscriber limit reached");
+            if (appCount >= maxPerApplication) throw new MessageDeliveryException("Per-application subscriber limit reached");
             subscriptionRepository.save(new WebSocketSubscription(sessionId, subscriptionId, idPart));
             events.publishEvent(new LogViewerEvent(applicationId, true));
             return;

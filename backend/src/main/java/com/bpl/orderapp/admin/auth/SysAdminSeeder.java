@@ -1,5 +1,9 @@
 package com.bpl.orderapp.admin.auth;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import com.bpl.orderapp.admin.user.User;
 import com.bpl.orderapp.admin.user.UserRepository;
 import org.slf4j.Logger;
@@ -65,21 +69,25 @@ public class SysAdminSeeder implements ApplicationRunner {
     private final BCryptPasswordEncoder encoder;
     private final String username;
     private final UserRepository userRepository;
+    private final Path passwordFile;
 
     public SysAdminSeeder(
         BCryptPasswordEncoder encoder,
         @Value("${app.bootstrap.sysadmin.username:admin}") String username,
+        @Value("${app.bootstrap.sysadmin.password-file:./data/initial-admin-password.txt}") String passwordFile,
         UserRepository userRepository
     ) {
         this.encoder = encoder;
         this.username = username;
+        this.passwordFile = Path.of(passwordFile).toAbsolutePath();
         this.userRepository = userRepository;
     }
 
     @Override
-    public void run(ApplicationArguments args) {
+    public void run(ApplicationArguments args) throws IOException {
         if (userRepository.countByRole("SYS_ADMIN") > 0) {
             log.info("SysAdmin seed skipped: user '{}' already exists.", username);
+            removeUsedPasswordFile();
             return;
         }
 
@@ -92,33 +100,61 @@ public class SysAdminSeeder implements ApplicationRunner {
         String cleartext = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
 
         String hash = encoder.encode(cleartext);
-        Instant now = Instant.now();
 
         User admin = new User();
-        admin.setUsername(username);
+        // The name can be taken if every Sys.Admin was demoted. Never take over that
+        // account: make a clearly named recovery one beside it.
+        String name = freeUsername();
+        admin.setUsername(name);
         admin.setPasswordHash(hash);
         admin.setRole("SYS_ADMIN");
         admin.setMustChangePassword(true);
+        writePrivateFile(cleartext);
         userRepository.save(admin);
 
-        // The ONE place the cleartext password is allowed to be
-        // written. The banner is on multiple lines and clearly marked
-        // so it stands out in deploy logs. Anything else that prints
-        // the password is a regression â€” the
-        // SysAdminSeeder_passwordNeverLoggedThroughLogger test below
-        // enforces this.
-        //
-        // Note: the line below is the only place this template string
-        // appears in the source. If you find yourself writing a second
-        // log.info(...) that includes `cleartext`, you've broken the
-        // contract; instead route the operator's notification through
-        // a non-log channel (configurable endpoint, file, etc.) and
-        // keep the log out of the loop.
-        log.info("=========================================================");
-        log.info("  BPL Sys.Admin bootstrap (one-time)");
-        log.info("  username: {}", username);
-        log.info("  initial password (rotate on first login): {}", cleartext);
-        log.info("  generated at: {}", now);
-        log.info("=========================================================");
+        // The password itself is never logged: logs are copied and kept widely.
+        log.info("Sys.Admin '{}' created. The initial password is in {}. Sign in, change it, "
+            + "then delete that file.", name, passwordFile);
+    }
+
+    private String freeUsername() {
+        if (!userRepository.existsByUsername(username)) {
+            return username;
+        }
+        String candidate = username + "-recovery";
+        for (int i = 2; userRepository.existsByUsername(candidate); i++) {
+            candidate = username + "-recovery-" + i;
+        }
+        return candidate;
+    }
+
+    /** Readable by the owner only, where the file system supports it (Linux in production). */
+    private void writePrivateFile(String password) throws IOException {
+        Files.createDirectories(passwordFile.getParent());
+        Files.deleteIfExists(passwordFile);
+        if (passwordFile.getFileSystem().supportedFileAttributeViews().contains("posix")) {
+            Files.createFile(passwordFile, PosixFilePermissions.asFileAttribute(
+                PosixFilePermissions.fromString("rw-------")));
+        }
+        Files.writeString(passwordFile, password + System.lineSeparator());
+    }
+
+    /** On a later start, drop the file if its password is no longer the initial one. */
+    private void removeUsedPasswordFile() {
+        if (!Files.exists(passwordFile)) {
+            return;
+        }
+        try {
+            String password = Files.readString(passwordFile).strip();
+            boolean stillWorks = userRepository.findByRole("SYS_ADMIN").stream()
+                .anyMatch(u -> u.isMustChangePassword() && encoder.matches(password, u.getPasswordHash()));
+            if (!stillWorks) {
+                Files.delete(passwordFile);
+                log.info("Deleted the used initial password file {}", passwordFile);
+            }
+        } catch (IOException e) {
+            log.warn("Could not check or delete {}; delete it by hand once the password is changed",
+                passwordFile, e);
+        }
     }
 }

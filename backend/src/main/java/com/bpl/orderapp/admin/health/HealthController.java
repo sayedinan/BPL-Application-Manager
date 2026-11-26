@@ -322,6 +322,9 @@ public class HealthController {
         // only touched when the request carried one (null = keep, "" = remove).
         ApplicationHealthConfig config = configRepository.findById(id)
             .orElseGet(() -> new ApplicationHealthConfig(id));
+        if (!keyProvided) {
+            requireSameOriginForSavedKey(config, url);
+        }
         config.apply(enabled, url, pin, interval);
         if (keyProvided) {
             config.setApiKeyEnc(encryptedKey);
@@ -384,6 +387,10 @@ public class HealthController {
         String apiKey;
         if (req.apiKey() == null) {
             apiKey = configRepository.findById(id)
+                .map(saved -> {
+                    requireSameOriginForSavedKey(saved, url);
+                    return saved;
+                })
                 .map(ApplicationHealthConfig::getApiKeyEnc)
                 .map(cipher::decrypt)
                 .orElse(null);
@@ -409,6 +416,24 @@ public class HealthController {
     // ------------------------------------------------------------------
     // Validation. Each returns the cleaned value or throws a 400.
     // ------------------------------------------------------------------
+
+    /**
+     * The saved key is write-only. Sending it somewhere new would hand it to
+     * whoever runs that address, so another origin needs the key typed again.
+     */
+    private static void requireSameOriginForSavedKey(ApplicationHealthConfig saved, String url) {
+        if (saved.getApiKeyEnc() != null && !origin(saved.getUrl()).equals(origin(url))) {
+            throw badRequest("The URL's scheme, host or port changed. Enter the API key again, "
+                + "or remove the saved key.");
+        }
+    }
+
+    private static String origin(String url) {
+        URI uri = URI.create(url);
+        String scheme = uri.getScheme().toLowerCase(Locale.ROOT);
+        int port = uri.getPort() != -1 ? uri.getPort() : (scheme.equals("https") ? 443 : 80);
+        return scheme + "://" + uri.getHost().toLowerCase(Locale.ROOT) + ":" + port;
+    }
 
     private static String validateUrl(String raw) {
         String url = raw == null ? "" : raw.trim();

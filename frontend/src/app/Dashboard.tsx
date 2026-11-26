@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, ApiError } from '@/api/client';
+import { api, ApiError, CSRF_HEADERS } from '@/api/client';
 import { API } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
 import { PageHeader } from '@/components/ui/Card';
@@ -166,7 +166,7 @@ export function DashboardPlaceholder(): JSX.Element {
       const res = await fetch(`/api/v1${path}`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Idempotency-Key': idempotencyKey },
+        headers: { ...CSRF_HEADERS, 'Idempotency-Key': idempotencyKey },
       });
       await loadApplications();
       if (res.ok) {
@@ -177,7 +177,13 @@ export function DashboardPlaceholder(): JSX.Element {
           `${action === 'start' ? 'Started' : 'Stopped'} ${app.name}, but couldn't confirm within the timeout — check its real state.`,
         );
       } else {
-        toast.push('error', `Failed to ${action} ${app.name} — check the server connection and scripts.`);
+        const problem = (await res.json().catch(() => null)) as { code?: string; detail?: string } | null;
+        toast.push(
+          'error',
+          problem?.code === 'APPLICATION_BUSY' && problem.detail
+            ? problem.detail
+            : `Failed to ${action} ${app.name} — check the server connection and scripts.`,
+        );
       }
     } catch {
       toast.push('error', `Failed to ${action} ${app.name}.`);

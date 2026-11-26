@@ -18,6 +18,7 @@ If you are about to write or say "the user's role is BPL" — stop; the correct 
 |---|---|---|---|
 | Create/delete users | ✅ | ✅ (User role only) | ❌ |
 | Create/delete Admins | ✅ | ❌ | ❌ |
+| Edit or reset the password of an Admin or Sys.Admin | ✅ | ❌ | ❌ |
 | Add/delete/edit engines | ✅ | ❌ | ❌ |
 | See all engines | ✅ | ✅ | ❌ (assigned only) |
 | Start/stop engines | ✅ (all) | ✅ (all) | ✅ (assigned only) |

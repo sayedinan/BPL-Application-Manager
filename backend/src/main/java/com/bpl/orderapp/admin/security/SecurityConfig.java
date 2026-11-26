@@ -86,18 +86,8 @@ public class SecurityConfig {
             @Value("${rate-limit.api-per-ip-per-minute:6000}") int apiPerAddressPerMinute,
             @Value("${rate-limit.api-per-user-per-minute:1200}") int apiPerUserPerMinute) throws Exception {
         http
-            // CSRF is disabled for the API endpoints. The session
-            // cookie is HttpOnly + SameSite=Strict, which means
-            // cross-origin browser requests cannot read the
-            // cookie value, so a CSRF attack against a same-origin
-            // browser-context request would need the victim's
-            // browser to actively fetch a cross-origin URL. For
-            // a pure JSON API consumed by the SPA, the cookie's
-            // SameSite=Strict attribute is the primary defense;
-            // CSRF tokens add ceremony without a corresponding
-            // security gain. If a future browser-context
-            // endpoint changes this calculus, re-enable CSRF and
-            // issue tokens to the SPA on session creation.
+            // Spring's token-based CSRF is off; CsrfHeaderFilter below requires a
+            // custom header on every state-changing request instead.
             .csrf(csrf -> csrf.disable())
 
             // Permitted paths. Login is the entry point; /auth/me
@@ -144,6 +134,8 @@ public class SecurityConfig {
             .addFilterAfter(new RateLimitFilter(clientAddress, loginPerSecond,
                 apiPerAddressPerMinute, apiPerUserPerMinute), SecurityContextHolderFilter.class)
 
+            // CSRF defence (see CsrfHeaderFilter). Both run in the order added here.
+            .addFilterBefore(new CsrfHeaderFilter(), AuthorizationFilter.class)
             .addFilterBefore(new PasswordChangeRequiredFilter(userRepository), AuthorizationFilter.class)
 
             // Absolute 90-day cap on any login, including sliding

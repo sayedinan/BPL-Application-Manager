@@ -151,3 +151,17 @@ describe('apiFetch — non-401 error handling', () => {
     expect(result).toBeUndefined();
   });
 });
+
+describe('apiFetch — CSRF header', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('is sent with state-changing requests', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+
+    await apiFetch('/auth/logout', { method: 'POST' });
+
+    expect(spy.mock.calls[0]?.[1]?.headers).toMatchObject({ 'X-BPL-CSRF': '1' });
+  });
+});

@@ -184,18 +184,8 @@ public class UserController {
         newUser.setEmail(email);
         newUser.setPhoneNumber(phoneNumber);
         newUser.setMustChangePassword(true);
-        java.util.UUID newId = userRepository.save(newUser).getId();
-        // Admin/Sys.Admin see all applications regardless of
-        // assignment rows (RBAC checks role first everywhere else in
-        // the app) — so assignments are only meaningful, and only
-        // stored, for USER-role accounts. Silently dropping them here
-        // for other roles keeps user_application_assignments free of
-        // rows that would otherwise be dead data from day one.
-        if (assignedIds != null && "USER".equals(role)) {
-            for (Long appId : assignedIds) {
-                assignmentRepository.save(new UserApplicationAssignment(newId, appId));
-            }
-        }
+        // Admin/Sys.Admin see all applications, so assignments are stored for USER only.
+        java.util.UUID newId = userUpdateService.create(newUser, "USER".equals(role) ? assignedIds : null);
         log.info("Created user '{}' (id={}, role={})", username, newId, role);
         try {
             var currentAuth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
@@ -233,14 +223,10 @@ public class UserController {
             .orElseThrow(com.bpl.orderapp.admin.common.InvalidCredentialsException::new);
         java.util.UUID callerId = caller.getId();
         com.bpl.orderapp.admin.accountDeletion.AccountDeletionGuard.assertCanDelete(callerId, id);
-        User target = userRepository.findById(id).orElseThrow(NotFoundException::new);
+        User target = userUpdateService.delete(id, callerIsSysAdmin);
         String targetRole = target.getRole();
-        if ("SYS_ADMIN".equals(targetRole) && !callerIsSysAdmin) {
-            throw new com.bpl.orderapp.admin.common.AdminCeilingException();
-        }
         String deletedUsername = target.getUsername();
 
-        userRepository.deleteById(id);
         // Kill live sessions so a deleted user's cookie can't authenticate as a
         // new user later created with the same username.
         revokeSessions(deletedUsername);
@@ -275,13 +261,9 @@ public class UserController {
         });
         String username = user.getUsername();
 
-        // Admin ceiling (SPEC §1): an ADMIN must not be able to reset a
-        // SYS_ADMIN's password, since they would receive the temporary
-        // password and could sign in as that account. Same rule as the
-        // delete and update endpoints.
-        if ("SYS_ADMIN".equals(user.getRole()) && !"SYS_ADMIN".equals(resetActorRole)) {
-            throw new com.bpl.orderapp.admin.common.AdminCeilingException();
-        }
+        // Admin ceiling (SPEC §1): whoever resets a password receives the temporary one
+        // and could sign in as that account.
+        UserUpdateService.requireMayManage(user.getRole(), "SYS_ADMIN".equals(resetActorRole));
 
         // 2. Generate a temporary password. Same recipe as the
         //    SysAdmin seeder: 24 bytes from SecureRandom → 32

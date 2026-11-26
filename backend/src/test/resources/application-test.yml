@@ -29,7 +29,13 @@ ssh:
   cipher:
     key: ${SSH_CIPHER_KEY:}
 
+# Keep the first-admin password file out of the working tree.
+app:
+  bootstrap:
+    sysadmin:
+      password-file: ${java.io.tmpdir}/bpl-test-admin-${random.uuid}.txt
+
 websocket:
-  max-per-user: 5
+  max-per-user: 2
   max-per-application: 50
   max-global: 500

@@ -28,7 +28,7 @@ A web-based administration tool for managing BPL (and future PCL) order applicat
 
 ### Rules
 - **No self-deletion** — no role can delete their own account
-- **Admin ceiling** — Admin cannot create/promote to Admin or Sys.Admin
+- **Admin ceiling** — Admin cannot create/promote to Admin or Sys.Admin, and cannot edit, delete or reset the password of an Admin or Sys.Admin account (their own included; they change their own password). Only Sys.Admin manages those accounts, and at least one Sys.Admin must always remain (`409 LAST_SYS_ADMIN`)
 - **Application assignment** — Users gain access via "Assigned Applications" (not "roles")
 - **Terminology:** "Role" = RBAC tier (SYS_ADMIN/ADMIN/USER). "Application Assignment" = per-application access grant.
 
@@ -281,6 +281,8 @@ SHELLCHECK_UNAVAILABLE
 
 ## 6. Application Lifecycle
 
+Start, stop, edit and delete of one application never run at the same time; a second request gets `409 APPLICATION_BUSY`.
+
 ### 6.1 Status States
 ```
 STOPPED → STARTING → RUNNING
@@ -324,8 +326,8 @@ STOPPED → STARTING → RUNNING
 1. Run `log_script` via SSH (15s timeout) → ordered lines (oldest→newest)
 2. Each line prefixed with epoch ms: `1725638400123 [INFO] message`
 3. Recall last saved `content` for this application
-4. Search new batch **backward** for matching content
-5. Lines after match = new → append with monotonic `line_number`, trim to 500
+4. Search the new batch **backward** for the place where the stored lines end, comparing the whole run of stored lines that fits, not only the last one (which may repeat). If no run matches, search backward for the last stored line alone. The poller's own `[ERROR]` lines are left out of this comparison
+5. Lines after the match = new → append with monotonic `line_number`, trim to 500
 6. **Fallback:** If last content not found → treat entire batch as new
 7. Broadcast new lines via WebSocket to `/topic/application-logs/{applicationId}`
 
@@ -341,6 +343,7 @@ tail -n "$LINES" "$LOG_FILE" 2>/dev/null | awk '{printf "%d %s\n", systime()*100
 - Connection/auth failure → write `[ERROR] Log poll failed: <reason>` to application log stream
 - Invalidate cached SSH connection → lazy reconnect on next tick
 - No silent retries, no swallowing
+- The same failure repeating is recorded once, until a poll succeeds or the reason changes, so it cannot push the real log out of the 500 kept lines
 
 ---
 
@@ -380,6 +383,9 @@ frame-ancestors 'none';
 base-uri 'self';
 form-action 'self'
 ```
+
+### CSRF
+Every request other than GET, HEAD, OPTIONS and TRACE must carry the header `X-BPL-CSRF` (any value), or it gets `403`, code `CSRF_REJECTED`. `SameSite=Strict` alone does not cover other ports or sibling subdomains. Another origin cannot add the header without a CORS preflight, which the backend does not approve; do not enable CORS for other origins without replacing this. Scripts calling the API must send it too.
 
 ### 8.6 Rate Limiting
 All limits are enforced by the backend (Bucket4j, in memory); the stock Caddy image has no rate limiter. A blocked request gets `429`, code `RATE_LIMITED`, and `Retry-After`.
@@ -485,7 +491,8 @@ services:
 
 ### 12.1 First Sys.Admin Bootstrap
 1. Flyway migration inserts seeded Sys.Admin
-2. Initial password shown once at deploy (logs/secret)
+2. The initial password is written once to a private file, never to the logs: `app.bootstrap.sysadmin.password-file`
+   (prod: `/data/initial-admin-password.txt`, override with `ADMIN_PASSWORD_FILE`). See DB-OPERATIONS.md.
 3. First login → forced password change
 
 ### 12.2 Password Reset (Admin → User)
@@ -566,8 +573,9 @@ management:
     health:
       show-details: never
 logging:
-  pattern:
-    console: '{"ts":"%d{ISO8601}","lvl":"%level","tid":"%X{traceId}","sid":"%X{spanId}","logger":"%logger","msg":"%msg"}%n'
+  structured:
+    format:
+      console: logstash
 ```
 
 ### 13.2 SSH Timeouts (Per Application, Configurable)

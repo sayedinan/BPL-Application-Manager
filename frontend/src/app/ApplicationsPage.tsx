@@ -1,3 +1,4 @@
+import { useToast } from '@/components/ui/Toast';
 import { CONTROL } from '@/components/ui/Field';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '@/api/client';
@@ -39,6 +40,9 @@ interface FormState {
   smsExternalOfflineMessage: string;
 }
 
+/** The body of a save: empty unless there is something to tell the user. */
+type SaveResult = { warning?: string } | undefined;
+
 const EMPTY_FORM: FormState = {
   name: '', serverIp: '', sshUsername: '', sshPassword: '', sshHostKeyFingerprint: '',
   startScript: '', stopScript: '', logScript: '',
@@ -50,6 +54,7 @@ const inputClass = CONTROL;
 const labelClass = 'mb-1 block text-sm font-medium text-ink';
 
 export function ApplicationsPage(): JSX.Element {
+  const toast = useToast();
   const [apps, setApps] = useState<ApplicationSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -80,6 +85,10 @@ export function ApplicationsPage(): JSX.Element {
 
   useEffect(() => { void loadApplications(); }, []);
 
+  function showWarning(result: SaveResult) {
+    if (result?.warning) toast.push('error', result.warning);
+  }
+
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
     if (key === 'serverIp' || key === 'sshUsername' || key === 'sshPassword') {
@@ -93,7 +102,7 @@ export function ApplicationsPage(): JSX.Element {
     if (!form.name.trim()) { setFormError('Name is required.'); return; }
     setSubmitting(true);
     try {
-      await api.post(API.APPLICATIONS.CREATE, {
+      const saved = await api.post<SaveResult>(API.APPLICATIONS.CREATE, {
         name: form.name, serverIp: form.serverIp, sshUsername: form.sshUsername,
         sshPassword: form.sshPassword, sshHostKeyFingerprint: form.sshHostKeyFingerprint,
         startScript: form.startScript, stopScript: form.stopScript, logScript: form.logScript,
@@ -102,6 +111,7 @@ export function ApplicationsPage(): JSX.Element {
         smsStartMessage: form.smsStartMessage, smsStopMessage: form.smsStopMessage,
         smsExternalOnlineMessage: form.smsExternalOnlineMessage, smsExternalOfflineMessage: form.smsExternalOfflineMessage,
       });
+      showWarning(saved);
       setForm(EMPTY_FORM);
       setShowForm(false);
       setTestStatus('untested');
@@ -178,7 +188,7 @@ export function ApplicationsPage(): JSX.Element {
     if (!form.name.trim()) { setFormError('Name is required.'); return; }
     setSubmitting(true);
     try {
-      await api.put(API.APPLICATIONS.UPDATE(editingId), {
+      const saved = await api.put<SaveResult>(API.APPLICATIONS.UPDATE(editingId), {
         name: form.name, serverIp: form.serverIp, sshUsername: form.sshUsername,
         sshPassword: form.sshPassword || undefined,
         sshHostKeyFingerprint: form.sshHostKeyFingerprint || undefined,
@@ -188,6 +198,7 @@ export function ApplicationsPage(): JSX.Element {
         smsStartMessage: form.smsStartMessage, smsStopMessage: form.smsStopMessage,
         smsExternalOnlineMessage: form.smsExternalOnlineMessage, smsExternalOfflineMessage: form.smsExternalOfflineMessage,
       });
+      showWarning(saved);
       cancelEdit();
       await loadApplications();
     } catch (err) {

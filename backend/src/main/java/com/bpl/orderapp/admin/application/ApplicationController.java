@@ -50,6 +50,8 @@ public class ApplicationController {
     private static final long CONFIRMATION_POLL_INTERVAL_MS = 1_000;
 
     private final AuditLogReader auditLogReader;
+    private ShellCheckValidator shellCheck = new ShellCheckValidator();
+    private final java.util.Set<Long> busy = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final SshCredentialCipher cipher;
     private final IdempotencyService idempotencyService;
     private final SshConnection sshConnection;
@@ -255,7 +257,7 @@ public class ApplicationController {
     }
 
     @PostMapping
-    public ResponseEntity<Void> createApplication(@RequestBody Map<String, Object> req, HttpServletRequest httpRequest) {
+    public ResponseEntity<Map<String, Object>> createApplication(@RequestBody Map<String, Object> req, HttpServletRequest httpRequest) {
         accessGuard.require(Action.CREATE_APPLICATION);
         String name = (String) req.get("name");
         String serverIp = (String) req.get("serverIp");
@@ -284,7 +286,7 @@ public class ApplicationController {
                 "SSH host key fingerprint is required: run Test Connection first");
         }
         String encPassword = cipher.encrypt(sshPassword);
-        validateScripts(httpRequest, startScript, stopScript, logScript);
+        boolean validated = validateScripts(httpRequest, startScript, stopScript, logScript);
 
         Application newApp = new Application();
         newApp.setName(name);
@@ -318,7 +320,7 @@ public class ApplicationController {
             log.warn("Audit write failed for CREATE_APPLICATION (id={})", newId, auditEx);
         }
 
-        return ResponseEntity.ok().build();
+        return saved(validated);
     }
 
     @PostMapping("/{id}/start")
@@ -326,6 +328,10 @@ public class ApplicationController {
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             HttpServletRequest httpRequest) {
         accessGuard.requireApplication(Action.CONTROL_APPLICATION, id);
+        return exclusively(id, () -> doStart(id, idempotencyKey, httpRequest));
+    }
+
+    private ResponseEntity<Map<String, Object>> doStart(Long id, String idempotencyKey, HttpServletRequest httpRequest) {
         requireHealthMonitoring(id);
         idempotencyService.checkAndStore(idempotencyKey, accessGuard.currentCaller().userId(), id);
 
@@ -395,6 +401,10 @@ public class ApplicationController {
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             HttpServletRequest httpRequest) {
         accessGuard.requireApplication(Action.CONTROL_APPLICATION, id);
+        return exclusively(id, () -> doStop(id, idempotencyKey, httpRequest));
+    }
+
+    private ResponseEntity<Map<String, Object>> doStop(Long id, String idempotencyKey, HttpServletRequest httpRequest) {
         requireHealthMonitoring(id);
         idempotencyService.checkAndStore(idempotencyKey, accessGuard.currentCaller().userId(), id);
 
@@ -509,11 +519,11 @@ public class ApplicationController {
      * ShellCheck gate (§12.3). Error-severity findings reject the save (400
      * SHELLCHECK_FAILED via ShellCheckFailedException). Fail-open ONLY when
      * ShellCheck itself is unavailable, and that case is audited.
+     * Returns false then, so the caller can warn the person saving.
      */
-    private void validateScripts(HttpServletRequest httpRequest, String... scripts) {
-        ShellCheckValidator validator = new ShellCheckValidator();
+    private boolean validateScripts(HttpServletRequest httpRequest, String... scripts) {
         try {
-            for (String sc : scripts) validator.validate(sc);
+            for (String sc : scripts) shellCheck.validate(sc);
         } catch (ShellCheckValidator.ShellCheckUnavailableException e) {
             log.warn("ShellCheck unavailable; saving unvalidated scripts", e);
             try {
@@ -523,12 +533,36 @@ public class ApplicationController {
             } catch (Exception auditEx) {
                 log.warn("Audit write failed for SHELLCHECK_UNAVAILABLE", auditEx);
             }
+            return false;
+        }
+        return true;
+    }
+
+    private static ResponseEntity<Map<String, Object>> saved(boolean scriptsValidated) {
+        return scriptsValidated
+            ? ResponseEntity.ok().build()
+            : ResponseEntity.ok(Map.of("warning", "Script validation unavailable: saved without checking."));
+    }
+
+    /** Start, stop, edit and delete of one application never overlap (single backend instance). */
+    private <T> T exclusively(Long id, java.util.function.Supplier<T> action) {
+        if (!busy.add(id)) {
+            throw new ApplicationBusyException();
+        }
+        try {
+            return action.get();
+        } finally {
+            busy.remove(id);
         }
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Void> updateApplication(@PathVariable Long id, @RequestBody Map<String, Object> req, HttpServletRequest httpRequest) {
+    public ResponseEntity<Map<String, Object>> updateApplication(@PathVariable Long id, @RequestBody Map<String, Object> req, HttpServletRequest httpRequest) {
         accessGuard.require(Action.UPDATE_APPLICATION);
+        return exclusively(id, () -> doUpdate(id, req, httpRequest));
+    }
+
+    private ResponseEntity<Map<String, Object>> doUpdate(Long id, Map<String, Object> req, HttpServletRequest httpRequest) {
         if (statusPollingOrchestrator.isOnline(id)) {
             return ResponseEntity.status(403).build();
         }
@@ -555,7 +589,7 @@ public class ApplicationController {
         Application app = applicationRepository.findById(id).orElseThrow(NotFoundException::new);
 
         String sshPassword = (String) req.get("sshPassword");
-        validateScripts(httpRequest, startScript, stopScript, logScript);
+        boolean validated = validateScripts(httpRequest, startScript, stopScript, logScript);
         app.setName(name);
         app.setServerIp(serverAddress);
         app.setSshUsername(sshUsername);
@@ -588,12 +622,16 @@ public class ApplicationController {
             log.warn("Audit write failed for UPDATE_APPLICATION (id={})", id, auditEx);
         }
 
-        return ResponseEntity.ok().build();
+        return saved(validated);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteApplication(@PathVariable Long id, HttpServletRequest httpRequest) {
         accessGuard.require(Action.DELETE_APPLICATION);
+        return exclusively(id, () -> doDelete(id, httpRequest));
+    }
+
+    private ResponseEntity<Void> doDelete(Long id, HttpServletRequest httpRequest) {
         if (statusPollingOrchestrator.isOnline(id)) {
             return ResponseEntity.status(409).build();
         }

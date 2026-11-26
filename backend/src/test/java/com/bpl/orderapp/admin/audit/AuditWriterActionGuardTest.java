@@ -19,7 +19,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 class AuditWriterActionGuardTest {
 
     private final AuditLogRepository repo = mock(AuditLogRepository.class);
-    private final AuditWriter writer = new AuditWriter(repo, mock(ApplicationRepository.class));
+    private final AuditWriter writer = new AuditWriter(repo, mock(ApplicationRepository.class),
+        new com.bpl.orderapp.admin.ratelimit.ClientAddress(false));
 
     @Test
     void unknownActionIsRejectedAndNothingIsSaved() {

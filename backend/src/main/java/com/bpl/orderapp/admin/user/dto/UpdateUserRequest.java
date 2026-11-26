@@ -33,6 +33,7 @@ import java.util.List;
  * gate itself (the security filter chain does, when it lands).
  */
 public record UpdateUserRequest(
+    @Pattern(regexp = "[^\\p{Cc}\\p{Zl}\\p{Zp}]*", message = "username must not contain control characters or line breaks")
     String username,
     @Size(max = 150) String fullName,
     String role,

@@ -52,7 +52,7 @@ class SecurityHardeningIntegrationTest {
     }
 
     private HttpResponse<String> login(String path, String username, String forwardedFor) throws Exception {
-        HttpRequest.Builder b = request(path).header("Content-Type", "application/json")
+        HttpRequest.Builder b = request(path).header("Content-Type", "application/json").header("X-BPL-CSRF", "1")
                 .POST(HttpRequest.BodyPublishers.ofString(
                         "{\"username\":\"" + username + "\",\"password\":\"wrong-Password-1\"}"));
         if (forwardedFor != null) b.header("X-Forwarded-For", forwardedFor);

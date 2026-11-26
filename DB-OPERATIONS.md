@@ -68,3 +68,13 @@ stays small. `audit_logs` is the only table that grows without bound.
    Remove `--dry-run` to commit. Add `--with-log-lines` to keep the last log lines. Sessions are not copied (everyone logs in once).
 4. The script prints per-table row counts (must match), then checks `foreign_key_check`, `sqlite_sequence` and `integrity_check`.
 5. Rollback within two weeks: stop, `git checkout pre-sqlite`, `docker compose up -d`.
+
+## First Sys.Admin password
+
+On the first start with an empty database, the backend writes the `admin` password to a file. It is not logged. In production, copy it out of the container:
+
+```
+docker compose cp backend:/data/initial-admin-password.txt ./initial-admin-password.txt
+```
+
+(In development it is `backend/data/initial-admin-password.txt`.) Sign in, change the password, then delete your copy. The backend deletes its own file at the next start after the password has been changed; until then the file stays on the data volume.

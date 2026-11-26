@@ -53,17 +53,11 @@ class UserRoleChangeSessionTest {
             String labibCookie = login(base, "labib");
             String adminCookie = login(base, "admin");
 
-            // CSRF: the token cookie is issued on a GET and echoed back in a header.
-            HttpResponse<String> csrf = http.send(HttpRequest.newBuilder(URI.create(base + "/api/v1/auth/me"))
-                    .header("Cookie", adminCookie).build(), HttpResponse.BodyHandlers.ofString());
-            String xsrf = csrf.headers().allValues("Set-Cookie").stream()
-                    .filter(c -> c.startsWith("XSRF-TOKEN="))
-                    .map(c -> c.split(";", 2)[0]).findFirst().orElse(null);
             HttpRequest.Builder put = HttpRequest.newBuilder(URI.create(base + "/api/v1/users/" + id))
                     .header("Content-Type", "application/json")
-                    .header("Cookie", xsrf == null ? adminCookie : adminCookie + "; " + xsrf)
+                    .header("Cookie", adminCookie)
+                    .header("X-BPL-CSRF", "1")
                     .PUT(HttpRequest.BodyPublishers.ofString("{\"role\":\"SYS_ADMIN\"}"));
-            if (xsrf != null) put.header("X-XSRF-TOKEN", xsrf.substring("XSRF-TOKEN=".length()));
 
             HttpResponse<String> update = http.send(put.build(), HttpResponse.BodyHandlers.ofString());
 
@@ -78,12 +72,12 @@ class UserRoleChangeSessionTest {
     private String login(String base, String username) throws Exception {
         HttpResponse<String> res = http.send(HttpRequest.newBuilder(URI.create(base + "/api/v1/auth/login"))
                 .header("Content-Type", "application/json")
+                .header("X-BPL-CSRF", "1")
                 .POST(HttpRequest.BodyPublishers.ofString(
                         "{\"username\":\"" + username + "\",\"password\":\"Known-Pass-123!\"}"))
                 .build(), HttpResponse.BodyHandlers.ofString());
         assertEquals(200, res.statusCode(), res.body());
         return res.headers().allValues("Set-Cookie").stream()
-                .filter(c -> !c.startsWith("XSRF-TOKEN="))
                 .map(c -> c.split(";", 2)[0]).findFirst().orElseThrow();
     }
 }

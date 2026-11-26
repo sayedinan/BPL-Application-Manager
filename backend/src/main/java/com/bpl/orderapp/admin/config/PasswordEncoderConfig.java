@@ -34,7 +34,8 @@ public class PasswordEncoderConfig {
 
     @Bean
     public AuditWriter auditWriter(AuditLogRepository auditLogRepository,
-                                   ApplicationRepository applicationRepository) {
-        return new AuditWriter(auditLogRepository, applicationRepository);
+                                   ApplicationRepository applicationRepository,
+                                   com.bpl.orderapp.admin.ratelimit.ClientAddress clientAddress) {
+        return new AuditWriter(auditLogRepository, applicationRepository, clientAddress);
     }
 }

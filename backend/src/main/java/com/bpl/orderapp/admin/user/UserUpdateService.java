@@ -45,6 +45,44 @@ public class UserUpdateService {
     /**
      * Applies the update. See {@link Result} for what the caller must do next.
      */
+    /** Admin ceiling: only a Sys.Admin may manage Admin and Sys.Admin accounts. */
+    static void requireMayManage(String targetRole, boolean callerIsSysAdmin) {
+        if (!"USER".equals(targetRole) && !callerIsSysAdmin) {
+            throw new com.bpl.orderapp.admin.common.AdminCeilingException();
+        }
+    }
+
+    /** Safe against two requests at once: SQLite runs write transactions one at a time. */
+    private void requireAnotherSysAdmin() {
+        if (userRepository.countByRole("SYS_ADMIN") <= 1) {
+            throw new LastSysAdminException();
+        }
+    }
+
+    /** The account and its assignments are saved together or not at all. */
+    @Transactional
+    public java.util.UUID create(User newUser, java.util.List<Long> assignedApplicationIds) {
+        java.util.UUID id = userRepository.save(newUser).getId();
+        if (assignedApplicationIds != null) {
+            for (Long appId : assignedApplicationIds) {
+                assignmentRepository.save(new UserApplicationAssignment(id, appId));
+            }
+        }
+        return id;
+    }
+
+    /** Returns the account that was deleted. */
+    @Transactional
+    public User delete(java.util.UUID id, boolean callerIsSysAdmin) {
+        User target = userRepository.findById(id).orElseThrow(NotFoundException::new);
+        requireMayManage(target.getRole(), callerIsSysAdmin);
+        if ("SYS_ADMIN".equals(target.getRole())) {
+            requireAnotherSysAdmin();
+        }
+        userRepository.deleteById(id);
+        return target;
+    }
+
     @Transactional
     public Result update(java.util.UUID id, UpdateUserRequest req, boolean callerIsSysAdmin) {
 
@@ -64,9 +102,7 @@ public class UserUpdateService {
         // the frontend's canManageRow visibility rule — previously
         // this was only enforced by hiding the Edit button, not by
         // the backend itself.
-        if ("SYS_ADMIN".equals(oldRole) && !callerIsSysAdmin) {
-            throw new com.bpl.orderapp.admin.common.AdminCeilingException();
-        }
+        requireMayManage(oldRole, callerIsSysAdmin);
 
         // Username, if present, must be non-blank and not already
         // taken by another active user (mirrors doCreate's duplicate
@@ -115,6 +151,9 @@ public class UserUpdateService {
             }
             if (!"USER".equals(req.role()) && !callerIsSysAdmin) {
                 throw new com.bpl.orderapp.admin.common.AdminCeilingException();
+            }
+            if ("SYS_ADMIN".equals(oldRole) && !"SYS_ADMIN".equals(req.role())) {
+                requireAnotherSysAdmin();
             }
             user.setRole(req.role());
         }
