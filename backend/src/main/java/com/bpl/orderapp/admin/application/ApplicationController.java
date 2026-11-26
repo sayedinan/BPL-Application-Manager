@@ -357,6 +357,7 @@ public class ApplicationController {
 
         if (!scriptSucceeded) {
             statusPollingOrchestrator.clearExpectedAction(id);
+            auditScriptFailure("START_APPLICATION", id, httpRequest);
             Map<String, Object> body = new HashMap<>();
             body.put("code", "SSH_COMMAND_FAILED");
             return ResponseEntity.status(502).body(body);
@@ -424,6 +425,7 @@ public class ApplicationController {
 
         if (!scriptSucceeded) {
             statusPollingOrchestrator.clearExpectedAction(id);
+            auditScriptFailure("STOP_APPLICATION", id, httpRequest);
             Map<String, Object> body = new HashMap<>();
             body.put("code", "SSH_COMMAND_FAILED");
             return ResponseEntity.status(502).body(body);
@@ -652,6 +654,18 @@ public class ApplicationController {
                     org.springframework.http.HttpStatus.BAD_REQUEST,
                     "SMS message templates must be 160 characters or fewer");
             }
+        }
+    }
+
+    // A failed script is still an attempt by a real person, so it is audited too.
+    // Best-effort: an audit problem must not replace the script error the caller gets.
+    private void auditScriptFailure(String action, Long id, HttpServletRequest httpRequest) {
+        try {
+            var actor = currentActor();
+            auditWriter.write(action, actor.get("username"), actor.get("role"),
+                id, null, null, Map.of("reason", "SSH_COMMAND_FAILED"), "FAILURE", httpRequest);
+        } catch (Exception auditEx) {
+            log.warn("Audit write failed for failed {} (id={})", action, id, auditEx);
         }
     }
 
